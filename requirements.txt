@@ -1,15 +1,23 @@
-streamlit>=1.46.0
+# Python
+python = "3.13"
 
-langchain==0.3.27
-langchain-core==0.3.74
-langchain-community==0.3.27
-langchain-openai==0.3.30
-langchain-mistralai>=0.2.11
+# Streamlit
+streamlit==1.59.0
 
-tavily-python>=0.7.11
+# LangChain v1 ecosystem
+langchain==1.0.1
+langgraph==1.0.0
 
-beautifulsoup4
-requests
-python-dotenv
-rich
-lxml
+# Model providers
+langchain-mistralai==0.2.12
+langchain-openai==1.0.1
+
+# Search
+tavily-python==0.7.26
+
+# Utilities
+beautifulsoup4==4.15.0
+requests==2.34.2
+python-dotenv==1.2.2
+rich==15.0.0
+lxml==6.1.1
