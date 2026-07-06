@@ -1,6 +1,3 @@
-# Python
-python = "3.13"
-
 # Streamlit
 streamlit==1.59.0
 
