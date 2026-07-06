@@ -1,16 +1,16 @@
 # LLM
-langchain==1.0.2
-langchain-core==1.0.2
-langchain-mistralai==0.2.12
+langchain
+langchain-core
+langchain-mistralai
 
 # Search + scraping
-tavily-python~=0.5.0
-beautifulsoup4~=4.12.0
-requests~=2.32.0
+tavily-python
+beautifulsoup4
+requests
 
 # App
-streamlit~=1.40.0
+streamlit
 
 # Env + logging
-python-dotenv~=1.0.0
-rich~=13.9.0
+python-dotenv
+rich
