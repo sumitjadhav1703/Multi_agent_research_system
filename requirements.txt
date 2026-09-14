@@ -1,20 +1,10 @@
-# Streamlit
-streamlit==1.59.0
-
-# LangChain v1 ecosystem
-langchain==1.4.0
-langgraph==1.2.11
-
-# Model providers
-langchain-mistralai==1.1.6
-langchain-openai==1.0.1
-
-# Search
-tavily-python==0.7.26
-
-# Utilities
-beautifulsoup4==4.15.0
-requests==2.34.2
-python-dotenv==1.2.2
-rich==15.0.0
+streamlit
+langchain
+langchain-core
+langchain-groq
+langgraph
+tavily-python
+beautifulsoup4
+requests
+python-dotenv
 lxml==6.1.1
