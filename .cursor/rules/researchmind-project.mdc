@@ -5,7 +5,7 @@ alwaysApply: true
 
 # ResearchMind 2.0 project rule
 
-- Treat `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md` as the complete approved product/architecture specification and `CURSOR_IMPLEMENTATION_PLAN.md` as the execution contract. Read both before implementation.
+- Treat `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md` as the complete approved product/architecture specification and `docs/IMPLEMENTATION_STATUS.md` as the live execution status. Read both before implementation.
 - The parent Cursor Agent is the orchestrator and must be manually selected as Claude Opus 5.5 High. Coding, frontend and test subagents must use Claude Sonnet 5 as pinned in `.cursor/agents/`. Verify actual model/task details; if unavailable or substituted, report it rather than pretending.
 - Parent Opus owns architecture, decomposition, task/file ownership, contracts, subagent dispatch, integration, review and milestone acceptance. Use Sonnet subagents proactively for bounded coding, frontend and testing tasks.
 - Do not run overlapping write agents in the same files. Use isolated worktrees when available; otherwise sequence changes. Limit default concurrent write-capable agents to two.
