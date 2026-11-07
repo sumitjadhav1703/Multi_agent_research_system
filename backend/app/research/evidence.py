@@ -456,9 +456,26 @@ def link_claims_to_sources(
 _INSTRUCTION_MARKERS = ("ignore earlier instructions", "ignore all instructions", "shell tool")
 
 
+def _body_matches_supported(body: str, supported_claims: list[Claim]) -> bool:
+    """True when the finding text does not add terms beyond the supported claims."""
+    normalized = " ".join(body.split()).lower()
+    if not normalized:
+        return False
+    claim_text = " ".join(claim.text for claim in supported_claims if claim.text.strip())
+    claim_normalized = " ".join(claim_text.split()).lower()
+    if not claim_normalized:
+        return False
+    if normalized == claim_normalized or normalized in claim_normalized:
+        return True
+    body_terms = significant_terms(body)
+    if not body_terms:
+        return False
+    return body_terms <= significant_terms(claim_text)
+
+
 def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Passage]) -> tuple[ReportDraft, list[str]]:
     known = {passage.evidence_id for passage in passages}
-    claim_ids = {claim.claim_id for claim in claims}
+    supported = {claim.claim_id: claim for claim in claims if claim.status == "supported"}
     repairs: list[str] = []
     kept: list[ReportSection] = []
     for section in report.sections:
@@ -466,24 +483,29 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
             continue
         invented = [evidence_id for evidence_id in section.evidence_ids if evidence_id not in known]
         evidence_ids = [evidence_id for evidence_id in section.evidence_ids if evidence_id in known]
-        linked_claims = [claim_id for claim_id in section.claim_ids if claim_id in claim_ids]
+        linked = [claim_id for claim_id in section.claim_ids if claim_id in supported]
         if invented:
             repairs.append(f"Removed invented citation(s): {', '.join(invented)}")
+        if not linked:
+            repairs.append(f"Dropped finding without supported claim: {section.section_id}")
+            continue
+        supported_claims = [supported[claim_id] for claim_id in linked]
+        supported_text = " ".join(claim.text for claim in supported_claims).strip()
         body = section.body.strip()
         if any(marker in body.lower() for marker in _INSTRUCTION_MARKERS):
             repairs.append(f"Dropped untrusted instruction text from {section.section_id}")
-            linked = [
-                claim.text
-                for claim in claims
-                if claim.claim_id in linked_claims and claim.status == "supported"
-            ]
-            body = " ".join(linked).strip()
+            body = supported_text
+        cited_unsupported = any(claim_id not in supported for claim_id in section.claim_ids)
+        if supported_text and (cited_unsupported or not _body_matches_supported(body, supported_claims)):
+            if body != supported_text:
+                repairs.append(f"Replaced finding body with supported claim text: {section.section_id}")
+                body = supported_text
         if not evidence_ids or not body:
             repairs.append(f"Dropped finding without evidence: {section.section_id}")
             continue
         kept.append(
             section.model_copy(
-                update={"body": body[:2000], "evidence_ids": evidence_ids, "claim_ids": linked_claims, "kind": "finding"}
+                update={"body": body[:2000], "evidence_ids": evidence_ids, "claim_ids": linked, "kind": "finding"}
             )
         )
     cited = {evidence_id for section in kept for evidence_id in section.evidence_ids}

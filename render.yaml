@@ -11,7 +11,7 @@ services:
     name: researchmind-api
     runtime: docker
     plan: free
-    region: oregon
+    region: singapore
     branch: main
     numInstances: 1
     dockerfilePath: ./Dockerfile

@@ -86,27 +86,16 @@ class GraphJobExecutor:
             session.close()
 
         try:
-            runner = self._runner(budget["max_model_calls"])
-            if resume_action:
-                outcome = runner.resume(
-                    job_id,
-                    ReviewDecision(action=resume_action, comments=resume_comments),
-                )
-                return _from_outcome(outcome)
-            if attempts > 1:
-                has_values, interrupted, state = runner.peek(job_id)
-                if interrupted:
-                    return _from_state(state, status="review_required")
-                if has_values:
-                    return _from_outcome(runner.continue_from_checkpoint(job_id))
-            started = time.monotonic()
-            outcome = runner.start(topic, owner_id=owner_id, run_id=job_id)
-            result = _from_outcome(outcome)
-            if time.monotonic() - started > budget["max_wall_clock_seconds"]:
-                result.status = "expired"
-                result.error_code = "wall_clock"
-                result.error_detail = "wall_clock"
-            return result
+            result = _run_graph(
+                runner=self._runner(budget["max_model_calls"]),
+                job_id=job_id,
+                topic=topic,
+                owner_id=owner_id,
+                resume_action=resume_action,
+                resume_comments=resume_comments,
+                attempts=attempts,
+                max_wall_clock_seconds=budget["max_wall_clock_seconds"],
+            )
         except RunNotPaused:
             return ExecutionResult(
                 status="failed",
@@ -121,6 +110,7 @@ class GraphJobExecutor:
                 error_code="graph_error",
                 error_detail=type(exc).__name__,
             )
+        return _honor_cancel(session_factory, job_id, result)
 
     def _runner(self, max_model_calls: int) -> ResearchGraphRunner:
         client = self.model_client
@@ -149,9 +139,79 @@ def _budget(raw: str) -> dict[str, int]:
     if not isinstance(parsed, dict):
         parsed = {}
     return {
-        "max_model_calls": int(parsed.get("max_model_calls") or 12),
-        "max_wall_clock_seconds": int(parsed.get("max_wall_clock_seconds") or 180),
+        "max_model_calls": _budget_value(parsed, "max_model_calls", 12),
+        "max_wall_clock_seconds": _budget_value(parsed, "max_wall_clock_seconds", 180),
     }
+
+
+def _budget_value(parsed: dict[str, Any], key: str, default: int) -> int:
+    """Default only when the key is absent or null. Explicit 0 stays 0."""
+    if key not in parsed or parsed[key] is None:
+        return default
+    return int(parsed[key])
+
+
+def _run_graph(
+    *,
+    runner: Any,
+    job_id: str,
+    topic: str,
+    owner_id: str,
+    resume_action: str | None,
+    resume_comments: str,
+    attempts: int,
+    max_wall_clock_seconds: int,
+) -> ExecutionResult:
+    if resume_action:
+        return _from_outcome(
+            runner.resume(
+                job_id,
+                ReviewDecision(action=resume_action, comments=resume_comments),
+            )
+        )
+    if attempts > 1:
+        has_values, interrupted, state = runner.peek(job_id)
+        if interrupted:
+            return _from_state(state, status="review_required")
+        if has_values:
+            return _from_outcome(runner.continue_from_checkpoint(job_id))
+    started = time.monotonic()
+    outcome = runner.start(topic, owner_id=owner_id, run_id=job_id)
+    result = _from_outcome(outcome)
+    if time.monotonic() - started > max_wall_clock_seconds:
+        result.status = "expired"
+        result.error_code = "wall_clock"
+        result.error_detail = "wall_clock"
+    return result
+
+
+def _honor_cancel(
+    session_factory: Callable[[], Session],
+    job_id: str,
+    result: ExecutionResult,
+) -> ExecutionResult:
+    """If cancel landed while the graph ran, do not report completed or review_required.
+
+    This does not interrupt an HTTP call already in flight. The check runs after
+    start, resume, or continue_from_checkpoint returns.
+    """
+    if result.status not in {"completed", "review_required"}:
+        return result
+    try:
+        session = session_factory()
+    except Exception:
+        return result
+    try:
+        job = session.get(ResearchJob, job_id)
+        if job is not None and job.cancel_requested:
+            result.status = "cancelled"
+            result.error_code = "cancelled"
+        return result
+    except Exception:
+        session.rollback()
+        return result
+    finally:
+        session.close()
 
 
 def _from_outcome(outcome: Any) -> ExecutionResult:

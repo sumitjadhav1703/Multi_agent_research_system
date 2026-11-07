@@ -27,15 +27,19 @@ ACTIVE_STATUSES = ("queued", "running", "review_required")
 TERMINAL_STATUSES = ("completed", "failed", "cancelled", "expired")
 CONFIG_VERSION = "m3-queue-v1"
 
-_RESERVE_GLOBAL = """
+# Postgres locks the singleton row before the active-job count. Under READ
+# COMMITTED a COUNT inside the same UPDATE can miss a job inserted by a
+# transaction that committed while this one waited. SQLite has no FOR UPDATE;
+# unit tests run the plain SELECT and are sequential. True concurrent
+# active-run serialization needs Postgres.
+_LOCK_GUARD_POSTGRES = "SELECT id FROM quota_guard WHERE id = 1 FOR UPDATE"
+_LOCK_GUARD_OTHER = "SELECT id FROM quota_guard WHERE id = 1"
+
+_INCREMENT_DAILY = """
 UPDATE quota_guard
 SET daily_window = :today,
     daily_count = CASE WHEN daily_window = :today THEN daily_count + 1 ELSE 1 END
 WHERE id = 1
-  AND (
-    SELECT COUNT(*) FROM research_jobs
-    WHERE status IN ('queued', 'running', 'review_required')
-  ) < :max_active
   AND (
     CASE WHEN daily_window = :today THEN daily_count ELSE 0 END
   ) < :daily_cap
@@ -170,13 +174,7 @@ def _start_run_body(
             "This guest identity has already used its one research run.",
         )
 
-    reserved = session.execute(
-        text(_RESERVE_GLOBAL),
-        {"today": utc_day(now), "max_active": max_active, "daily_cap": daily_cap},
-    )
-    if reserved.rowcount != 1:
-        session.rollback()
-        raise _global_limit_error(session, max_active=max_active, daily_cap=daily_cap, now=now)
+    _reserve_global_slot(session, now=now, max_active=max_active, daily_cap=daily_cap)
 
     job = ResearchJob(
         id=job_id,
@@ -365,6 +363,40 @@ def _reuse_or_conflict(session: Session, row: IdempotencyKey, digest: str) -> Re
     if job is None:
         raise JobServiceError(409, "idempotency_conflict", "Idempotency-Key does not match a stored run.")
     return job
+
+
+def _lock_quota_guard(session: Session) -> bool:
+    """Return whether quota_guard id=1 exists, locking it on Postgres.
+
+    True FOR UPDATE concurrency needs Postgres. SQLite tests still run the SELECT.
+    """
+    dialect = session.get_bind().dialect.name
+    statement = _LOCK_GUARD_POSTGRES if dialect == "postgresql" else _LOCK_GUARD_OTHER
+    return session.execute(text(statement)).first() is not None
+
+
+def _reserve_global_slot(session: Session, *, now: str, max_active: int, daily_cap: int) -> None:
+    """Lock the guard, count active jobs, then take one daily slot.
+
+    Both the active-run cap and the daily cap fail closed. The daily UPDATE
+    stays conditional so a slot is not taken when the cap is already reached.
+    """
+    if not _lock_quota_guard(session):
+        session.rollback()
+        raise _global_limit_error(session, max_active=max_active, daily_cap=daily_cap, now=now)
+    active = session.scalar(
+        select(func.count()).select_from(ResearchJob).where(ResearchJob.status.in_(ACTIVE_STATUSES))
+    )
+    guard = session.get(QuotaGuard, 1)
+    today = utc_day(now)
+    daily = guard.daily_count if guard is not None and guard.daily_window == today else 0
+    if int(active or 0) >= max_active or int(daily) >= daily_cap:
+        session.rollback()
+        raise _global_limit_error(session, max_active=max_active, daily_cap=daily_cap, now=now)
+    reserved = session.execute(text(_INCREMENT_DAILY), {"today": today, "daily_cap": daily_cap})
+    if reserved.rowcount != 1:
+        session.rollback()
+        raise _global_limit_error(session, max_active=max_active, daily_cap=daily_cap, now=now)
 
 
 def _global_limit_error(session: Session, *, max_active: int, daily_cap: int, now: str) -> JobServiceError:

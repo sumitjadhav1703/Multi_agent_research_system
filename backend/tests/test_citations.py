@@ -5,6 +5,7 @@ import unittest
 
 from backend.app.graph.limits import GraphLimits
 from backend.app.research.evidence import (
+    assemble_report,
     claim_grounded,
     enforce_claim_assessments,
     finalize_ledger,
@@ -115,6 +116,74 @@ class CitationTests(unittest.TestCase):
         self.assertIn("quote_not_in_passage", codes)
         self.assertIn("invented_citation", codes)
         self.assertIn("supported_without_evidence", codes)
+
+    def test_finding_without_supported_claim_is_dropped(self) -> None:
+        passage = _passage()
+        insufficient = Claim(
+            claim_id="cl_gap",
+            text="The lab did not measure widget latency.",
+            evidence_ids=["ev1"],
+            status="insufficient",
+            verification_reason="Not enough overlap.",
+        )
+        supported = Claim(
+            claim_id="cl_ok",
+            text="Widget latency fell in the lab report.",
+            evidence_ids=["ev1"],
+            status="supported",
+            verification_reason="Quoted.",
+        )
+        contradictory = Claim(
+            claim_id="cl_cx",
+            text="Widget latency rose in the field report.",
+            evidence_ids=["ev1"],
+            status="contradictory",
+            verification_reason="A second passage disagrees.",
+        )
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_bad",
+                    heading="Finding",
+                    body="The lab did not measure widget latency.",
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_gap"],
+                    kind="finding",
+                ),
+                ReportSection(
+                    section_id="sec_good",
+                    heading="Finding",
+                    body="Widget latency fell in the lab report.",
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_ok"],
+                    kind="finding",
+                ),
+                ReportSection(
+                    section_id="sec_invented",
+                    heading="Finding",
+                    body="The moon is made of cheese.",
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_ok"],
+                    kind="finding",
+                ),
+            ],
+        )
+        repaired, repairs = assemble_report(report, [insufficient, supported, contradictory], [passage])
+        findings = [section for section in repaired.sections if section.kind == "finding"]
+        finding_ids = [section.section_id for section in findings]
+        self.assertNotIn("sec_bad", finding_ids)
+        self.assertIn("sec_good", finding_ids)
+        kept = next(section for section in findings if section.section_id == "sec_good")
+        self.assertEqual(kept.claim_ids, ["cl_ok"])
+        self.assertEqual(kept.body, supported.text)
+        invented = next(section for section in findings if section.section_id == "sec_invented")
+        self.assertEqual(invented.claim_ids, ["cl_ok"])
+        self.assertEqual(invented.body, supported.text)
+        self.assertNotIn("moon", invented.body.lower())
+        self.assertTrue(any(section.kind == "gap" and "cl_gap" in section.claim_ids for section in repaired.sections))
+        self.assertTrue(any(section.kind == "conflict" and "cl_cx" in section.claim_ids for section in repaired.sections))
+        self.assertTrue(any("sec_bad" in note for note in repairs))
 
     def test_merge_drops_duplicate_urls(self) -> None:
         source = _source().model_dump()

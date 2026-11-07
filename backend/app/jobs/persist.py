@@ -63,10 +63,18 @@ def _finalize_owned(
             job.error_code = result.error_code
             job.error_detail = _safe(result.error_detail)
         else:
-            job.status = result.status if result.status in _KNOWN else "failed"
+            status = result.status if result.status in _KNOWN else "failed"
+            # A cancel that wins the race after the graph returns must not be stored
+            # as completed or review_required.
+            if job.cancel_requested and status in {"completed", "review_required"}:
+                status = "cancelled"
+            job.status = status
             job.approval_status = result.approval_status
             job.stop_reason = result.stop_reason
-            job.error_code = result.error_code
+            if status == "cancelled" and job.cancel_requested:
+                job.error_code = "cancelled"
+            else:
+                job.error_code = result.error_code
             job.error_detail = _safe(result.error_detail)
             job.resume_action = None
             job.resume_comments = None
@@ -101,7 +109,7 @@ _KNOWN = {"queued", "running", "review_required", "completed", "failed", "cancel
 
 
 def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: ExecutionResult, now: str) -> None:
-    for model in (EvidencePassage, ResearchClaim, ResearchSource, ResearchReport):
+    for model in (EvidencePassage, ResearchClaim, ResearchSource, ResearchReport, UsageLedger):
         session.execute(delete(model).where(model.job_id == job_id))
     seen_urls: set[str] = set()
     seen_keys: set[str] = set()

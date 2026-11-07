@@ -1,11 +1,28 @@
 # ResearchMind 2.0 deployment report
 
 **Date:** 2026-11-07  
-**Author:** Grok 4.7 (user-authorized). Not Sonnet 5.  
-**Profile intended:** Profile A from the approved plan — one Render Free web service, Neon for Postgres, one static frontend, one Cloudflare Worker.  
-**Public V2 URLs:** none. Nothing was deployed. The only public app URL still documented in the README is the existing V1 Streamlit app.
+**Author:** Cursor Auto/Composer parent (deploy session). Earlier artifact author was Grok 4.7 (user-authorized), not Sonnet 5.  
+**Profile intended:** Profile A — one Render Free web service, Neon Postgres, one static frontend, one Cloudflare Worker.  
+**Region target:** Singapore / Asia Pacific (user request after the first US deploy).
 
-This report separates checks that ran from checks that did not. It does not contain hosted latency, memory, CPU, token, or cold-start measurements. Those were not observed.
+## Live public URLs (Singapore)
+
+| Surface | Region | URL | Smoke check |
+|---|---|---|---|
+| API (Render Free Docker) | `singapore` | https://researchmind-api-sg.onrender.com | `GET /api/v1/health/live` → 200; `GET /api/v1/health/ready` → 200 `database: ok` (`USE_MOCK_PROVIDER=true`) |
+| Console (Vercel) | build/functions `sin1` | https://researchmind-console.vercel.app | HTTP 200 HTML shell |
+| Neon Postgres | `aws-ap-southeast-1` (Singapore) | project `researchmind-2` / `lively-star-88380432` | Wired as Render `DATABASE_URL` (value not recorded here) |
+| Cloudflare MCP Worker | workers.dev (edge) | https://researchmind-mcp.jadhavsumit534.workers.dev | Deployed via Wrangler OAuth after re-login. `RESEARCHMIND_API_BASE` set to Singapore API at deploy time. Version `14008bd9-6d25-4855-a339-9ad9d4d24161`. |
+
+**Removed / superseded**
+
+- Neon US West (`aws-us-west-2` project `autumn-mode-98666904`) — **deleted**.
+- Render Oregon `researchmind-api` (`srv-dbnlo1c9v7es73d4at5g`, https://researchmind-api-o2tw.onrender.com) — **deleted by user** (API now 404; absent from Render service list).
+- `render.yaml` region default is now `singapore`.
+
+Cold-start time, RSS, and hosted research-run latency were **not** measured in this session.
+
+This report separates checks that ran from checks that did not.
 
 ## What was verified
 
@@ -43,7 +60,7 @@ This report separates checks that ran from checks that did not. It does not cont
 | `Dockerfile` | Python 3.13 slim image. Installs `backend/requirements.txt`, then `backend/requirements-fetch.txt` with `--no-deps`. Runs as uid 10001. Listens through `infra/docker-entrypoint.sh`. |
 | `.dockerignore` | Keeps `.env`, frontend, MCP, evals, and tests out of the build context. |
 | `infra/docker-entrypoint.sh` | Refuses to start unless `WEB_CONCURRENCY` is `1`. Binds `0.0.0.0:$PORT` (default `8000`). One Uvicorn worker: `backend.app.main:app`. |
-| `render.yaml` | One Docker web service `researchmind-api` (`plan: free`, `region: oregon`, `numInstances: 1`, health `/api/v1/health/live`) and one static site `researchmind-console`. No Render Postgres. `autoDeployTrigger` is off. |
+| `render.yaml` | One Docker web service `researchmind-api` (`plan: free`, `region: singapore`, `numInstances: 1`, health `/api/v1/health/live`) and one static site `researchmind-console`. No Render Postgres. `autoDeployTrigger` is off. Live service name on Render is currently `researchmind-api-sg`. |
 | `vercel.json` | Alternative static host. Install and build run in `frontend/`. Output is `frontend/dist`. SPA rewrite to `index.html`. Public env name is `VITE_API_BASE` only, plus the existing public `VITE_TURNSTILE_SITE_KEY`. |
 | `.python-version` | `3.13` |
 | CORS | `CORS_ORIGINS` on `Settings`. Empty means same-origin only. |
