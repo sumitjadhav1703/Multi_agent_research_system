@@ -58,31 +58,34 @@ export function NewResearchPage() {
   return (
     <section className="stack">
       <PageHeader
-        eyebrow="New research"
         title="Ask one public question"
-        lede="One research run per guest token for this demo. Submit only public, non-sensitive topics. Free provider APIs receive the question."
+        lede="One research run for this guest session. Keep topics public and non-sensitive."
       />
-      <p className="banner info" role="status">
-        One research run per account for this demo. {data?.note ?? "Checking the allowance."}
-      </p>
+
       {data?.one_use_consumed ? (
         <div className="banner warning" role="status">
-          <h2>Quota consumed</h2>
-          <p>This guest identity has already used its research run. Reopen the saved run instead of starting another.</p>
+          <h2>Your demo run is used</h2>
+          <p>Open the saved run instead of starting another.</p>
           <div className="button-row">
             {runs.map((runId) => (
-              <Link key={runId} to={`/runs/${runId}`}>
-                Reopen existing run
+              <Link key={runId} className="button" to={`/runs/${runId}`}>
+                Open run
               </Link>
             ))}
           </div>
         </div>
-      ) : null}
+      ) : (
+        <p className="meta" role="status">
+          {data?.note ?? "Checking allowance…"}
+        </p>
+      )}
+
       {data?.one_use_refunded && !data.one_use_consumed ? (
         <p className="banner info" role="status">
-          The previous attempt was refunded before provider work. One run is available.
+          Previous attempt was refunded. You still have one run.
         </p>
       ) : null}
+
       <form
         className="stack"
         onSubmit={(event) => {
@@ -98,32 +101,30 @@ export function NewResearchPage() {
             maxLength={500}
             value={topic}
             onChange={(event) => setTopic(event.target.value)}
+            placeholder="Type a research question…"
           />
         </label>
         <p className="meta">{topic.trim().length} / 500</p>
-        <div className="button-row">
+        <div className="chip-row">
           {EXAMPLES.map((example) => (
-            <button key={example} type="button" className="secondary" onClick={() => setTopic(example)}>
+            <button key={example} type="button" className="chip" onClick={() => setTopic(example)}>
               {example}
             </button>
           ))}
         </div>
-        <details className="panel">
-          <summary>Server budgets</summary>
-          <p>
-            Depth, source cap, and citation handling are fixed by the server. This form cannot raise them.
-            Citation markers open the saved evidence item.
-          </p>
+        <details className="details-panel">
+          <summary>Server limits</summary>
+          <p>These caps are fixed by the server for the demo.</p>
           <dl className="metric-list">
             {Object.entries(LIMIT_LABELS).map(([key, label]) => (
               <div key={key}>
                 <dt>{label}</dt>
-                <dd>{data?.limits?.[key] ?? "unknown"}</dd>
+                <dd>{data?.limits?.[key] ?? "—"}</dd>
               </div>
             ))}
           </dl>
         </details>
-        {blockedReason ? <p role="status">{blockedReason}</p> : null}
+        {blockedReason ? <p className="meta" role="status">{blockedReason}</p> : null}
         <ErrorText error={mutation.error} />
         <button type="submit" disabled={Boolean(blockedReason) || mutation.isPending}>
           {mutation.isPending ? "Starting…" : "Start research"}
@@ -135,18 +136,26 @@ export function NewResearchPage() {
 
 function blockReason(
   topic: string,
-  usage: { one_use_consumed: boolean; global_active_runs: number; global_max_active_runs: number; global_daily_starts: number; global_daily_cap: number } | undefined,
+  usage:
+    | {
+        one_use_consumed: boolean;
+        global_active_runs: number;
+        global_max_active_runs: number;
+        global_daily_starts: number;
+        global_daily_cap: number;
+      }
+    | undefined,
   pending: boolean,
   failed: boolean,
 ): string | null {
-  if (pending) return "Checking the demo allowance.";
-  if (failed || !usage) return "The allowance could not be loaded. Start stays off until the server answers.";
-  if (usage.one_use_consumed) return "The one-use allowance is already consumed.";
+  if (pending) return "Checking allowance…";
+  if (failed || !usage) return "Allowance unavailable. Start stays off until the server answers.";
+  if (usage.one_use_consumed) return "Demo run already used.";
   if (usage.global_active_runs >= usage.global_max_active_runs) {
-    return "The demo already has the maximum number of active runs.";
+    return "Demo already has the maximum active runs.";
   }
-  if (usage.global_daily_starts >= usage.global_daily_cap) return "The demo has reached its daily run cap.";
+  if (usage.global_daily_starts >= usage.global_daily_cap) return "Daily demo cap reached.";
   if (topic.trim().length === 0) return "Enter a research question.";
-  if (topic.trim().length > 500) return "The question must be 500 characters or fewer.";
+  if (topic.trim().length > 500) return "Keep the question to 500 characters.";
   return null;
 }

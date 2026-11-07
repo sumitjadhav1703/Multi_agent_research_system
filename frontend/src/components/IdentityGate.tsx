@@ -40,7 +40,7 @@ export function IdentityGate() {
         window.clearInterval(timer);
       }
       if (attempts > 20) {
-        setWidgetNote("The verification widget did not load. Paste a token if you already have one.");
+        setWidgetNote("Verification widget did not load. Paste a token if you have one.");
         window.clearInterval(timer);
       }
     }, 300);
@@ -51,12 +51,9 @@ export function IdentityGate() {
   }, [siteKey]);
 
   return (
-    <section className="panel stack">
-      <h1>Verify to continue</h1>
-      <p>
-        This demo issues one guest identity after a Cloudflare Turnstile check. The token stays in this
-        browser tab and is sent as a bearer header, never in the page address.
-      </p>
+    <section className="panel stack gate-panel">
+      <h1>Enter demo</h1>
+      <p>One guest session. Pass the check below, then ask one public research question.</p>
       <form
         className="stack"
         onSubmit={(event) => {
@@ -68,8 +65,8 @@ export function IdentityGate() {
         {siteKey ? <div id="turnstile-widget" /> : null}
         {!siteKey ? (
           <p className="banner warning" role="status">
-            No public Turnstile site key is configured for this build. The server still decides whether
-            the verification token is valid.
+            Turnstile site key is missing on this build, so the widget cannot load. Add{" "}
+            <code>VITE_TURNSTILE_SITE_KEY</code> on Vercel and redeploy.
           </p>
         ) : null}
         {widgetNote ? (
@@ -77,16 +74,21 @@ export function IdentityGate() {
             {widgetNote}
           </p>
         ) : null}
-        <label className="field">
-          <span>Verification token</span>
-          <input
-            type="text"
-            name="turnstile_token"
-            autoComplete="off"
-            value={verification}
-            onChange={(event) => setVerification(event.target.value)}
-          />
-        </label>
+        {!siteKey || widgetNote ? (
+          <label className="field">
+            <span>Verification token</span>
+            <input
+              type="text"
+              name="turnstile_token"
+              autoComplete="off"
+              value={verification}
+              onChange={(event) => setVerification(event.target.value)}
+              placeholder="Paste token"
+            />
+          </label>
+        ) : (
+          <input type="hidden" name="turnstile_token" value={verification} />
+        )}
         <ErrorText error={mutation.error} />
         <button type="submit" disabled={mutation.isPending || verification.trim().length === 0}>
           {mutation.isPending ? "Checking…" : "Continue"}

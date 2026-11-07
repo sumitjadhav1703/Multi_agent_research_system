@@ -8,6 +8,9 @@
 - Prefer continuing to the next milestone when the current gate allows, while still stopping for milestone review rather than inventing pass evidence.
 - Use project subagents proactively with non-overlapping file ownership; default to at most two concurrent write-capable agents; use local Mac tooling when useful.
 - Prefer Singapore/Pacific (or nearest) cloud regions for Neon, Render, and Vercel; avoid US/Oregon placements when a Singapore or nearby option exists, for lower latency.
+- Treat the public site as a resume portfolio demo: no Sign-in/login pages on the landing; frontend polish over auth-product UX.
+- Match Research Console UI to the brief-pinned video landing theme (dark full-bleed, Bubbledot/Geist Pixel) rather than a separate utilitarian look.
+- Prefer a production-grade public GitHub tree: omit `.streamlit` and local Cursor/plan master docs from what is pushed; ship only deployable product artifacts.
 
 ## Learned Workspace Facts
 
@@ -21,3 +24,4 @@
 - Local Docker/Postgres is not always available; `FOR UPDATE SKIP LOCKED` lease behavior needs real Postgres and is not proven by SQLite-only paths.
 - Live Singapore deploy stack: Neon in `aws-ap-southeast-1`, Render API `https://researchmind-api-sg.onrender.com`, Vercel console `https://researchmind-console.vercel.app` (`sin1`, `VITE_API_BASE` → SG API), Cloudflare MCP Worker `https://researchmind-mcp.jadhavsumit534.workers.dev` (points at SG API).
 - Guest research still needs Turnstile keys on Render/Vercel; real LLM runs need provider keys on Render and `USE_MOCK_PROVIDER=false`.
+- Static portfolio marketing landing lives under `frontend/landing/` (HTML/CSS/JS, CloudFront background video, Bubbledot + Geist Pixel); React console remains under `frontend/`.

@@ -25,12 +25,11 @@ export function EvaluationPage() {
   return (
     <section className="stack">
       <PageHeader
-        eyebrow="Evaluation"
-        title="No benchmark has been recorded"
-        lede="DeepEval is not part of this release. Scores are omitted because none were measured."
+        title="No benchmark yet"
+        lede="DeepEval is not in this release. No scores were measured."
       />
-      <p className="banner info" role="status">
-        Full benchmarks stay manual and are not available to guest accounts. There is no button to launch one from here.
+      <p className="meta" role="status">
+        Guests cannot launch benchmarks from this demo.
       </p>
       <ScoreChart points={[]} />
       <div className="table-wrap panel">

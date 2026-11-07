@@ -24,9 +24,8 @@ export function UsagePage() {
   return (
     <section className="stack">
       <PageHeader
-        eyebrow="Run history"
-        title="Your guest usage"
-        lede="Only runs for this guest token are listed. Estimated cost stays unknown unless the server reports a figure."
+        title="Your usage"
+        lede="Runs for this guest session only."
       />
       {usage.isPending ? <p role="status">Loading usage.</p> : null}
       <ErrorText error={usage.error} />

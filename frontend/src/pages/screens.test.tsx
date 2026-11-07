@@ -156,7 +156,7 @@ beforeEach(() => {
 describe("research console screens", () => {
   it("asks for verification before a guest token exists", async () => {
     renderAt("/");
-    expect(await screen.findByRole("heading", { name: "Verify to continue" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Enter demo" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Verification token" })).toBeInTheDocument();
   });
 
@@ -165,9 +165,9 @@ describe("research console screens", () => {
     world.usage.one_use_consumed = true;
     world.usage.run_ids = ["run-1"];
     renderAt("/");
-    expect(await screen.findByRole("heading", { name: "Quota consumed" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Your demo run is used" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start research" })).toBeDisabled();
-    expect(screen.getByRole("link", { name: "Reopen existing run" })).toHaveAttribute("href", "/runs/run-1");
+    expect(screen.getByRole("link", { name: "Open run" })).toHaveAttribute("href", "/runs/run-1");
   });
 
   it("shows a cancelled run from the saved status while the channel connects", async () => {
@@ -211,7 +211,7 @@ describe("research console screens", () => {
   it("does not offer a guest benchmark or invent an accuracy figure", async () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     renderAt("/evaluation");
-    expect(await screen.findByRole("heading", { name: "No benchmark has been recorded" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No benchmark yet" })).toBeInTheDocument();
     expect(screen.getAllByText("not measured").length).toBeGreaterThan(3);
     expect(screen.queryByRole("button", { name: /benchmark/i })).toBeNull();
     expect(screen.queryByText(/%/)).toBeNull();

@@ -38,9 +38,8 @@ export function LiveRunPage() {
   return (
     <section className="stack">
       <PageHeader
-        eyebrow="Live research run"
         title={run.topic}
-        lede="Events replay from the saved log. The status line comes from the run record."
+        lede="Live progress from the saved run log."
         actions={
           <div className="button-row">
             <Link className="button secondary" to={`/runs/${run.run_id}/report`}>
@@ -52,7 +51,7 @@ export function LiveRunPage() {
           </div>
         }
       />
-      {reused ? <p className="banner info">This request reopened your existing run.</p> : null}
+      {reused ? <p className="banner info">Reopened your existing run.</p> : null}
       <RunStatusBar run={run} connection={connection} />
       <BannerList banners={banners} />
       <dl className="metric-list">

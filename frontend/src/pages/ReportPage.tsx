@@ -36,7 +36,6 @@ export function ReportPage() {
   return (
     <section className="stack">
       <PageHeader
-        eyebrow="Final report"
         title={run.topic}
         lede={snapshot?.wording ?? "Evidence assessed against stored passages. This is not an absolute fact-check."}
         actions={

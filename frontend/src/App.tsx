@@ -44,7 +44,7 @@ export function AppRoutes() {
 export function App() {
   return (
     <AppProviders>
-      <BrowserRouter>
+      <BrowserRouter basename="/app">
         <AppRoutes />
       </BrowserRouter>
     </AppProviders>

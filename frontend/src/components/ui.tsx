@@ -6,7 +6,6 @@ import type { ConnectionState, ResearchRun, UsageFigures } from "../api/types";
 import { channelLabel } from "../domain/runView";
 
 export function PageHeader({
-  eyebrow,
   title,
   lede,
   actions,
@@ -19,7 +18,6 @@ export function PageHeader({
   return (
     <header className="page-header">
       <div>
-        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
         <h1>{title}</h1>
         {lede ? <p className="lede">{lede}</p> : null}
       </div>

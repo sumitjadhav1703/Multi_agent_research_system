@@ -91,8 +91,11 @@ services:
     autoDeployTrigger: "off"
     routes:
       - type: rewrite
-        source: /*
-        destination: /index.html
+        source: /app/*
+        destination: /app/index.html
+      - type: rewrite
+        source: /app
+        destination: /app/index.html
     envVars:
       - key: NODE_VERSION
         value: "24"

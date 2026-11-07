@@ -52,9 +52,8 @@ export function EvidencePage() {
   return (
     <section className="stack">
       <PageHeader
-        eyebrow="Evidence explorer"
         title={run.topic}
-        lede="Passages and claims come from the saved snapshot. Publication dates are not stored."
+        lede="Passages and claims from the saved snapshot."
       />
       <RunStatusBar run={run} connection={connection} />
       <BannerList banners={runBanners({ run, events, snapshot, connection })} />
