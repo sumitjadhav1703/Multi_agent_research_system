@@ -4,7 +4,7 @@
 - **Date:** 2026-11-07  
 - **Deciders:** Project owner (approved source-of-truth plan); Gate 0 audit records acceptance into this repository  
 - **Canonical spec:** [`docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](../RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md)  
-- **Execution contract:** [`CURSOR_IMPLEMENTATION_PLAN.md`](../../CURSOR_IMPLEMENTATION_PLAN.md)
+- **Execution status:** [`docs/IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md)
 
 ---
 

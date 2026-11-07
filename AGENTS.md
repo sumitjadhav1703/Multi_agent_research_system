@@ -4,7 +4,7 @@
 - If a required/pinned model is unavailable, substituted, or exhausted, stop and report honestly; never claim Opus or Sonnet ran when they did not. User authorized Grok for coding subagents when Sonnet 5 weekly usage was exhausted.
 - Never read, print, log, cat, or commit `.env` or secret values; API keys stay local in `.env` (gitignored). Processes may load env via dotenv without displaying values.
 - Ask the user when blocked or when a decision is needed rather than guessing through ambiguity.
-- Do not edit the approved plan files themselves (including `ResearchMind_2_0_Deployment_Ready_Plan.md`); implement against them and keep todos in sync rather than recreating them.
+- Do not recreate large Cursor kit plan dumps in the repo root; implement against `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md` and keep `docs/IMPLEMENTATION_STATUS.md` in sync.
 - Prefer continuing to the next milestone when the current gate allows, while still stopping for milestone review rather than inventing pass evidence.
 - Use project subagents proactively with non-overlapping file ownership; default to at most two concurrent write-capable agents; use local Mac tooling when useful.
 - Prefer Singapore/Pacific (or nearest) cloud regions for Neon, Render, and Vercel; avoid US/Oregon placements when a Singapore or nearby option exists, for lower latency.
@@ -12,7 +12,7 @@
 ## Learned Workspace Facts
 
 - Workspace root is `/Users/sumitjadhav/Multi_agent_research_system/repo`; GitHub remote is `https://github.com/sumitjadhav1703/Multi_agent_research_system.git`.
-- Authoritative ResearchMind 2.0 specs are `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`, `CURSOR_IMPLEMENTATION_PLAN.md`, and root `ResearchMind_2_0_Deployment_Ready_Plan.md`; track progress in `docs/IMPLEMENTATION_STATUS.md`.
+- Authoritative ResearchMind 2.0 spec is `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`; track progress in `docs/IMPLEMENTATION_STATUS.md` and measured hosts in `docs/deployment-report.md`.
 - V1 Streamlit/pipeline baseline is frozen at git tag `v1-baseline`; keep V1 modules and offline V1 tests green while V2 grows beside them under `backend/`.
 - V2 stack target: FastAPI + LiteLLM SDK Router (free-only allowlist, no paid fallback), LangGraph bounded research, PostgreSQL/Neon durable jobs/quotas/checkpoints, REST + SSE (no first-release WebSockets), React/Vite Research Console, thin Cloudflare MCP Worker, Render deployability with a public URL as definition-of-done.
 - Prefer Python 3.13 for the backend locally; Python 3.15 failed LiteLLM native builds in this environment.

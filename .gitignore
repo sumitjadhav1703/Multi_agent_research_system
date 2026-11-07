@@ -16,3 +16,7 @@ evals/results/
 package-lock.json
 !frontend/package-lock.json
 !mcp-server/package-lock.json
+
+# Local / generated (not for public tree)
+.streamlit/
+mcp-server/.deploy-bundle/

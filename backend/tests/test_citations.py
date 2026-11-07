@@ -185,6 +185,43 @@ class CitationTests(unittest.TestCase):
         self.assertTrue(any(section.kind == "conflict" and "cl_cx" in section.claim_ids for section in repaired.sections))
         self.assertTrue(any("sec_bad" in note for note in repairs))
 
+    def test_negated_finding_body_is_replaced_with_supported_claim(self) -> None:
+        passage = _passage()
+        supported = Claim(
+            claim_id="cl_access",
+            text="Access is available",
+            evidence_ids=["ev1"],
+            status="supported",
+            verification_reason="Quoted.",
+        )
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_flip",
+                    heading="Finding",
+                    body="Access is not available",
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_access"],
+                    kind="finding",
+                ),
+                ReportSection(
+                    section_id="sec_same",
+                    heading="Finding",
+                    body="Access is available",
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_access"],
+                    kind="finding",
+                ),
+            ],
+        )
+        repaired, repairs = assemble_report(report, [supported], [passage])
+        findings = {section.section_id: section for section in repaired.sections if section.kind == "finding"}
+        self.assertEqual(findings["sec_flip"].body, supported.text)
+        self.assertNotIn("not", findings["sec_flip"].body.lower().split())
+        self.assertEqual(findings["sec_same"].body, supported.text)
+        self.assertTrue(any("sec_flip" in note for note in repairs))
+
     def test_merge_drops_duplicate_urls(self) -> None:
         source = _source().model_dump()
         other = _source(source_id="src2", subquestion_id="sq2").model_dump()

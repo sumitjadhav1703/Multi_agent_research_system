@@ -456,8 +456,44 @@ def link_claims_to_sources(
 _INSTRUCTION_MARKERS = ("ignore earlier instructions", "ignore all instructions", "shell tool")
 
 
+# Short negations are dropped by significant_terms (min length 4). Keep them here
+# so report bodies cannot flip claim polarity ("available" vs "not available").
+_NEGATION_TOKENS = frozenset(
+    {
+        "not",
+        "no",
+        "never",
+        "none",
+        "nor",
+        "without",
+        "cant",
+        "isnt",
+        "arent",
+        "wasnt",
+        "werent",
+        "doesnt",
+        "dont",
+        "didnt",
+        "wont",
+        "hasnt",
+        "havent",
+        "hadnt",
+    }
+)
+
+
+def _report_match_terms(text: str) -> set[str]:
+    """Terms for finding-vs-claim matching, including short negation markers."""
+    normalized = text.lower().replace("'", "").replace("’", "")
+    terms = significant_terms(normalized)
+    for token in re.findall(r"[a-z0-9]+", normalized):
+        if token in _NEGATION_TOKENS:
+            terms.add(token)
+    return terms
+
+
 def _body_matches_supported(body: str, supported_claims: list[Claim]) -> bool:
-    """True when the finding text does not add terms beyond the supported claims."""
+    """True when the finding text does not add terms or flip negation vs supported claims."""
     normalized = " ".join(body.split()).lower()
     if not normalized:
         return False
@@ -465,12 +501,21 @@ def _body_matches_supported(body: str, supported_claims: list[Claim]) -> bool:
     claim_normalized = " ".join(claim_text.split()).lower()
     if not claim_normalized:
         return False
-    if normalized == claim_normalized or normalized in claim_normalized:
+    if normalized == claim_normalized:
         return True
-    body_terms = significant_terms(body)
+    body_terms = _report_match_terms(body)
+    claim_terms = _report_match_terms(claim_text)
     if not body_terms:
         return False
-    return body_terms <= significant_terms(claim_text)
+    # Short negations must match exactly; otherwise "not available" ⊆ "available" fails
+    # one way and "available" ⊆ "not available" would incorrectly pass the other way.
+    if (body_terms & _NEGATION_TOKENS) != (claim_terms & _NEGATION_TOKENS):
+        return False
+    content_body = body_terms - _NEGATION_TOKENS
+    content_claim = claim_terms - _NEGATION_TOKENS
+    if not content_body:
+        return False
+    return content_body <= content_claim
 
 
 def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Passage]) -> tuple[ReportDraft, list[str]]:

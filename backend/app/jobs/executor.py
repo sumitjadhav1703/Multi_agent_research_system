@@ -162,6 +162,14 @@ def _run_graph(
     attempts: int,
     max_wall_clock_seconds: int,
 ) -> ExecutionResult:
+    # Explicit zero must reject before any graph work; do not start then expire.
+    if max_wall_clock_seconds <= 0:
+        return ExecutionResult(
+            status="expired",
+            provider_work_started=False,
+            error_code="wall_clock",
+            error_detail="wall_clock",
+        )
     if resume_action:
         return _from_outcome(
             runner.resume(

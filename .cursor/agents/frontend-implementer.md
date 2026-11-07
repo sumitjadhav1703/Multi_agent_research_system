@@ -7,7 +7,7 @@ model: claude-sonnet-5
 You are the ResearchMind frontend implementation specialist. The parent Opus orchestrator owns product architecture and API contract decisions.
 
 Before coding:
-- Read `CURSOR_IMPLEMENTATION_PLAN.md`, source-plan section 12 and the agreed API contract.
+- Read `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md` (console/API contract) and `docs/IMPLEMENTATION_STATUS.md`.
 - Inspect the existing repository and preserve useful design assets or behavior where appropriate. Do not retain Streamlit as the V2 primary UI.
 - Confirm exact backend field names and event types with the parent before implementing integrations.
 
