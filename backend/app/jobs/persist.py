@@ -46,8 +46,8 @@ def _finalize_owned(
     try:
         from backend.app.db.models import ResearchJob
 
-        job = session.get(ResearchJob, job_id)
-        if job is None or job.lease_owner != worker_id:
+        job = _load_owned_job(session, job_id, worker_id=worker_id)
+        if job is None:
             # A missing lease means recovery already released the row. Writing
             # here would let a stale worker finish a job it no longer owns.
             span.set(outcome="skipped")
@@ -63,9 +63,10 @@ def _finalize_owned(
             job.error_code = result.error_code
             job.error_detail = _safe(result.error_detail)
         else:
+            # Re-read cancel_requested so a /cancel that committed after the first
+            # load is not overwritten by completed/review_required.
+            _refresh_cancel_flag(session, job)
             status = result.status if result.status in _KNOWN else "failed"
-            # A cancel that wins the race after the graph returns must not be stored
-            # as completed or review_required.
             if job.cancel_requested and status in {"completed", "review_required"}:
                 status = "cancelled"
             job.status = status
@@ -108,9 +109,41 @@ def _finalize_owned(
 _KNOWN = {"queued", "running", "review_required", "completed", "failed", "cancelled", "expired"}
 
 
+def _load_owned_job(session: Session, job_id: str, *, worker_id: str):
+    from backend.app.db.models import ResearchJob
+
+    query = select(ResearchJob).where(ResearchJob.id == job_id)
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        query = query.with_for_update()
+    job = session.scalars(query).first()
+    if job is None or job.lease_owner != worker_id:
+        return None
+    return job
+
+
+def _refresh_cancel_flag(session: Session, job) -> None:
+    """Pull the latest cancel_requested without flushing a stale in-memory 0 first."""
+    from backend.app.db.models import ResearchJob
+
+    with session.no_autoflush:
+        flag = session.connection().execute(
+            select(ResearchJob.cancel_requested).where(ResearchJob.id == job.id)
+        ).scalar_one()
+    job.cancel_requested = int(flag)
+
+
+def _usage_has_values(usage: dict) -> bool:
+    keys = ("llm_calls", "prompt_tokens", "completion_tokens", "total_tokens", "search_calls")
+    return any(usage.get(key) is not None for key in keys)
+
+
 def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: ExecutionResult, now: str) -> None:
-    for model in (EvidencePassage, ResearchClaim, ResearchSource, ResearchReport, UsageLedger):
+    for model in (EvidencePassage, ResearchClaim, ResearchSource, ResearchReport):
         session.execute(delete(model).where(model.job_id == job_id))
+    usage = result.usage or {}
+    replace_usage = _usage_has_values(usage)
+    if replace_usage:
+        session.execute(delete(UsageLedger).where(UsageLedger.job_id == job_id))
     seen_urls: set[str] = set()
     seen_keys: set[str] = set()
     for source in result.sources:
@@ -175,8 +208,7 @@ def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: Exe
                 created_at=now,
             )
         )
-    usage = result.usage or {}
-    if usage:
+    if replace_usage:
         session.add(
             UsageLedger(
                 id=str(uuid.uuid4()),
