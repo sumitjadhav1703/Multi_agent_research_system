@@ -24,6 +24,7 @@ from backend.app.jobs.consumer import QueueConsumer, consumer_enabled
 from backend.app.jobs.errors import JobServiceError
 from backend.app.jobs.executor import LifespanGraphExecutor
 from backend.app.jobs.lease import recover_expired_leases
+from backend.app.jobs.retention import run_retention_pass
 from backend.app.jobs.turnstile import build_turnstile_verifier
 
 
@@ -53,6 +54,12 @@ async def lifespan(app: FastAPI):
             session = app.state.session_factory()
             try:
                 recover_expired_leases(session)
+                if settings.data_retention_enabled:
+                    run_retention_pass(
+                        session,
+                        retention_days=settings.data_retention_days,
+                        batch_size=settings.data_retention_batch_size,
+                    )
                 session.commit()
             finally:
                 session.close()
@@ -72,6 +79,10 @@ async def lifespan(app: FastAPI):
             lease_seconds=settings.job_lease_seconds,
             heartbeat_seconds=settings.job_heartbeat_seconds,
             poll_seconds=settings.queue_poll_seconds,
+            retention_enabled=settings.data_retention_enabled,
+            retention_days=settings.data_retention_days,
+            retention_interval_seconds=settings.data_retention_interval_seconds,
+            retention_batch_size=settings.data_retention_batch_size,
         )
         consumer.start()
         app.state.consumer = consumer

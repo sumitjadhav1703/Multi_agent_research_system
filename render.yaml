@@ -37,6 +37,14 @@ services:
         value: "12"
       - key: MAX_RUN_WALL_CLOCK_SECONDS
         value: "180"
+      - key: DATA_RETENTION_ENABLED
+        value: "true"
+      - key: DATA_RETENTION_DAYS
+        value: "2"
+      - key: DATA_RETENTION_INTERVAL_SECONDS
+        value: "3600"
+      - key: DATA_RETENTION_BATCH_SIZE
+        value: "100"
       - key: OTEL_TRACES_EXPORTER
         value: none
       - key: OTEL_SERVICE_NAME

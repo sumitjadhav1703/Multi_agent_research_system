@@ -17,3 +17,8 @@ def add_seconds(now: str, seconds: int) -> str:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return (parsed + timedelta(seconds=seconds)).isoformat()
+
+
+def add_days(now: str, days: int) -> str:
+    """Shift an ISO-8601 UTC timestamp by whole days (negative allowed)."""
+    return add_seconds(now, int(days) * 24 * 60 * 60)

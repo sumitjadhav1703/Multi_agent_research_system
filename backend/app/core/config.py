@@ -131,12 +131,25 @@ class Settings(BaseSettings):
         alias="TURNSTILE_VERIFY_URL",
     )
     guest_token_ttl_hours: int = Field(default=24 * 14, alias="GUEST_TOKEN_TTL_HOURS")
+    # Auto-delete research rows older than this many days (jobs + orphans). Min 1.
+    data_retention_enabled: bool = Field(default=True, alias="DATA_RETENTION_ENABLED")
+    data_retention_days: int = Field(default=2, alias="DATA_RETENTION_DAYS")
+    data_retention_interval_seconds: int = Field(
+        default=3600, alias="DATA_RETENTION_INTERVAL_SECONDS"
+    )
+    data_retention_batch_size: int = Field(default=100, alias="DATA_RETENTION_BATCH_SIZE")
     worker_id: str = Field(default_factory=make_worker_id, alias="WORKER_ID")
     # Exact browser origins, comma-separated. Empty means same-origin only.
     # Never "*": the console sends Authorization, and wildcard credentials are rejected.
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
-    @field_validator("allow_paid_models", "use_mock_provider", "queue_consumer_enabled", mode="before")
+    @field_validator(
+        "allow_paid_models",
+        "use_mock_provider",
+        "queue_consumer_enabled",
+        "data_retention_enabled",
+        mode="before",
+    )
     @classmethod
     def _parse_bool(cls, value: object) -> object:
         if isinstance(value, str):
@@ -226,6 +239,12 @@ class Settings(BaseSettings):
 
         for model_id in self.configured_model_ids():
             _assert_model_allowed(model_id, allow)
+        if self.data_retention_days < 1:
+            raise ValueError("DATA_RETENTION_DAYS must be at least 1.")
+        if self.data_retention_interval_seconds < 1:
+            raise ValueError("DATA_RETENTION_INTERVAL_SECONDS must be at least 1.")
+        if self.data_retention_batch_size < 1:
+            raise ValueError("DATA_RETENTION_BATCH_SIZE must be at least 1.")
         return self
 
 
