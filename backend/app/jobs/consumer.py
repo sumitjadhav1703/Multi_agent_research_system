@@ -194,11 +194,13 @@ class QueueConsumer:
                 batch_size=self.retention_batch_size,
             )
             session.commit()
-            self._last_retention_at = now
         except Exception:
             session.rollback()
+            # Advance the schedule even on failure so a broken purge cannot
+            # retry on every QUEUE_POLL_SECONDS tick (~0.5s).
             emit("retention.failed", {"error.class": "database_error"}, level=logging.ERROR)
         finally:
+            self._last_retention_at = now
             session.close()
 
     def _loop(self) -> None:

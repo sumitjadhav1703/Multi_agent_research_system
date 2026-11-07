@@ -80,7 +80,7 @@ Jobs, events, evidence live in Neon (1 GB free cap/project). Render disk is ephe
 **IMPLEMENTED:** `DATA_RETENTION_DAYS` defaults to **2**. On API startup and about once per hour in the queue consumer, ResearchMind deletes:
 
 - `research_jobs` with `created_at` older than the cutoff, plus child events/sources/passages/claims/reports/usage/idempotency rows  
-- Orphan `guest_identities` (and entitlements) with no remaining jobs when they are past the cutoff or past `expires_at`  
+- Orphan `guest_identities` (and entitlements) with no remaining jobs **only after** `expires_at` (so a Turnstile guest can still start within `GUEST_TOKEN_TTL_HOURS`)  
 - Best-effort LangGraph checkpoint rows by `thread_id` on Postgres  
 
 `quota_guard` is never deleted. Batch size defaults to 100 jobs per pass. Disable with `DATA_RETENTION_ENABLED=false`.

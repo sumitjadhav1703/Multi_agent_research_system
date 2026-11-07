@@ -4,14 +4,17 @@ Runs inside the API process (startup + periodic queue-consumer tick). This is
 not a separate paid worker and not FastAPI BackgroundTasks as the sole owner.
 
 Deletes jobs older than the cutoff and their child rows, then orphan guest
-identities that have no remaining jobs. quota_guard is never deleted.
-LangGraph checkpoint rows are best-effort removed by thread_id on Postgres.
+identities that have no remaining jobs and whose token has already expired
+(`expires_at < now`). Unexpired guest rows are kept so a Turnstile-issued
+bearer remains usable until GUEST_TOKEN_TTL_HOURS elapses. quota_guard is
+never deleted. LangGraph checkpoint rows are best-effort removed by
+thread_id on Postgres.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import delete, or_, select, text
+from sqlalchemy import and_, delete, or_, select, text
 from sqlalchemy.orm import Session
 
 from backend.app.db.models import (
@@ -80,7 +83,7 @@ def purge_expired_data(
             session.execute(delete(model).where(model.job_id.in_(job_ids)))
         session.execute(delete(ResearchJob).where(ResearchJob.id.in_(job_ids)))
 
-    identity_ids = _select_orphan_identities(session, cutoff=cutoff, now=clock, batch_size=batch_size)
+    identity_ids = _select_orphan_identities(session, now=clock, cutoff=cutoff, batch_size=batch_size)
     if identity_ids:
         session.execute(delete(DemoEntitlement).where(DemoEntitlement.identity_id.in_(identity_ids)))
         session.execute(delete(GuestIdentity).where(GuestIdentity.id.in_(identity_ids)))
@@ -138,16 +141,29 @@ def _select_old_jobs(
 
 
 def _select_orphan_identities(
-    session: Session, *, cutoff: str, now: str, batch_size: int
+    session: Session, *, now: str, cutoff: str, batch_size: int
 ) -> list[str]:
+    """Delete only expired orphan guests.
+
+    A visitor may verify Turnstile and wait days before starting a run. Their
+    bearer stays valid until expires_at (GUEST_TOKEN_TTL_HOURS). Rows with a
+    null expires_at are treated as corrupt and removed only after the job
+    retention cutoff so they cannot linger forever.
+    """
     job_owners = select(ResearchJob.owner_id).distinct()
     rows = session.scalars(
         select(GuestIdentity.id)
         .where(
             GuestIdentity.id.not_in(job_owners),
             or_(
-                GuestIdentity.created_at < cutoff,
-                GuestIdentity.expires_at.is_not(None) & (GuestIdentity.expires_at < now),
+                and_(
+                    GuestIdentity.expires_at.is_not(None),
+                    GuestIdentity.expires_at < now,
+                ),
+                and_(
+                    GuestIdentity.expires_at.is_(None),
+                    GuestIdentity.created_at < cutoff,
+                ),
             ),
         )
         .order_by(GuestIdentity.created_at.asc())

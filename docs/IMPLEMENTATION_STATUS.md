@@ -7,7 +7,7 @@
 
 ### Follow-up: 2-day data retention (this change)
 
-- **IMPLEMENTED:** `backend/app/jobs/retention.py` purges research jobs older than `DATA_RETENTION_DAYS` (default **2**) plus orphan guest identities. Runs on lifespan startup and periodically inside `QueueConsumer` (`DATA_RETENTION_INTERVAL_SECONDS`, default 3600).  
+- **IMPLEMENTED:** `backend/app/jobs/retention.py` purges research jobs older than `DATA_RETENTION_DAYS` (default **2**). Orphan guest identities are removed only after `expires_at` (preserves unexpired Turnstile tokens). Runs on lifespan startup and periodically inside `QueueConsumer` (`DATA_RETENTION_INTERVAL_SECONDS`, default 3600). Failed purge passes still advance the schedule so retries are not every poll tick.  
 - **Does not delete** `quota_guard`. Postgres LangGraph checkpoint cleanup is best-effort by `thread_id`.  
 - **Env:** `DATA_RETENTION_ENABLED`, `DATA_RETENTION_DAYS`, `DATA_RETENTION_INTERVAL_SECONDS`, `DATA_RETENTION_BATCH_SIZE` (also set in `render.yaml` / `.env.example`).  
 - **Tests:** `backend/tests/test_retention.py`. Full backend offline suite on this change: **108 tests, 2 skipped (local Postgres durability), OK** (`USE_MOCK_PROVIDER=true`, Python 3.12 venv).  

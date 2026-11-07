@@ -60,7 +60,8 @@ class RetentionTests(unittest.TestCase):
             session.commit()
 
         self.assertEqual(stats.jobs_deleted, 1)
-        self.assertEqual(stats.identities_deleted, 1)
+        # Old job owner is still inside GUEST_TOKEN_TTL, so the orphan identity stays.
+        self.assertEqual(stats.identities_deleted, 0)
         with self.factory() as session:
             remaining_jobs = {row.id for row in session.scalars(select(ResearchJob))}
             self.assertEqual(remaining_jobs, {recent_id})
@@ -72,6 +73,7 @@ class RetentionTests(unittest.TestCase):
             self.assertEqual(session.scalar(select(func.count()).select_from(UsageLedger)), 1)
             self.assertEqual(session.scalar(select(func.count()).select_from(IdempotencyKey)), 1)
             self.assertIsNone(session.get(ResearchJob, old_id))
+            self.assertEqual(session.scalar(select(func.count()).select_from(GuestIdentity)), 2)
             # Singleton quota row must survive forever.
             self.assertEqual(session.scalar(select(func.count()).select_from(QuotaGuard)), 1)
 
@@ -125,6 +127,40 @@ class RetentionTests(unittest.TestCase):
         with self.factory() as session:
             self.assertIsNone(session.get(GuestIdentity, "orphan-expired"))
             self.assertIsNone(session.get(DemoEntitlement, "orphan-expired"))
+
+    def test_unexpired_orphan_identity_is_preserved(self) -> None:
+        """Turnstile guest waiting >2 days before starting a run keeps their token."""
+        now = utc_now()
+        with self.factory() as session:
+            session.add(
+                GuestIdentity(
+                    id="orphan-valid",
+                    created_at=add_days(now, -5),
+                    expires_at=add_days(now, 9),
+                    turnstile_verified=1,
+                )
+            )
+            session.flush()
+            session.add(
+                DemoEntitlement(
+                    identity_id="orphan-valid",
+                    status="available",
+                    job_id=None,
+                    consumed_at=None,
+                    refunded_at=None,
+                    refund_reason=None,
+                )
+            )
+            session.commit()
+
+        with self.factory() as session:
+            stats = purge_expired_data(session, retention_days=2, now=now)
+            session.commit()
+
+        self.assertEqual(stats.identities_deleted, 0)
+        with self.factory() as session:
+            self.assertIsNotNone(session.get(GuestIdentity, "orphan-valid"))
+            self.assertIsNotNone(session.get(DemoEntitlement, "orphan-valid"))
 
     def test_retention_due_respects_interval(self) -> None:
         now = utc_now()
