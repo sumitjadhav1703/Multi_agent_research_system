@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+litellm
+python-dotenv
+httpx
+langgraph>=1.0.0,<1.2
+sqlalchemy>=2.0,<2.1
+psycopg[binary]>=3.2,<4
+langgraph-checkpoint-postgres>=3,<4
+opentelemetry-sdk==1.45.2
+opentelemetry-exporter-otlp-proto-http==1.45.2

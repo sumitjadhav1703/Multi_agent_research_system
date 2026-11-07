@@ -1,0 +1,8 @@
+# Local Wrangler overrides. Copy to .dev.vars if you need a different API origin.
+# .dev.vars is gitignored. Do not put guest tokens, provider keys, or database URLs here.
+#
+# Name only. The value is the FastAPI origin, not a secret:
+# RESEARCHMIND_API_BASE=http://127.0.0.1:8000
+#
+# Milestone 6 does not read a Worker secret. Do not store a guest bearer with
+# `wrangler secret put`. The MCP client sends that bearer on each request.
