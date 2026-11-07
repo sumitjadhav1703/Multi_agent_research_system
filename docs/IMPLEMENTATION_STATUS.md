@@ -1,9 +1,17 @@
 # ResearchMind 2.0 — Implementation Status
 
-**Updated:** 2026-11-07  
-**Repository root:** `/Users/sumitjadhav/Multi_agent_research_system/repo`  
-**Git:** `main` @ `f1881b9` + local annotated tag `v1-baseline` (M2 and M3 changes are local and uncommitted)  
-**Current gate:** **Singapore public stack + MCP Worker are live.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP `https://researchmind-mcp.jadhavsumit534.workers.dev`. Oregon deleted. CORS OK. Turnstile + provider keys are configured on the hosts; live ready reports `use_mock_provider: false`. Codex P2 fixes (cancel, quota lock, usage ledger, supported findings, zero budget) are in this branch. Awaiting parent review of a real end-to-end research run.
+**Updated:** 2026-11-08  
+**Repository root:** `/workspace`  
+**Git:** feature branch for data retention (see latest commit)  
+**Current gate:** **Singapore public stack + MCP Worker are live.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP `https://researchmind-mcp.jadhavsumit534.workers.dev`. Oregon deleted. CORS OK. Turnstile + provider keys are configured on the hosts; live ready reports `use_mock_provider: false`.
+
+### Follow-up: 2-day data retention (this change)
+
+- **IMPLEMENTED:** `backend/app/jobs/retention.py` purges research jobs older than `DATA_RETENTION_DAYS` (default **2**) plus orphan guest identities. Runs on lifespan startup and periodically inside `QueueConsumer` (`DATA_RETENTION_INTERVAL_SECONDS`, default 3600).  
+- **Does not delete** `quota_guard`. Postgres LangGraph checkpoint cleanup is best-effort by `thread_id`.  
+- **Env:** `DATA_RETENTION_ENABLED`, `DATA_RETENTION_DAYS`, `DATA_RETENTION_INTERVAL_SECONDS`, `DATA_RETENTION_BATCH_SIZE` (also set in `render.yaml` / `.env.example`).  
+- **Tests:** `backend/tests/test_retention.py`. Full backend offline suite on this change: **108 tests, 2 skipped (local Postgres durability), OK** (`USE_MOCK_PROVIDER=true`, Python 3.12 venv).  
+- **Not claimed:** hosted Neon purge metrics; automatic vacuum/storage reclaim timing on Neon. After merge, set the new env vars on Render (or redeploy from `render.yaml` values) so production starts purging.
 
 ---
 
