@@ -3,7 +3,7 @@
 **Updated:** 2026-11-07  
 **Repository root:** `/Users/sumitjadhav/Multi_agent_research_system/repo`  
 **Git:** `main` @ `f1881b9` + local annotated tag `v1-baseline` (M2 and M3 changes are local and uncommitted)  
-**Current gate:** **Milestone 7 deploy artifacts are in the tree. No public V2 URL.** Docker, Render, Vercel, and Neon were not deployed. Wrangler is not logged in. Awaiting parent review.
+**Current gate:** **Singapore public stack + MCP Worker are live.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP `https://researchmind-mcp.jadhavsumit534.workers.dev`. Oregon deleted. CORS OK. Turnstile + provider keys are configured on the hosts; live ready reports `use_mock_provider: false`. Codex P2 fixes (cancel, quota lock, usage ledger, supported findings, zero budget) are in this branch. Awaiting parent review of a real end-to-end research run.
 
 ---
 

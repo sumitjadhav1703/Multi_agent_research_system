@@ -7,6 +7,7 @@
 - Do not edit the approved plan files themselves (including `ResearchMind_2_0_Deployment_Ready_Plan.md`); implement against them and keep todos in sync rather than recreating them.
 - Prefer continuing to the next milestone when the current gate allows, while still stopping for milestone review rather than inventing pass evidence.
 - Use project subagents proactively with non-overlapping file ownership; default to at most two concurrent write-capable agents; use local Mac tooling when useful.
+- Prefer Singapore/Pacific (or nearest) cloud regions for Neon, Render, and Vercel; avoid US/Oregon placements when a Singapore or nearby option exists, for lower latency.
 
 ## Learned Workspace Facts
 
@@ -18,3 +19,5 @@
 - LiteLLM Gemini id `gemini/gemini-2.0-flash` returned HTTP 404 (retired); point defaults at the current Flash alias and do not claim a live Gemini pass without a fresh verified call.
 - SSRF defenses remain V1-level (DNS/scheme checks with residual DNS-rebinding/connect-time risk); do not document SSRF as closed without egress-proxy or equivalent hardening.
 - Local Docker/Postgres is not always available; `FOR UPDATE SKIP LOCKED` lease behavior needs real Postgres and is not proven by SQLite-only paths.
+- Live Singapore deploy stack: Neon in `aws-ap-southeast-1`, Render API `https://researchmind-api-sg.onrender.com`, Vercel console `https://researchmind-console.vercel.app` (`sin1`, `VITE_API_BASE` → SG API), Cloudflare MCP Worker `https://researchmind-mcp.jadhavsumit534.workers.dev` (points at SG API).
+- Guest research still needs Turnstile keys on Render/Vercel; real LLM runs need provider keys on Render and `USE_MOCK_PROVIDER=false`.

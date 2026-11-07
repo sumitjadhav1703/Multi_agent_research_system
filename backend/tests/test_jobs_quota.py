@@ -30,7 +30,7 @@ from backend.app.db.models import (
 )
 from backend.app.jobs.consumer import QueueConsumer, process_one
 from backend.app.jobs.errors import JobServiceError
-from backend.app.jobs.executor import ExecutionResult, GraphJobExecutor
+from backend.app.jobs.executor import ExecutionResult, GraphJobExecutor, _budget
 from backend.app.jobs.lease import recover_expired_leases
 from backend.app.jobs.persist import finalize_job
 from backend.app.jobs.quota import (
@@ -487,6 +487,195 @@ class QuotaJobTests(unittest.TestCase):
             stored = session.get(ResearchJob, job.id)
             self.assertEqual(stored.status, "completed")
             self.assertEqual(stored.approval_status, "approved")
+
+    def test_explicit_zero_model_budget_is_preserved(self) -> None:
+        budget = _budget('{"max_model_calls":0}')
+        self.assertEqual(budget["max_model_calls"], 0)
+        self.assertEqual(budget["max_wall_clock_seconds"], 180)
+        self.assertEqual(_budget('{"max_wall_clock_seconds":0}')["max_wall_clock_seconds"], 0)
+        self.assertEqual(_budget("{}")["max_model_calls"], 12)
+        self.assertEqual(_budget('{"max_model_calls":null}')["max_model_calls"], 12)
+
+    def test_second_finalize_replaces_usage_ledger(self) -> None:
+        now = utc_now()
+        job_id = "33333333-3333-3333-3333-333333333333"
+        with self.factory() as session:
+            session.add(
+                GuestIdentity(
+                    id="ledger-owner",
+                    created_at=now,
+                    expires_at=add_seconds(now, 3600),
+                    turnstile_verified=1,
+                )
+            )
+            session.flush()
+            session.add(DemoEntitlement(identity_id="ledger-owner", status="consumed", job_id=job_id, consumed_at=now))
+            session.add(
+                ResearchJob(
+                    id=job_id,
+                    owner_id="ledger-owner",
+                    topic="Widget latency",
+                    status="running",
+                    idempotency_key="ledger-key",
+                    thread_id=job_id,
+                    lease_owner="worker-test",
+                    attempts=1,
+                    max_attempts=3,
+                    cancel_requested=0,
+                    provider_work_started=1,
+                    config_version="m3-queue-v1",
+                    budget_json="{}",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+        first = ExecutionResult(
+            status="review_required",
+            provider_work_started=True,
+            approval_status="pending",
+            usage={
+                "llm_calls": 2,
+                "prompt_tokens": 5,
+                "completion_tokens": 1,
+                "total_tokens": 6,
+                "search_calls": 1,
+            },
+        )
+        finalize_job(self.factory, job_id, first, worker_id="worker-test")
+        with self.factory() as session:
+            stored = session.get(ResearchJob, job_id)
+            self.assertEqual(stored.status, "review_required")
+            stored.status = "running"
+            stored.lease_owner = "worker-test"
+            stored.finished_at = None
+            session.commit()
+        second = ExecutionResult(
+            status="completed",
+            provider_work_started=True,
+            approval_status="approved",
+            usage={
+                "llm_calls": 3,
+                "prompt_tokens": 8,
+                "completion_tokens": 4,
+                "total_tokens": 12,
+                "search_calls": 2,
+            },
+        )
+        finalize_job(self.factory, job_id, second, worker_id="worker-test")
+        with self.factory() as session:
+            rows = session.scalars(select(UsageLedger).where(UsageLedger.job_id == job_id)).all()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].llm_calls, 3)
+            self.assertEqual(rows[0].prompt_tokens, 8)
+            self.assertEqual(rows[0].completion_tokens, 4)
+            self.assertEqual(rows[0].total_tokens, 12)
+            self.assertEqual(rows[0].search_calls, 2)
+            self.assertEqual(session.get(ResearchJob, job_id).status, "completed")
+
+    def test_cancel_after_start_is_persisted(self) -> None:
+        now = utc_now()
+        job_id = "44444444-4444-4444-4444-444444444444"
+        with self.factory() as session:
+            session.add(
+                GuestIdentity(
+                    id="cancel-owner",
+                    created_at=now,
+                    expires_at=add_seconds(now, 3600),
+                    turnstile_verified=1,
+                )
+            )
+            session.flush()
+            session.add(DemoEntitlement(identity_id="cancel-owner", status="consumed", job_id=job_id, consumed_at=now))
+            session.add(
+                ResearchJob(
+                    id=job_id,
+                    owner_id="cancel-owner",
+                    topic="Widget latency",
+                    status="running",
+                    idempotency_key="cancel-after-start",
+                    thread_id=job_id,
+                    lease_owner="worker-test",
+                    attempts=1,
+                    max_attempts=3,
+                    cancel_requested=0,
+                    provider_work_started=0,
+                    config_version="m3-queue-v1",
+                    budget_json="{}",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+
+        factory = self.factory
+
+        class _Outcome:
+            interrupted = False
+            approval_status = "approved"
+            events = [{"type": "worker.done", "event_id": 3, "payload": {"ok": True}}]
+            state = {
+                "approval_status": "approved",
+                "stop_reason": "answered",
+                "usage": {
+                    "llm_calls": 4,
+                    "prompt_tokens": 9,
+                    "completion_tokens": 3,
+                    "total_tokens": 12,
+                    "search_calls": 1,
+                },
+                "events": [],
+                "sources": [],
+                "passages": [],
+                "claims": [],
+            }
+
+        class _Runner:
+            def start(self, topic: str, *, owner_id: str, run_id: str) -> _Outcome:
+                with factory() as session:
+                    job = session.get(ResearchJob, run_id)
+                    if job is None:
+                        raise AssertionError(run_id)
+                    job.cancel_requested = 1
+                    session.commit()
+                return _Outcome()
+
+        class _Executor(GraphJobExecutor):
+            def _runner(self, max_model_calls: int) -> _Runner:
+                return _Runner()
+
+        result = _Executor(mock_settings()).execute(factory, job_id)
+        self.assertEqual(result.status, "cancelled")
+        self.assertEqual(result.error_code, "cancelled")
+        self.assertTrue(result.provider_work_started)
+        self.assertEqual(result.usage.get("llm_calls"), 4)
+        self.assertEqual(result.events[0]["type"], "worker.done")
+        finalize_job(factory, job_id, result, worker_id="worker-test")
+        with factory() as session:
+            stored = session.get(ResearchJob, job_id)
+            self.assertEqual(stored.status, "cancelled")
+            self.assertEqual(stored.error_code, "cancelled")
+            self.assertEqual(stored.provider_work_started, 1)
+
+        with factory() as session:
+            stored = session.get(ResearchJob, job_id)
+            stored.status = "running"
+            stored.lease_owner = "worker-test"
+            stored.finished_at = None
+            stored.cancel_requested = 1
+            stored.error_code = None
+            session.commit()
+        raced = ExecutionResult(
+            status="completed",
+            provider_work_started=True,
+            approval_status="approved",
+            usage={"llm_calls": 1, "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "search_calls": 0},
+        )
+        finalize_job(factory, job_id, raced, worker_id="worker-test")
+        with factory() as session:
+            stored = session.get(ResearchJob, job_id)
+            self.assertEqual(stored.status, "cancelled")
+            self.assertEqual(stored.error_code, "cancelled")
 
     def _issue(self, turnstile_token: str) -> str:
         with self.factory() as session:
