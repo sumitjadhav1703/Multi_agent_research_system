@@ -49,6 +49,7 @@ Reports and scores still need human review. Free-tier hosts (Render) can cold-st
 | API | https://researchmind-api-sg.onrender.com |
 | MCP Worker | https://researchmind-mcp.jadhavsumit534.workers.dev |
 | Spec / status | [`docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md), [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md), [`docs/deployment-report.md`](docs/deployment-report.md) |
+| Engineering story | [`docs/engineering-story/`](docs/engineering-story/) — bottlenecks, decisions, eval, deploy, portfolio evidence |
 
 ## Architecture
 
