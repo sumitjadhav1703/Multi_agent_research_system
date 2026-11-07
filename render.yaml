@@ -1,0 +1,102 @@
+# ResearchMind 2.0 student demo.
+# One Docker web service. The queue consumer starts in the FastAPI lifespan.
+# Do not add a Render Postgres database. DATABASE_URL must be a Neon URL,
+# set in the dashboard (sync: false). Do not commit the value.
+# Apply this blueprint only after the secret names below are filled in the dashboard.
+# Pick either this static site or the Vercel project in vercel.json, then set
+# CORS_ORIGINS to that site's exact origin.
+
+services:
+  - type: web
+    name: researchmind-api
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/health/live
+    autoDeployTrigger: "off"
+    envVars:
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: APP_ENV
+        value: production
+      - key: ALLOW_PAID_MODELS
+        value: "false"
+      - key: USE_MOCK_PROVIDER
+        value: "false"
+      - key: QUEUE_CONSUMER_ENABLED
+        value: "true"
+      - key: GLOBAL_MAX_ACTIVE_RUNS
+        value: "1"
+      - key: GLOBAL_DAILY_RUN_CAP
+        value: "3"
+      - key: MAX_MODEL_CALLS_PER_RUN
+        value: "12"
+      - key: MAX_RUN_WALL_CLOCK_SECONDS
+        value: "180"
+      - key: OTEL_TRACES_EXPORTER
+        value: none
+      - key: OTEL_SERVICE_NAME
+        value: researchmind
+      - key: LOG_LEVEL
+        value: INFO
+      - key: FREE_MODEL_ALLOWLIST
+        value: groq/openai/gpt-oss-20b,gemini/gemini-flash-latest,gemini/gemini-2.0-flash,mistral/mistral-small-latest,openrouter/meta-llama/llama-3.2-3b-instruct:free,mock/free-model
+      - key: PLANNER_PRIMARY_MODEL
+        value: groq/openai/gpt-oss-20b
+      - key: PLANNER_FALLBACK_MODEL
+        value: gemini/gemini-flash-latest
+      - key: RESEARCH_PRIMARY_MODEL
+        value: groq/openai/gpt-oss-20b
+      - key: RESEARCH_FALLBACK_MODEL
+        value: gemini/gemini-flash-latest
+      - key: VERIFIER_PRIMARY_MODEL
+        value: gemini/gemini-flash-latest
+      - key: VERIFIER_FALLBACK_MODEL
+        value: mistral/mistral-small-latest
+      - key: WRITER_PRIMARY_MODEL
+        value: groq/openai/gpt-oss-20b
+      - key: WRITER_FALLBACK_MODEL
+        value: mistral/mistral-small-latest
+      - key: EVAL_JUDGE_PRIMARY_MODEL
+        value: gemini/gemini-flash-latest
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+
+  - type: web
+    name: researchmind-console
+    runtime: static
+    branch: main
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: frontend/dist
+    autoDeployTrigger: "off"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: VITE_API_BASE
+        sync: false
+      - key: VITE_TURNSTILE_SITE_KEY
+        sync: false

@@ -1,0 +1,5 @@
+# Optional judge extra. Not installed by CI and not part of backend/requirements.txt.
+# Verified on 2026-11-07: deepeval 4.3.3 exposes deepeval.models.LiteLLMModel.
+# A live judge completion was not run. Install only for a controlled offline run:
+#   uv pip install --python /tmp/rm_v2_venv/bin/python -r evals/requirements.txt
+deepeval==4.3.3

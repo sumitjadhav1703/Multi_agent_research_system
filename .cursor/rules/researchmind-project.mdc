@@ -1,0 +1,22 @@
+---
+description: Always-applied architecture, subagent orchestration, testing, security and deployment requirements for ResearchMind 2.0.
+alwaysApply: true
+---
+
+# ResearchMind 2.0 project rule
+
+- Treat `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md` as the complete approved product/architecture specification and `CURSOR_IMPLEMENTATION_PLAN.md` as the execution contract. Read both before implementation.
+- The parent Cursor Agent is the orchestrator and must be manually selected as Claude Opus 5.5 High. Coding, frontend and test subagents must use Claude Sonnet 5 as pinned in `.cursor/agents/`. Verify actual model/task details; if unavailable or substituted, report it rather than pretending.
+- Parent Opus owns architecture, decomposition, task/file ownership, contracts, subagent dispatch, integration, review and milestone acceptance. Use Sonnet subagents proactively for bounded coding, frontend and testing tasks.
+- Do not run overlapping write agents in the same files. Use isolated worktrees when available; otherwise sequence changes. Limit default concurrent write-capable agents to two.
+- Preserve the current V1 implementation as baseline until V2 is tested. Run the current offline suite before making changes.
+- Implement in milestones and update `docs/IMPLEMENTATION_STATUS.md`. Never mark work complete without real test output and parent review.
+- Keep the project deployable throughout. A public deployment URL is a required final deliverable, not optional future work.
+- Enforce all usage quotas, provider allowlists and one-use identity limits in backend/database code. Never rely on frontend-only controls.
+- No paid provider fallback or silent top-up. Keep all secrets server-side and out of logs, traces and frontend bundles.
+- PostgreSQL is the durable source of truth for jobs, events, idempotency, quotas, evidence and graph checkpoints. Do not rely on local disk, in-memory queues or FastAPI BackgroundTasks for durable jobs.
+- Use LiteLLM SDK Router inside FastAPI first. Use LangGraph for bounded parallel research and human review. Use DeepEval for controlled benchmark runs, not each public request.
+- Use REST for commands and SSE for replayable progress. Do not add WebSockets or arbitrary webhooks in the first release without an approved, measured requirement.
+- Keep MCP as a thin authenticated Cloudflare Worker that forwards to FastAPI; do not duplicate the research graph in the Worker.
+- Keep the first Render deployment to one web service, one Uvicorn worker and one bounded queue consumer. Record cold starts and resource usage. Do not upgrade hosting until measured triggers justify it.
+- No fake metrics, fake citations, fabricated provider availability, untested security claims or “production-ready” label. Document actual measured behavior and known limits.

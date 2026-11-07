@@ -5,3 +5,14 @@ __pycache__/
 .streamlit/secrets.toml
 output/
 .playwright-mcp/
+node_modules/
+frontend/dist/
+mcp-server/.dev.vars
+mcp-server/.wrangler/
+evals/results/
+.deepeval/
+.DS_Store
+.cursor/hooks/
+package-lock.json
+!frontend/package-lock.json
+!mcp-server/package-lock.json

@@ -1,0 +1,9 @@
+# Packages imported by the V1 tools.py fetch path.
+# Install with pip --no-deps after backend/requirements.txt.
+# langchain 1.4.7 depends on langgraph>=1.2.12; the API pins langgraph==1.1.10.
+# Installing langchain normally would replace that pin. Its tool decorator
+# imports langchain-core, which the API image already has.
+beautifulsoup4==4.15.0
+soupsieve==3.0.4
+tavily-python==0.8.5
+langchain==1.4.7

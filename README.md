@@ -50,6 +50,7 @@ independently verify every claim.
 - [Quick start](#quick-start)
 - [Using the workspace](#using-the-workspace)
 - [Reliability and recovery](#reliability-and-recovery)
+- [ResearchMind 2.0 student demo](#researchmind-20-student-demo)
 - [Deployment](#deployment)
 - [Testing and development](#testing-and-development)
 - [Project structure](#project-structure)
@@ -102,6 +103,11 @@ All four stages use **`openai/gpt-oss-20b` served by Groq**. Search and Reader
 use LangChain's tool-calling agent interface; Writer and Critic combine prompt
 templates, a chat model, and a string output parser. The critic is a separate
 prompted pass using the same model, not an independent fact-checking service.
+
+The diagram above is the original Streamlit pipeline (V1). The 2.0 console is a
+separate FastAPI and React path described in
+[ResearchMind 2.0 student demo](#researchmind-20-student-demo). V1 remains the
+app behind the Streamlit link at the top of this file.
 
 | Stage | Input | Output |
 | --- | --- | --- |
@@ -273,6 +279,55 @@ new research replaces them; session expiry, a new session, or a server restart
 can lose them. Editing the topic field does not change the topic of a resumed
 run. Download any report you want to keep.
 
+## ResearchMind 2.0 student demo
+
+V2 is a student portfolio demo, not a production service. It is a FastAPI
+process with one Uvicorn worker and one Postgres-backed queue consumer, a
+static React console, Neon for durable jobs, and a thin Cloudflare Worker that
+forwards MCP calls to FastAPI. The public Streamlit URL above is still V1.
+No V2 frontend, API, or MCP URL has been published from this repository yet.
+`docs/deployment-report.md` lists what was checked on this machine and what is
+still unverified. It does not contain latency, memory, or quality figures for
+a hosted run.
+
+```text
+Browser (Vite static console)
+    REST + SSE, Authorization: Bearer
+        |
+        v
+One API container (Dockerfile, 0.0.0.0:$PORT, WEB_CONCURRENCY=1)
+    lifespan queue consumer
+        |
+        +--> Neon PostgreSQL (DATABASE_URL, not Render Postgres)
+        +--> Free-tier model allowlist through the LiteLLM SDK
+Cloudflare Worker (mcp-server/) forwards six tools to the same API
+```
+
+Local API, from the repository root, with Python 3.13 and `backend/requirements.txt`
+installed:
+
+```bash
+USE_MOCK_PROVIDER=true QUEUE_CONSUMER_ENABLED=false \
+  uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 1
+```
+
+The console dev server is `npm run dev` in `frontend/`. Leave `VITE_API_BASE`
+empty locally; Vite proxies `/api` to `http://127.0.0.1:8000`. A deployed
+console sets `VITE_API_BASE` to the public API origin and no other API
+variable. The API must list that exact origin in `CORS_ORIGINS`. A wildcard
+origin is rejected at startup.
+
+Container and host files: `Dockerfile`, `.dockerignore`, `render.yaml`, and
+`vercel.json`. Use one static host, either the Render static service in
+`render.yaml` or a Vercel project pointed at this repo. Do not create a Render
+Postgres instance for this demo. Health checks are `GET /api/v1/health/live`
+and `GET /api/v1/health/ready`. Readiness checks the database when `DATABASE_URL`
+is set. It does not require every model provider to be up.
+
+Provider keys, `DATABASE_URL`, and `TURNSTILE_SECRET_KEY` stay on the server.
+Names and the manual deploy checklist are in `.env.example` and
+`docs/deployment-report.md`.
+
 ## Deployment
 
 ### Streamlit Community Cloud
@@ -348,6 +403,8 @@ Multi_agent_research_system/
 ├── LICENSE
 └── README.md
 ```
+
+That tree is the V1 Streamlit app. ResearchMind 2.0 adds `backend/`, `frontend/`, `mcp-server/`, `Dockerfile`, `render.yaml`, and `vercel.json` beside it.
 
 ## Troubleshooting
 
