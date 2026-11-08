@@ -41,27 +41,75 @@ export function BannerList({ banners }: { banners: readonly Banner[] }) {
   );
 }
 
+const DISMISSED_NOTICES_KEY = "researchmind.dismissedNotices";
+
+function readDismissedNotices(): Record<string, true> {
+  try {
+    const raw = sessionStorage.getItem(DISMISSED_NOTICES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, true> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (value === true) out[key] = true;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeDismissedNotices(map: Record<string, true>) {
+  try {
+    sessionStorage.setItem(DISMISSED_NOTICES_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 /**
  * Compact top-right notice cluster for run pages.
- * Reclaims the wide empty gutter that full-width banner stacks wasted.
+ * Dismissals persist for the browser tab session across Live / Report / Evidence.
  */
 export function NoticeCluster({
   notices,
   stickyHint,
+  scope = "run",
 }: {
   notices: readonly Banner[];
   stickyHint?: string | null;
+  /** Prefix so dismissals follow the run across pages. */
+  scope?: string;
 }) {
-  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
-  const visible = notices.filter((notice) => !dismissed[notice.id]);
-  if (visible.length === 0 && !stickyHint) return null;
+  const [dismissed, setDismissed] = useState(readDismissedNotices);
+  const hintKey = `${scope}:hint`;
+  const showHint = Boolean(stickyHint) && !dismissed[hintKey];
+  const visible = notices.filter((notice) => !dismissed[`${scope}:${notice.id}`]);
+
+  function dismiss(key: string) {
+    setDismissed((prev) => {
+      const next = { ...prev, [key]: true as const };
+      writeDismissedNotices(next);
+      return next;
+    });
+  }
+
+  if (visible.length === 0 && !showHint) return null;
 
   return (
     <aside className="notice-cluster" aria-label="Run notices">
-      {stickyHint ? (
-        <p className="notice-chip notice-chip--hint" role="status">
-          {stickyHint}
-        </p>
+      {showHint && stickyHint ? (
+        <div className="notice-chip notice-chip--hint" role="status">
+          <span>{stickyHint}</span>
+          <button
+            type="button"
+            className="notice-dismiss"
+            aria-label="Dismiss status hint"
+            onClick={() => dismiss(hintKey)}
+          >
+            ×
+          </button>
+        </div>
       ) : null}
       <div className="notice-stack" aria-live="polite">
         {visible.map((notice) => (
@@ -76,7 +124,7 @@ export function NoticeCluster({
                 type="button"
                 className="notice-dismiss"
                 aria-label={`Dismiss ${notice.title}`}
-                onClick={() => setDismissed((prev) => ({ ...prev, [notice.id]: true }))}
+                onClick={() => dismiss(`${scope}:${notice.id}`)}
               >
                 ×
               </button>

@@ -650,9 +650,17 @@ button.chip:hover {
 }
 
 .run-top {
+  position: relative;
   display: grid;
   gap: 0.85rem;
   align-items: start;
+}
+
+.run-top-main {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+  align-content: start;
 }
 
 .run-top .page-header {
@@ -664,9 +672,13 @@ button.chip:hover {
   gap: 0.45rem;
   justify-items: stretch;
   min-width: 0;
+  align-content: start;
 }
 
 .notice-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
   margin: 0;
   padding: 0.55rem 0.8rem;
   border-radius: var(--radius-pill);
@@ -677,6 +689,11 @@ button.chip:hover {
   font-size: 0.78rem;
   letter-spacing: -0.02em;
   line-height: 1.35;
+}
+
+.notice-chip > span {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .notice-stack {
@@ -1162,11 +1179,16 @@ button.chip:hover {
 }
 
 .evidence-page .run-top {
-  gap: 0.65rem;
+  gap: 0.55rem;
+  margin-bottom: 0.15rem;
 }
 
 .evidence-page .page-header .lede {
   max-width: 42rem;
+}
+
+.evidence-page .run-top-main {
+  gap: 0.4rem;
 }
 
 .evidence-reader {
@@ -1475,6 +1497,15 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .run-top-main {
+    padding-right: 0;
+  }
+
+  .notice-cluster {
+    position: static;
+    width: auto;
+  }
+
   .process-rail {
     flex-direction: column;
     gap: 0.45rem;
@@ -1510,15 +1541,24 @@ th {
 }
 
 @media (min-width: 960px) {
+  /* Notices float top-right so their stack height does not open a hole
+     under the title/status before Live / Report / Evidence content. */
   .run-top {
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
-    gap: 0.75rem 1.25rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+
+  .run-top-main {
+    padding-right: min(23.5rem, 42%);
   }
 
   .notice-cluster {
-    justify-self: end;
-    width: min(22rem, 100%);
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(22rem, 40%);
     padding-top: 0.15rem;
+    z-index: 2;
   }
 
   .split {

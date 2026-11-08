@@ -42,35 +42,37 @@ export function ReportPage() {
   return (
     <section className="stack report-doc">
       <div className="run-top">
-        <PageHeader
-          title={run.topic}
-          lede={snapshot?.wording ?? "Evidence assessed against stored passages. This is not an absolute fact-check."}
-          actions={
-            markdown ? (
-              <div className="button-row no-print">
-                <button type="button" onClick={() => downloadMarkdown(run.run_id, markdown)}>
-                  Export Markdown
-                </button>
-                <button type="button" className="secondary" onClick={() => window.print()}>
-                  Print / save as PDF
-                </button>
-              </div>
-            ) : null
-          }
-        />
-        <NoticeCluster notices={notices} stickyHint={hint} />
+        <div className="run-top-main">
+          <PageHeader
+            title={run.topic}
+            lede={snapshot?.wording ?? "Evidence assessed against stored passages. This is not an absolute fact-check."}
+            actions={
+              markdown ? (
+                <div className="button-row no-print">
+                  <button type="button" onClick={() => downloadMarkdown(run.run_id, markdown)}>
+                    Export Markdown
+                  </button>
+                  <button type="button" className="secondary" onClick={() => window.print()}>
+                    Print / save as PDF
+                  </button>
+                </div>
+              ) : null
+            }
+          />
+          <RunStatusBar
+            run={run}
+            connection={connection}
+            hasAnswer={Boolean(answerBody)}
+            surface="report"
+            compact
+          />
+          <p className="meta">
+            Duration {formatElapsed(run.started_at, run.finished_at)} · Sources{" "}
+            {snapshot ? snapshot.sources.length : "unknown"} · Evaluation not measured
+          </p>
+        </div>
+        <NoticeCluster notices={notices} stickyHint={hint} scope={run.run_id} />
       </div>
-      <RunStatusBar
-        run={run}
-        connection={connection}
-        hasAnswer={Boolean(answerBody)}
-        surface="report"
-        compact
-      />
-      <p className="meta">
-        Duration {formatElapsed(run.started_at, run.finished_at)} · Sources{" "}
-        {snapshot ? snapshot.sources.length : "unknown"} · Evaluation not measured
-      </p>
       {run.status === "review_required" ? <ReviewForm runId={run.run_id} /> : null}
 
       <article className="answer-panel" aria-labelledby="report-answer-heading">

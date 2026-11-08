@@ -133,6 +133,7 @@ function renderAt(path: string) {
 beforeEach(() => {
   sseCalls.length = 0;
   sessionStorage.clear();
+  sessionStorage.removeItem("researchmind.dismissedNotices");
   world.usage.one_use_consumed = false;
   world.usage.run_ids = [];
   world.run.status = "cancelled";
@@ -183,6 +184,19 @@ describe("research console screens", () => {
     expect(await screen.findByText(/live updates|saved on server/i)).toBeInTheDocument();
     expect(sseCalls.at(-1)?.url).not.toMatch(/token|authorization/i);
     expect(sseCalls.at(-1)?.headers?.Authorization).toMatch(/^Bearer /);
+  });
+
+  it("keeps dismissed run notices closed across Live and Report", async () => {
+    sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
+    const user = userEvent.setup();
+    const { unmount } = renderAt("/runs/run-1");
+    expect(await screen.findByText("Insufficient evidence")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dismiss Insufficient evidence" }));
+    expect(screen.queryByText("Insufficient evidence")).toBeNull();
+    unmount();
+    renderAt("/runs/run-1/report");
+    expect(await screen.findByRole("heading", { name: "Answer" })).toBeInTheDocument();
+    expect(screen.queryByText("Insufficient evidence")).toBeNull();
   });
 
   it("keeps the saved status visible when the channel drops", async () => {

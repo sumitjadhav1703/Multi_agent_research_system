@@ -59,24 +59,26 @@ export function LiveRunPage() {
   return (
     <section className="stack">
       <div className="run-top">
-        <PageHeader
-          title={run.topic}
-          lede="Follow the process rail, then read the answer when it lands."
-          actions={
-            <div className="button-row">
-              <Link className="button" to={`/runs/${run.run_id}/report`}>
-                Open report
-              </Link>
-              <Link className="button secondary" to={`/runs/${run.run_id}/evidence`}>
-                Evidence
-              </Link>
-            </div>
-          }
-        />
-        <NoticeCluster notices={notices} stickyHint={hint} />
+        <div className="run-top-main">
+          <PageHeader
+            title={run.topic}
+            lede="Follow the process rail, then read the answer when it lands."
+            actions={
+              <div className="button-row">
+                <Link className="button" to={`/runs/${run.run_id}/report`}>
+                  Open report
+                </Link>
+                <Link className="button secondary" to={`/runs/${run.run_id}/evidence`}>
+                  Evidence
+                </Link>
+              </div>
+            }
+          />
+          {reused ? <p className="banner info">Reopened your existing run.</p> : null}
+          <RunStatusBar run={run} connection={connection} hasAnswer={Boolean(answerBody)} surface="live" compact />
+        </div>
+        <NoticeCluster notices={notices} stickyHint={hint} scope={run.run_id} />
       </div>
-      {reused ? <p className="banner info">Reopened your existing run.</p> : null}
-      <RunStatusBar run={run} connection={connection} hasAnswer={Boolean(answerBody)} surface="live" compact />
 
       <div className="process-shell">
         <div className="process-shell-head">

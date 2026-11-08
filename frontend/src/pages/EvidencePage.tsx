@@ -57,19 +57,21 @@ export function EvidencePage() {
   return (
     <section className="stack evidence-page">
       <div className="run-top">
-        <PageHeader
-          title={run.topic}
-          lede="Pick a source → read the passage → see which claims it supports."
-        />
-        <NoticeCluster notices={notices} stickyHint={hint} />
+        <div className="run-top-main">
+          <PageHeader
+            title={run.topic}
+            lede="Pick a source → read the passage → see which claims it supports."
+          />
+          <RunStatusBar
+            run={run}
+            connection={connection}
+            hasAnswer={Boolean(answerBody)}
+            surface="evidence"
+            compact
+          />
+        </div>
+        <NoticeCluster notices={notices} stickyHint={hint} scope={run.run_id} />
       </div>
-      <RunStatusBar
-        run={run}
-        connection={connection}
-        hasAnswer={Boolean(answerBody)}
-        surface="evidence"
-        compact
-      />
       {sources.length === 0 ? (
         <section className="panel">
           <SectionHeading kind="sources">Sources</SectionHeading>
