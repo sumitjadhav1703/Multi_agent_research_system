@@ -13,11 +13,11 @@
 
 - **Symptom:** `https://researchmind-api-sg.onrender.com/docs` (and all routes) timed out with **0 bytes** for 90–180s. TLS to the Render edge succeeded; no app logs were emitted until a manual redeploy.
 - **Dissection (not a classic git-bisect app crash):** Last successful cold start was `56b2f4d` / retention merge era; startup completed in logs. After Free spin-down (~15 min idle), wake requests hung at the edge with **no container logs**. Manual `trigger_deploy` brought the service back; `/docs` and `/openapi.json` returned **200**.
-- **Code hardenings:** Postgres `connect_timeout=10`, checkpointer setup `asyncio.wait_for(..., 30s)`, retention removed from lifespan (consumer-only), `HEAD /` and `HEAD /api/v1/health/live` accepted (Render probed `HEAD /` and got 405 before).
-- **Does not delete** `quota_guard`. Postgres LangGraph checkpoint cleanup is best-effort by `thread_id`.  
-- **Env:** `DATA_RETENTION_ENABLED`, `DATA_RETENTION_DAYS`, `DATA_RETENTION_INTERVAL_SECONDS`, `DATA_RETENTION_BATCH_SIZE` (also set in `render.yaml` / `.env.example`).  
-- **Tests:** `backend/tests/test_retention.py`. Full backend offline suite on this change: **108 tests, 2 skipped (local Postgres durability), OK** (`USE_MOCK_PROVIDER=true`, Python 3.12 venv).  
-- **Not claimed:** hosted Neon purge metrics; automatic vacuum/storage reclaim timing on Neon. After merge, set the new env vars on Render (or redeploy from `render.yaml` values) so production starts purging.
+- **Root hardenings (two layers):**
+  1. **Do not block Uvicorn bind on Neon.** FastAPI lifespan yields after non-DB setup; migrations, checkpointer, lease recovery, and queue consumer run in a background `asyncio` task (`to_thread` for sync SQLAlchemy). `/docs`, `/`, and `/health/live` stay up while `database: starting` (ready → 503). Postgres `connect_timeout=10`, checkpointer `wait_for` 30s, retention consumer-only, `HEAD /` + `HEAD /health/live` accepted.
+  2. **Reduce Free spin-down.** `.github/workflows/keep-api-awake.yml` pings `/api/v1/health/live` every ~10 minutes (plus `workflow_dispatch`). Demo keep-alive, not an SLA; GitHub cron can drift.
+- **Tests:** `backend/tests/test_startup_hang_guards.py` (deferred init + docs-while-starting). Retention suite unchanged.
+- **Not claimed:** zero cold starts forever on Render Free; measured wake latency after this change until redeploy + idle interval.
 
 ---
 

@@ -31,6 +31,11 @@ def ready(request: Request) -> JSONResponse:
         body["status"] = "not_ready"
         body["database"] = "unavailable"
         return JSONResponse(status_code=503, content=body)
+    if getattr(request.app.state, "database_starting", False):
+        # Lifespan already yielded; Neon may still be waking. Live/docs stay up.
+        body["status"] = "not_ready"
+        body["database"] = "starting"
+        return JSONResponse(status_code=503, content=body)
     factory = getattr(request.app.state, "session_factory", None)
     if factory is not None or settings.database_configured:
         try:

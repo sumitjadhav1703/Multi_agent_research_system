@@ -1,7 +1,9 @@
 """FastAPI application entrypoint for ResearchMind 2.0."""
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,12 +28,46 @@ from backend.app.jobs.executor import LifespanGraphExecutor
 from backend.app.jobs.lease import recover_expired_leases
 from backend.app.jobs.turnstile import build_turnstile_verifier
 
+logger = logging.getLogger(__name__)
+
+
+def _start_queue_consumer(app: FastAPI, settings) -> QueueConsumer | None:
+    factory = getattr(app.state, "session_factory", None)
+    if factory is None or not consumer_enabled(app.state, settings.queue_consumer_enabled):
+        return None
+    executor = getattr(app.state, "executor", None)
+    if executor is None:
+        executor = LifespanGraphExecutor(settings, getattr(app.state, "postgres_url", None))
+    consumer = QueueConsumer(
+        session_factory=factory,
+        executor=executor,
+        worker_id=settings.worker_id,
+        lease_seconds=settings.job_lease_seconds,
+        heartbeat_seconds=settings.job_heartbeat_seconds,
+        poll_seconds=settings.queue_poll_seconds,
+        retention_enabled=settings.data_retention_enabled,
+        retention_days=settings.data_retention_days,
+        retention_interval_seconds=settings.data_retention_interval_seconds,
+        retention_batch_size=settings.data_retention_batch_size,
+    )
+    consumer.start()
+    app.state.consumer = consumer
+    return consumer
+
+
+def _recover_leases(session_factory) -> None:
+    session = session_factory()
+    try:
+        recover_expired_leases(session)
+        session.commit()
+    finally:
+        session.close()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Fail closed on invalid free-only config before serving traffic.
-    # Keep this path short: Render Free + Neon scale-to-zero must still bind
-    # /docs and /health/live even when the database is waking up.
+    # Non-DB setup only on the critical path. Yield ASAP so Uvicorn can bind
+    # and serve /docs + /health/live while Neon/Render Free wake in the background.
     configure_observability()
     clear_settings_cache()
     settings = get_settings()
@@ -41,52 +77,65 @@ async def lifespan(app: FastAPI):
             secret=settings.turnstile_secret_key,
             verify_url=settings.turnstile_verify_url,
         )
+
     owns_engine = False
-    if getattr(app.state, "session_factory", None) is None and settings.database_configured:
+    consumer: QueueConsumer | None = None
+    init_task: asyncio.Task | None = None
+
+    async def _init_database() -> None:
+        nonlocal owns_engine, consumer
         try:
             engine = make_engine(settings.database_url or "")
-            apply_migrations(engine)
+            # Sync SQLAlchemy work off the event loop so /docs stays responsive.
+            await asyncio.to_thread(apply_migrations, engine)
             app.state.engine = engine
             app.state.session_factory = make_session_factory(engine)
             owns_engine = True
             if (settings.database_url or "").startswith(("postgres://", "postgresql://")):
                 await setup_postgres_checkpointer(settings.database_url or "", timeout_seconds=30.0)
                 app.state.postgres_url = settings.database_url
-            session = app.state.session_factory()
-            try:
-                # Lease recovery only. Retention runs in the queue consumer after
-                # the server is already accepting HTTP (including Swagger /docs).
-                recover_expired_leases(session)
-                session.commit()
-            finally:
-                session.close()
+            # Lease recovery only. Retention runs in the queue consumer.
+            await asyncio.to_thread(_recover_leases, app.state.session_factory)
+            consumer = _start_queue_consumer(app, settings)
+            app.state.database_startup_error = None
         except Exception:
+            logger.exception("Database startup failed; serving live/docs without durable store")
             app.state.database_startup_error = "database_unavailable"
             app.state.session_factory = None
-    consumer = None
-    factory = getattr(app.state, "session_factory", None)
-    if factory is not None and consumer_enabled(app.state, settings.queue_consumer_enabled):
-        executor = getattr(app.state, "executor", None)
-        if executor is None:
-            executor = LifespanGraphExecutor(settings, getattr(app.state, "postgres_url", None))
-        consumer = QueueConsumer(
-            session_factory=factory,
-            executor=executor,
-            worker_id=settings.worker_id,
-            lease_seconds=settings.job_lease_seconds,
-            heartbeat_seconds=settings.job_heartbeat_seconds,
-            poll_seconds=settings.queue_poll_seconds,
-            retention_enabled=settings.data_retention_enabled,
-            retention_days=settings.data_retention_days,
-            retention_interval_seconds=settings.data_retention_interval_seconds,
-            retention_batch_size=settings.data_retention_batch_size,
-        )
-        consumer.start()
-        app.state.consumer = consumer
+            engine = getattr(app.state, "engine", None)
+            if owns_engine and engine is not None:
+                with suppress(Exception):
+                    await asyncio.to_thread(engine.dispose)
+                owns_engine = False
+                app.state.engine = None
+        finally:
+            app.state.database_starting = False
+
+    injected = getattr(app.state, "session_factory", None) is not None
+    if injected:
+        # Tests and special hosts inject a factory before lifespan; start consumer only.
+        consumer = _start_queue_consumer(app, settings)
+        app.state.database_starting = False
+    elif settings.database_configured:
+        app.state.database_starting = True
+        init_task = asyncio.create_task(_init_database(), name="researchmind-db-init")
+    else:
+        app.state.database_starting = False
+
     yield
+
+    if init_task is not None and not init_task.done():
+        init_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await init_task
+    elif init_task is not None:
+        with suppress(Exception):
+            await init_task
     shutdown_observability()
     if consumer is not None:
         consumer.stop()
+    elif getattr(app.state, "consumer", None) is not None:
+        app.state.consumer.stop()
     engine = getattr(app.state, "engine", None)
     if owns_engine and engine is not None:
         engine.dispose()
