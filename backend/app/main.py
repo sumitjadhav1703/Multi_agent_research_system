@@ -176,7 +176,8 @@ def create_app() -> FastAPI:
     async def _job_error(_request: Request, exc: JobServiceError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"code": exc.code, "message": exc.message})
 
-    @application.api_route("/", methods=["GET", "HEAD"])
+    @application.get("/")
+    @application.head("/", include_in_schema=False)
     def root() -> dict[str, str]:
         # Render probes HEAD / during port detection; 405 confused cold starts.
         return {"service": "researchmind", "version": __version__}

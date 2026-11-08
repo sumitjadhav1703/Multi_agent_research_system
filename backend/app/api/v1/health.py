@@ -10,7 +10,8 @@ from backend.app.db.engine import make_engine, ping
 router = APIRouter(tags=["health"])
 
 
-@router.api_route("/health/live", methods=["GET", "HEAD"])
+@router.get("/health/live")
+@router.head("/health/live", include_in_schema=False)
 def live() -> dict[str, str]:
     return {"status": "ok"}
 
