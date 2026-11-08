@@ -11,6 +11,7 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health/live")
+@router.head("/health/live", include_in_schema=False)
 def live() -> dict[str, str]:
     return {"status": "ok"}
 
@@ -30,6 +31,11 @@ def ready(request: Request) -> JSONResponse:
     if getattr(request.app.state, "database_startup_error", None):
         body["status"] = "not_ready"
         body["database"] = "unavailable"
+        return JSONResponse(status_code=503, content=body)
+    if getattr(request.app.state, "database_starting", False):
+        # Lifespan already yielded; Neon may still be waking. Live/docs stay up.
+        body["status"] = "not_ready"
+        body["database"] = "starting"
         return JSONResponse(status_code=503, content=body)
     factory = getattr(request.app.state, "session_factory", None)
     if factory is not None or settings.database_configured:

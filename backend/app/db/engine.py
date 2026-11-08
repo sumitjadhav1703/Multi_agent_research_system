@@ -18,15 +18,20 @@ def make_engine(database_url: str) -> Engine:
     """
     url = _sqlalchemy_url(database_url)
     connect_args: dict[str, Any] = {}
+    engine_kwargs: dict[str, Any] = {
+        "future": True,
+        "pool_pre_ping": not url.startswith("sqlite"),
+    }
     if url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
         connect_args["timeout"] = 5
-    engine = create_engine(
-        url,
-        future=True,
-        pool_pre_ping=not url.startswith("sqlite"),
-        connect_args=connect_args,
-    )
+    else:
+        # Neon cold-start + Render Free wake must not hang the FastAPI lifespan forever.
+        # Without this, /docs and /health never bind while Postgres dials.
+        connect_args["connect_timeout"] = 10
+        engine_kwargs["pool_timeout"] = 10
+        engine_kwargs["pool_recycle"] = 300
+    engine = create_engine(url, connect_args=connect_args, **engine_kwargs)
     _instrument_engine(engine)
     if database_url.startswith("sqlite"):
 

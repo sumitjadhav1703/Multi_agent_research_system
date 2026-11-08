@@ -1,0 +1,27 @@
+# Render Free spins down after ~15 minutes idle. A sleeping instance can hang
+# edge requests (TLS ok, 0-byte body, no app logs) until a redeploy. Ping live
+# health often enough that the student demo usually stays warm. This is a
+# demo keep-alive, not an SLA.
+name: Keep API awake
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping ResearchMind live health
+        run: |
+          set -euo pipefail
+          url="${API_LIVE_URL:-https://researchmind-api-sg.onrender.com/api/v1/health/live}"
+          # Cold wake can take ~1 minute on Free; allow headroom without hanging CI forever.
+          code="$(curl -sS -o /tmp/rm-live.body -w '%{http_code}' --max-time 90 "$url" || true)"
+          echo "GET $url -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "body:" >&2
+            head -c 500 /tmp/rm-live.body >&2 || true
+            exit 1
+          fi
