@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ResearchRun, RunEvent } from "../api/types";
 import { formatUnknown } from "./format";
 import { linkCitations, neutralizeHtml } from "./markdown";
-import { mergeEvents, runBanners, workerCards } from "./runView";
+import { mergeEvents, nextActionHint, runBanners, sourcesSeenCount, workerCards } from "./runView";
 
 const run = (status: string, extra: Partial<ResearchRun> = {}): ResearchRun => ({
   run_id: "run-1",
@@ -87,5 +87,22 @@ describe("run view", () => {
   it("turns citation ids into links and neutralizes tags", () => {
     expect(neutralizeHtml("See <script>alert(1)</script>")).not.toContain("<script>");
     expect(linkCitations("See ev_sq1_1.", ["ev_sq1_1"])).toContain("](#cite-ev_sq1_1)");
+  });
+
+  it("humanizes next-action copy by surface and answer presence", () => {
+    expect(nextActionHint(run("completed"), true, "live")).toContain("open Report");
+    expect(nextActionHint(run("completed"), true, "report")).toContain("full write-up below");
+    expect(nextActionHint(run("completed"), true, "evidence")).toContain("passages below");
+    expect(nextActionHint(run("completed"), false, "evidence")).toContain("No stored answer");
+  });
+
+  it("counts sources from snapshot or discovered/extracted events", () => {
+    const events = [
+      event(1, "source.discovered", { source_id: "src_a", extraction_method: "html" }),
+      event(2, "source.extracted", { source_id: "src_a", extraction_method: "html" }),
+    ];
+    expect(sourcesSeenCount(events, null)).toBe(1);
+    expect(sourcesSeenCount([], 3)).toBe(3);
+    expect(sourcesSeenCount(events, 2)).toBe(2);
   });
 });

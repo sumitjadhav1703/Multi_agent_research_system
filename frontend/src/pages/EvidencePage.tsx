@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { BannerList, ErrorText, PageHeader, RunStatusBar } from "../components/ui";
+import { SectionHeading } from "../components/SectionMark";
+import { ErrorText, NoticeCluster, PageHeader, RunStatusBar } from "../components/ui";
 import { extractionLabel, formatWhen } from "../domain/format";
-import { discoveredSources, runBanners } from "../domain/runView";
+import { answerMarkdown, discoveredSources, nextActionHint, noticeBanners } from "../domain/runView";
 import { useRunChannel } from "../hooks/useRunChannel";
 
 export function EvidencePage() {
@@ -48,31 +49,48 @@ export function EvidencePage() {
   }
 
   const discovered = discoveredSources(events);
+  const { markdown, draft } = answerMarkdown(snapshot, events);
+  const answerBody = markdown ?? draft;
+  const notices = noticeBanners({ run, events, snapshot, connection });
+  const hint = nextActionHint(run, Boolean(answerBody), "evidence");
 
   return (
     <section className="stack">
-      <PageHeader
-        title={run.topic}
-        lede="Passages and claims from the saved snapshot."
+      <div className="run-top">
+        <PageHeader
+          title={run.topic}
+          lede="Pick a source → read the passage → see which claims it supports."
+        />
+        <NoticeCluster notices={notices} stickyHint={hint} />
+      </div>
+      <RunStatusBar
+        run={run}
+        connection={connection}
+        hasAnswer={Boolean(answerBody)}
+        surface="evidence"
+        compact
       />
-      <RunStatusBar run={run} connection={connection} />
-      <BannerList banners={runBanners({ run, events, snapshot, connection })} />
+      <p className="evidence-lede">
+        Evidence explains what the answer is allowed to claim. Titles first; technical IDs stay in the meta line.
+      </p>
       {sources.length === 0 ? (
         <section className="panel">
-          <h2>No stored sources</h2>
-          {discovered.length === 0 ? <p>Evidence has not been stored for this run yet.</p> : null}
-          <ul className="feed">
-            {discovered.map((source) => (
-              <li key={source.sourceId}>
-                {source.sourceId} · {extractionLabel(source.extractionMethod)} · progress event, not a stored passage
-              </li>
-            ))}
-          </ul>
+          <SectionHeading kind="sources">Sources</SectionHeading>
+          <p>No stored sources for this run yet.</p>
+          {discovered.length === 0 ? null : (
+            <ul className="feed">
+              {discovered.map((source) => (
+                <li key={source.sourceId}>
+                  {source.sourceId} · {extractionLabel(source.extractionMethod)} · progress event, not a stored passage
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       ) : (
         <div className="evidence-grid">
           <section className="panel">
-            <h2>Sources</h2>
+            <SectionHeading kind="sources">Sources</SectionHeading>
             <label className="field">
               <span>Domain</span>
               <select value={domain} onChange={(event) => setDomain(event.target.value)}>
@@ -103,23 +121,31 @@ export function EvidencePage() {
                   aria-pressed={source.source_id === activeSourceId}
                   onClick={() => setSelectedId(source.source_id)}
                 >
-                  {source.title || source.source_id}
-                  <span className="meta"> {source.domain}</span>
+                  {source.title || source.domain || "Untitled source"}
+                  <span className="meta">
+                    {" "}
+                    {source.domain}
+                    <br />
+                    {source.source_id}
+                  </span>
                 </button>
               ))}
             </div>
           </section>
-          <section className="panel">
-            <h2>{active?.title || "Passage"}</h2>
+
+          <section className="panel evidence-reader">
+            <h2>{active?.title || active?.domain || "Passage reader"}</h2>
             {active ? (
               <>
-                <p className="meta">{extractionLabel(active.extraction_method)}</p>
-                <p className="meta">Retrieved: {formatWhen(active.retrieved_at)}</p>
-                <p className="meta">Publication date: unknown</p>
+                <p className="meta">
+                  {extractionLabel(active.extraction_method)} · Retrieved {formatWhen(active.retrieved_at)} ·
+                  Publication date unknown
+                </p>
+                <p className="meta">{active.source_id}</p>
                 <p>{active.excerpt || "No excerpt stored."}</p>
               </>
             ) : (
-              <p>Select a source.</p>
+              <p>Select a source on the left.</p>
             )}
             {visiblePassages.map((passage) => (
               <article
@@ -127,32 +153,44 @@ export function EvidencePage() {
                 id={passage.evidence_id}
                 className={highlighted.has(passage.evidence_id) ? "passage highlight" : "passage"}
               >
-                <h3>{passage.evidence_id}</h3>
+                <h3>Stored passage</h3>
+                <p className="meta">{passage.evidence_id}</p>
                 <p>{passage.quote}</p>
               </article>
             ))}
             {active && visiblePassages.length === 0 ? <p>No passage is stored for this source.</p> : null}
           </section>
+
           <section className="panel">
-            <h2>Claims</h2>
-            {(linkedClaims.length > 0 ? linkedClaims : claims).map((claim) => (
-              <button
-                key={claim.claim_id}
-                type="button"
-                className="secondary"
-                aria-pressed={claim.claim_id === (claimId ?? requestedClaim)}
-                onClick={() => {
-                  setClaimId(claim.claim_id);
-                  const passage = passages.find((item) => claim.evidence_ids.includes(item.evidence_id));
-                  if (passage) setSelectedId(passage.source_id);
-                }}
-              >
-                <strong>{claim.claim_id}</strong> · {claim.status}
-                <span className="meta"> {claim.text}</span>
-              </button>
-            ))}
-            {claims.length === 0 ? <p>No claims are stored yet.</p> : null}
-            {activeClaim ? <p>{activeClaim.verification_reason ?? "No verification note stored."}</p> : null}
+            <SectionHeading kind="critics">Claims</SectionHeading>
+            {claims.length === 0 ? (
+              <p>No claim ledger for this run. The answer may still exist without per-claim rows.</p>
+            ) : (
+              <div className="claim-list">
+                {(linkedClaims.length > 0 ? linkedClaims : claims).map((claim) => (
+                  <button
+                    key={claim.claim_id}
+                    type="button"
+                    className="secondary"
+                    aria-pressed={claim.claim_id === (claimId ?? requestedClaim)}
+                    onClick={() => {
+                      setClaimId(claim.claim_id);
+                      const passage = passages.find((item) => claim.evidence_ids.includes(item.evidence_id));
+                      if (passage) setSelectedId(passage.source_id);
+                    }}
+                  >
+                    <strong>{claim.text}</strong>
+                    <span className="meta">
+                      {" "}
+                      {claim.status} · {claim.claim_id}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {activeClaim ? (
+              <p style={{ marginTop: "0.75rem" }}>{activeClaim.verification_reason ?? "No verification note stored."}</p>
+            ) : null}
           </section>
         </div>
       )}

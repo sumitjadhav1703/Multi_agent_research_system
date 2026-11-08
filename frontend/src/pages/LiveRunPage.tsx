@@ -1,13 +1,18 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { EMPTY_USAGE } from "../api/types";
+import { ExpandableMarkdown } from "../components/ExpandableMarkdown";
 import { CancelRun } from "../components/ReviewForm";
-import { BannerList, ErrorText, PageHeader, RunStatusBar, UsageFiguresList } from "../components/ui";
+import { SectionHeading } from "../components/SectionMark";
+import { StageMark, stageMarkKind } from "../components/StageMark";
+import { ErrorText, NoticeCluster, PageHeader, RunStatusBar, UsageFiguresList } from "../components/ui";
 import { formatElapsed, formatWhen, extractionLabel } from "../domain/format";
 import {
   ACTIVE_STATUSES,
+  answerMarkdown,
   discoveredSources,
-  runBanners,
+  nextActionHint,
+  noticeBanners,
   stageStates,
   summarizeEvent,
   usageFromEvents,
@@ -28,76 +33,108 @@ export function LiveRunPage() {
     return <ErrorText error={missing ? new Error("This run is not available to this guest identity.") : runQuery.error} />;
   }
 
-  const banners = runBanners({ run, events, snapshot, connection });
+  const notices = noticeBanners({ run, events, snapshot, connection });
   const stages = stageStates(events, run.status);
   const workers = workerCards(events);
   const sources = snapshot?.sources ?? [];
   const discovered = discoveredSources(events);
   const usage = snapshot?.usage ?? usageFromEvents(events) ?? EMPTY_USAGE;
+  const { markdown, draft } = answerMarkdown(snapshot, events);
+  const answerBody = markdown ?? draft;
+  const hint = nextActionHint(run, Boolean(answerBody), "live");
+  const citationIds = [
+    ...(snapshot?.passages.map((passage) => passage.evidence_id) ?? []),
+    ...(snapshot?.claims.map((claim) => claim.claim_id) ?? []),
+    ...(snapshot?.sources.map((source) => source.source_id) ?? []),
+  ];
+  const allowedUrls = [
+    ...(snapshot?.sources.flatMap((source) => [source.url, source.canonical_url]) ?? []),
+  ];
+  const doneCount = stages.filter((stage) => stage.state === "done").length;
 
   return (
     <section className="stack">
-      <PageHeader
-        title={run.topic}
-        lede="Live progress from the saved run log."
-        actions={
-          <div className="button-row">
-            <Link className="button secondary" to={`/runs/${run.run_id}/report`}>
-              Report
-            </Link>
-            <Link className="button secondary" to={`/runs/${run.run_id}/evidence`}>
-              Evidence
-            </Link>
-          </div>
-        }
-      />
+      <div className="run-top">
+        <PageHeader
+          title={run.topic}
+          lede="Follow the process rail, then read the answer when it lands."
+          actions={
+            <div className="button-row">
+              <Link className="button" to={`/runs/${run.run_id}/report`}>
+                Open report
+              </Link>
+              <Link className="button secondary" to={`/runs/${run.run_id}/evidence`}>
+                Evidence
+              </Link>
+            </div>
+          }
+        />
+        <NoticeCluster notices={notices} stickyHint={hint} />
+      </div>
       {reused ? <p className="banner info">Reopened your existing run.</p> : null}
-      <RunStatusBar run={run} connection={connection} />
-      <BannerList banners={banners} />
-      <dl className="metric-list">
-        <div>
-          <dt>Elapsed</dt>
-          <dd>{formatElapsed(run.started_at, run.finished_at)}</dd>
+      <RunStatusBar run={run} connection={connection} hasAnswer={Boolean(answerBody)} surface="live" compact />
+
+      <div className="process-shell">
+        <div className="process-shell-head">
+          <SectionHeading kind="flow">Process</SectionHeading>
+          <p className="meta process-progress">
+            {doneCount} of {stages.length} stages complete
+          </p>
         </div>
-        <div>
-          <dt>Attempts</dt>
-          <dd>{run.attempts}</dd>
-        </div>
-        <div>
-          <dt>Stop reason</dt>
-          <dd>{run.stop_reason ?? "none recorded"}</dd>
-        </div>
-        <div>
-          <dt>Approval</dt>
-          <dd>{run.approval_status ?? "unknown"}</dd>
-        </div>
-      </dl>
-      <ol className="timeline" aria-label="Research stages">
-        {stages.map((stage) => (
-          <li key={stage.id} className={stage.state}>
-            <strong>{stage.label}</strong>
-            <span>{stage.state}</span>
-          </li>
-        ))}
-      </ol>
-      <div className="split">
-        <section className="panel">
-          <h2>Activity</h2>
-          {events.length === 0 ? <p>No events saved yet.</p> : null}
-          <ul className="feed" aria-live="polite">
-            {events.slice(-80).map((event) => (
-              <li key={event.sequence_id}>
-                <time dateTime={event.created_at}>{formatWhen(event.created_at)}</time>{" "}
-                <strong>{event.type}</strong>
-                <div>{summarizeEvent(event)}</div>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <div className="stack">
-          <UsageFiguresList usage={usage} />
+        <ol className="process-rail" aria-label="Research stages">
+          {stages.map((stage, index) => (
+            <li key={stage.id} className={stage.state} aria-current={stage.state === "active" ? "step" : undefined}>
+              {index > 0 ? <span className="step-connector" aria-hidden="true" /> : null}
+              <span className="step-icon" aria-hidden="true">
+                <StageMark kind={stageMarkKind(stage.id)} />
+              </span>
+              <span className="step-label">{stage.label}</span>
+              <span className="step-state">
+                <span className="visually-hidden">Status: </span>
+                {stage.state}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="live-cockpit">
+        <article className="answer-panel" aria-labelledby="live-answer-heading">
+          <SectionHeading kind="answer">Answer</SectionHeading>
+          <h3 id="live-answer-heading" className="visually-hidden">
+            Research answer
+          </h3>
+          {answerBody ? (
+            <>
+              {draft && !markdown ? (
+                <p className="banner warning">Draft excerpt from review. Full stored report may still be arriving.</p>
+              ) : null}
+              <ExpandableMarkdown
+                markdown={answerBody}
+                citationIds={citationIds}
+                allowedUrls={allowedUrls}
+                runId={run.run_id}
+                lines={7}
+              />
+              <div className="button-row" style={{ marginTop: "0.85rem" }}>
+                <Link className="button" to={`/runs/${run.run_id}/report`}>
+                  Open full report
+                </Link>
+              </div>
+            </>
+          ) : (
+            <p className="answer-empty">
+              {ACTIVE_STATUSES.has(run.status)
+                ? "No stored answer yet. The write-up appears here when the report stage finishes."
+                : "No stored answer for this run. Check Critics and Evidence for what was assessed."}
+            </p>
+          )}
+        </article>
+
+        <aside className="stack">
+          <UsageFiguresList usage={usage} heading="Usage" />
           <section className="panel">
-            <h2>Sources</h2>
+            <SectionHeading kind="sources">Sources</SectionHeading>
             {sources.length === 0 && discovered.length === 0 ? <p>No sources saved yet.</p> : null}
             <ul className="feed">
               {sources.map((source) => (
@@ -116,23 +153,48 @@ export function LiveRunPage() {
                 : null}
             </ul>
           </section>
-        </div>
+        </aside>
       </div>
-      <section className="panel">
-        <h2>Workers</h2>
-        {workers.length === 0 ? <p>No worker events yet. Provider name is unknown until an event includes one.</p> : null}
-        <div className="timeline">
-          {workers.map((worker) => (
-            <article key={worker.subquestionId} className="card">
-              <h3>{worker.subquestionId}</h3>
-              <p>State: {worker.state}</p>
-              <p>Provider: {worker.provider}</p>
-              <p>Sources: {worker.sources === null ? "unknown" : worker.sources}</p>
-              {worker.error ? <p>{worker.error}</p> : null}
-            </article>
-          ))}
-        </div>
-      </section>
+
+      <div className="split">
+        <section className="panel">
+          <h2>Activity</h2>
+          <p className="meta">
+            Elapsed {formatElapsed(run.started_at, run.finished_at)} · Attempts {run.attempts} ·{" "}
+            {run.stop_reason ?? "no stop reason"}
+          </p>
+          {events.length === 0 ? <p>No events saved yet.</p> : null}
+          <ul className="feed activity-feed" aria-live="polite">
+            {events.slice(-80).map((event) => (
+              <li key={event.sequence_id}>
+                <time dateTime={event.created_at}>{formatWhen(event.created_at)}</time>{" "}
+                <strong>{event.type}</strong>
+                <div>{summarizeEvent(event)}</div>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="panel">
+          <h2>Workers</h2>
+          {workers.length === 0 ? (
+            <p>No worker events yet. Provider name is unknown until an event includes one.</p>
+          ) : null}
+          <ul className="worker-rows">
+            {workers.map((worker) => (
+              <li key={worker.subquestionId}>
+                <strong>{worker.subquestionId}</strong>
+                <span className="meta">{worker.state}</span>
+                <span className="meta">
+                  Provider {worker.provider} · Sources{" "}
+                  {worker.sources === null ? "unknown" : worker.sources}
+                  {worker.error ? ` · ${worker.error}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+
       {ACTIVE_STATUSES.has(run.status) ? <CancelRun runId={run.run_id} /> : null}
     </section>
   );

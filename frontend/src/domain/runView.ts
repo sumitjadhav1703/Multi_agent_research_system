@@ -50,7 +50,7 @@ const STAGES: {
   { id: "plan", label: "Plan", start: ["planner.started"], done: ["planner.completed"] },
   {
     id: "workers",
-    label: "Research workers",
+    label: "Workers",
     start: ["worker.started"],
     done: ["worker.completed"],
     fail: ["worker.failed"],
@@ -64,14 +64,14 @@ const STAGES: {
   { id: "evidence", label: "Evidence", start: ["evidence.extracted"], done: ["evidence.extracted"] },
   {
     id: "verify",
-    label: "Verification",
+    label: "Verify",
     start: ["claim.verified", "claim.conflicted"],
     done: ["claim.verified", "claim.conflicted"],
   },
   { id: "report", label: "Report", start: ["writer.started"], done: ["writer.completed"] },
   {
     id: "review",
-    label: "Human review",
+    label: "Review",
     start: ["review.awaiting", "review.requested"],
     done: ["review.resumed", "run.completed"],
   },
@@ -170,17 +170,30 @@ export function workerCards(events: readonly RunEvent[]): WorkerCard[] {
 export function discoveredSources(events: readonly RunEvent[]): DiscoveredSource[] {
   const sources = new Map<string, DiscoveredSource>();
   for (const event of events) {
-    if (event.type !== "source.discovered") continue;
+    if (event.type !== "source.discovered" && event.type !== "source.extracted") continue;
     const sourceId = String(event.payload.source_id ?? "");
     if (!sourceId) continue;
+    const prior = sources.get(sourceId);
     sources.set(sourceId, {
       sourceId,
-      url: typeof event.payload.url === "string" ? event.payload.url : "",
+      url: typeof event.payload.url === "string" ? event.payload.url : (prior?.url ?? ""),
       extractionMethod:
-        typeof event.payload.extraction_method === "string" ? event.payload.extraction_method : "unknown",
+        typeof event.payload.extraction_method === "string"
+          ? event.payload.extraction_method
+          : (prior?.extractionMethod ?? "unknown"),
     });
   }
   return [...sources.values()];
+}
+
+/** Prefer durable snapshot count; fall back to unique source ids in progress events. */
+export function sourcesSeenCount(
+  events: readonly RunEvent[],
+  snapshotSourceCount: number | null | undefined = null,
+): number {
+  const fromEvents = discoveredSources(events).length;
+  const fromSnapshot = typeof snapshotSourceCount === "number" ? snapshotSourceCount : 0;
+  return Math.max(fromEvents, fromSnapshot);
 }
 
 export function usageFromEvents(events: readonly RunEvent[]): UsageFigures {
@@ -289,6 +302,11 @@ export function runBanners(input: {
   return banners;
 }
 
+/** Notices for the top-right cluster — drop statuses already covered by the status pill. */
+export function noticeBanners(input: Parameters<typeof runBanners>[0]): Banner[] {
+  return runBanners(input).filter((banner) => banner.id !== "queued" && banner.id !== "running");
+}
+
 function statusBanner(run: ResearchRun): Banner {
   if (run.status === "queued") {
     return {
@@ -374,6 +392,47 @@ export function summarizeEvent(event: RunEvent): string {
   const text = bits.join(" · ");
   if (!text) return "No extra detail.";
   return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+}
+
+export type HintSurface = "live" | "report" | "evidence" | "generic";
+
+export function nextActionHint(
+  run: ResearchRun,
+  hasAnswer: boolean,
+  surface: HintSurface = "generic",
+): string | null {
+  switch (run.status) {
+    case "queued":
+      return "Queued. The process rail will move when a worker picks this run up.";
+    case "running":
+      return "Research is in progress. Watch the process rail for the active step.";
+    case "review_required":
+      return surface === "report"
+        ? "Waiting for your review — approve, revise, or reject below."
+        : "Waiting for your review — open Report to approve, revise, or reject.";
+    case "completed":
+      if (!hasAnswer) return "Run finished. No stored answer body for this run.";
+      if (surface === "report") return "Answer ready — full write-up below.";
+      if (surface === "evidence") return "Answer ready — passages below show what it can claim.";
+      return "Answer ready — open Report for the full write-up.";
+    case "failed":
+      return "This run failed. Check Activity for the stop reason.";
+    case "cancelled":
+      return "This run was cancelled.";
+    case "expired":
+      return "This run expired before it finished.";
+    default:
+      return null;
+  }
+}
+
+export function answerMarkdown(
+  snapshot: ArtifactSnapshot | null,
+  events: readonly RunEvent[],
+): { markdown: string | null; draft: string | null } {
+  const markdown = snapshot?.report?.markdown ?? null;
+  const draft = markdown ? null : draftFromReview(events);
+  return { markdown, draft };
 }
 
 export function draftFromReview(events: readonly RunEvent[]): string | null {

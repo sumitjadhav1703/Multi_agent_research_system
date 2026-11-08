@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Banner, BannerTone } from "../domain/runView";
-import { statusLabel } from "../domain/runView";
+import { nextActionHint, statusLabel, type HintSurface } from "../domain/runView";
 import { formatUnknown } from "../domain/format";
 import type { ConnectionState, ResearchRun, UsageFigures } from "../api/types";
 import { channelLabel } from "../domain/runView";
@@ -26,6 +26,7 @@ export function PageHeader({
   );
 }
 
+/** Full-width banners for Ask / gate pages only. */
 export function BannerList({ banners }: { banners: readonly Banner[] }) {
   if (banners.length === 0) return null;
   return (
@@ -40,6 +41,54 @@ export function BannerList({ banners }: { banners: readonly Banner[] }) {
   );
 }
 
+/**
+ * Compact top-right notice cluster for run pages.
+ * Reclaims the wide empty gutter that full-width banner stacks wasted.
+ */
+export function NoticeCluster({
+  notices,
+  stickyHint,
+}: {
+  notices: readonly Banner[];
+  stickyHint?: string | null;
+}) {
+  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
+  const visible = notices.filter((notice) => !dismissed[notice.id]);
+  if (visible.length === 0 && !stickyHint) return null;
+
+  return (
+    <aside className="notice-cluster" aria-label="Run notices">
+      {stickyHint ? (
+        <p className="notice-chip notice-chip--hint" role="status">
+          {stickyHint}
+        </p>
+      ) : null}
+      <div className="notice-stack" aria-live="polite">
+        {visible.map((notice) => (
+          <article
+            key={notice.id}
+            className={`notice-card tone-${notice.tone}`}
+            role={notice.tone === "danger" ? "alert" : "status"}
+          >
+            <div className="notice-card-head">
+              <h2>{notice.title}</h2>
+              <button
+                type="button"
+                className="notice-dismiss"
+                aria-label={`Dismiss ${notice.title}`}
+                onClick={() => setDismissed((prev) => ({ ...prev, [notice.id]: true }))}
+              >
+                ×
+              </button>
+            </div>
+            <p>{notice.detail}</p>
+          </article>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 export function StatusPill({ status }: { status: string }) {
   return <span className={`pill tone-${toneFor(status)}`}>{statusLabel(status)}</span>;
 }
@@ -51,16 +100,30 @@ function toneFor(status: string): BannerTone {
   return "info";
 }
 
-export function RunStatusBar({ run, connection }: { run: ResearchRun; connection: ConnectionState }) {
+export function RunStatusBar({
+  run,
+  connection,
+  hasAnswer = false,
+  surface = "generic",
+  compact = false,
+}: {
+  run: ResearchRun;
+  connection: ConnectionState;
+  hasAnswer?: boolean;
+  surface?: HintSurface;
+  /** When true, omit the next-action hint (shown in NoticeCluster instead). */
+  compact?: boolean;
+}) {
   const channel = channelLabel(connection);
+  const hint = compact ? null : nextActionHint(run, hasAnswer, surface);
   return (
-    <p className="status-bar">
+    <div className="status-bar">
       <StatusPill status={run.status} />
       <span>
-        Saved status: {statusLabel(run.status)}. Progress channel: {channel}.
-        {connection === "live" ? "" : " The status is the saved run from the server."}
+        {connection === "live" ? `Live updates (${channel})` : `Saved on server (${channel})`}
+        {hint ? ` · ${hint}` : ""}
       </span>
-    </p>
+    </div>
   );
 }
 

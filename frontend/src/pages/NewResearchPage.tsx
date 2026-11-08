@@ -56,7 +56,7 @@ export function NewResearchPage() {
   const runs = data?.run_ids ?? [];
 
   return (
-    <section className="stack">
+    <section className="stack stage--ask">
       <PageHeader
         title="Ask one public question"
         lede="One research run for this guest session. Keep topics public and non-sensitive."

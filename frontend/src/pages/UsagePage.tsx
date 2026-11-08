@@ -1,11 +1,14 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useSyncExternalStore } from "react";
 import { getEvents, getReady, getRun, getUsage } from "../api/client";
+import { consumeRunStream } from "../api/sse";
 import { useToken } from "../auth/token";
 import { ErrorText, PageHeader, UsageFiguresList } from "../components/ui";
 import { formatElapsed, formatUnknown, formatWhen } from "../domain/format";
-import { discoveredSources, statusLabel } from "../domain/runView";
+import { maxSequence, sourcesSeenCount, statusLabel } from "../domain/runView";
 import { EMPTY_USAGE } from "../api/types";
+import { runStore } from "../state/runStore";
 
 export function UsagePage() {
   const { token } = useToken();
@@ -93,6 +96,8 @@ export function UsagePage() {
 
 function RunRow({ runId }: { runId: string }) {
   const { token } = useToken();
+  const version = useSyncExternalStore(runStore.subscribe, runStore.getVersion, runStore.getVersion);
+  void version;
   const run = useQuery({
     queryKey: ["run", runId],
     enabled: Boolean(token),
@@ -103,8 +108,34 @@ function RunRow({ runId }: { runId: string }) {
     enabled: Boolean(token),
     queryFn: () => getEvents(token as string, runId, 0),
   });
+
+  useEffect(() => {
+    if (!token || !events.data) return;
+    runStore.merge(runId, events.data.events);
+    if (runStore.get(runId)?.snapshot) return;
+    const controller = new AbortController();
+    void consumeRunStream({
+      token,
+      runId,
+      after: maxSequence(events.data.events),
+      signal: controller.signal,
+      onOpen: () => undefined,
+      onEvent: (event) => runStore.merge(runId, [event]),
+      onSnapshot: (snapshot) => runStore.setSnapshot(runId, snapshot),
+      onClosed: () => undefined,
+      onDrop: () => undefined,
+      onUnauthorized: () => undefined,
+    });
+    return () => controller.abort();
+  }, [token, runId, events.data]);
+
   const item = run.data;
-  const sources = events.data ? discoveredSources(events.data.events).length : null;
+  const entry = runStore.get(runId);
+  const eventList = events.data?.events ?? entry?.events ?? [];
+  const sources =
+    events.data || entry?.snapshot
+      ? sourcesSeenCount(eventList, entry?.snapshot?.sources.length)
+      : null;
   return (
     <tr>
       <td>

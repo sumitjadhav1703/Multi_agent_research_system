@@ -173,10 +173,13 @@ describe("research console screens", () => {
   it("shows a cancelled run from the saved status while the channel connects", async () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     renderAt("/runs/run-1");
-    expect(await screen.findByText(/Saved status: Cancelled/)).toBeInTheDocument();
-    expect(await screen.findByText(/Progress channel: connected/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Answer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Process" })).toBeInTheDocument();
+    expect(screen.getByText("Cancelled", { selector: ".pill" })).toBeInTheDocument();
     expect(screen.getByText("Partial result")).toBeInTheDocument();
     expect(screen.getByText("Insufficient evidence")).toBeInTheDocument();
+    expect(screen.getByLabelText("Run notices")).toBeInTheDocument();
+    expect(await screen.findByText(/live updates|saved on server/i)).toBeInTheDocument();
     expect(sseCalls.at(-1)?.url).not.toMatch(/token|authorization/i);
     expect(sseCalls.at(-1)?.headers?.Authorization).toMatch(/^Bearer /);
   });
@@ -185,19 +188,21 @@ describe("research console screens", () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     world.run = { ...world.run, status: "queued", stop_reason: null, finished_at: null, cancel_requested: false };
     renderAt("/runs/reconnect-me");
-    expect(await screen.findByText(/Progress channel: reconnecting/)).toBeInTheDocument();
-    expect(screen.getAllByText(/saved run from the server/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Saved status: Queued/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Answer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Process" })).toBeInTheDocument();
+    expect(screen.getByText("Queued", { selector: ".pill" })).toBeInTheDocument();
   });
 
   it("sanitizes the stored report and shows unknown cost on the usage screen", async () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     world.run = { ...world.run, status: "review_required" };
     renderAt("/runs/run-1/report");
+    expect(await screen.findByRole("heading", { name: "Answer" })).toBeInTheDocument();
     expect(await screen.findByText(/Stored finding cites/)).toBeInTheDocument();
     expect(document.querySelector("script")).toBeNull();
     expect(screen.getByRole("link", { name: "ev_sq1_1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Critics" })).toBeInTheDocument();
   });
 
   it("shows unknown cost instead of a zero estimate", async () => {
