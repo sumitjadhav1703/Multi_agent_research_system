@@ -20,14 +20,14 @@ import {
   workerCards,
 } from "../domain/runView";
 import { useFirstVisitExpand } from "../hooks/useFirstVisitExpand";
-import { useRunChannel } from "../hooks/useRunChannel";
+import { useRunChannelContext } from "../hooks/runChannelContext";
 
 export function LiveRunPage() {
   const { runId = "" } = useParams();
   const location = useLocation();
   const reused = Boolean((location.state as { reused?: boolean } | null)?.reused);
   const expandSecondary = useFirstVisitExpand(`live:${runId || "none"}`);
-  const { runQuery, events, snapshot, connection } = useRunChannel(runId);
+  const { runQuery, events, snapshot, connection } = useRunChannelContext();
   const run = runQuery.data;
 
   if (runQuery.isPending) return <p role="status">Loading the saved run.</p>;

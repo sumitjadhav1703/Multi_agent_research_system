@@ -199,6 +199,13 @@ describe("research console screens", () => {
     expect(screen.queryByText("Insufficient evidence")).toBeNull();
   });
 
+  it("does not flash a Reconnecting notice when opening a saved run", async () => {
+    sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
+    renderAt("/runs/run-1");
+    expect(await screen.findByRole("heading", { name: "Answer" })).toBeInTheDocument();
+    expect(screen.queryByText("Reconnecting")).toBeNull();
+  });
+
   it("keeps the saved status visible when the channel drops", async () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     world.run = { ...world.run, status: "queued", stop_reason: null, finished_at: null, cancel_requested: false };

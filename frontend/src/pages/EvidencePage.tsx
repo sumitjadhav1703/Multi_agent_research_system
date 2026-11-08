@@ -1,16 +1,15 @@
 import { useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { SectionHeading } from "../components/SectionMark";
 import { ErrorText, NoticeCluster, PageHeader, RunStatusBar } from "../components/ui";
 import { extractionLabel, formatWhen } from "../domain/format";
 import { answerMarkdown, discoveredSources, nextActionHint, noticeBanners } from "../domain/runView";
-import { useRunChannel } from "../hooks/useRunChannel";
+import { useRunChannelContext } from "../hooks/runChannelContext";
 
 export function EvidencePage() {
-  const { runId = "" } = useParams();
   const [params] = useSearchParams();
-  const { runQuery, events, snapshot, connection } = useRunChannel(runId);
+  const { runQuery, events, snapshot, connection } = useRunChannelContext();
   const sources = useMemo(() => snapshot?.sources ?? [], [snapshot]);
   const passages = useMemo(() => snapshot?.passages ?? [], [snapshot]);
   const claims = useMemo(() => snapshot?.claims ?? [], [snapshot]);

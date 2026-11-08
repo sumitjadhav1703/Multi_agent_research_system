@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { TokenProvider } from "./auth/token";
 import { Shell } from "./components/Shell";
+import { RunWorkspace } from "./hooks/runChannelContext";
 import { EvaluationPage } from "./pages/EvaluationPage";
 import { EvidencePage } from "./pages/EvidencePage";
 import { LiveRunPage } from "./pages/LiveRunPage";
@@ -31,9 +32,11 @@ export function AppRoutes() {
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<NewResearchPage />} />
-        <Route path="runs/:runId" element={<LiveRunPage />} />
-        <Route path="runs/:runId/report" element={<ReportPage />} />
-        <Route path="runs/:runId/evidence" element={<EvidencePage />} />
+        <Route path="runs/:runId" element={<RunWorkspace />}>
+          <Route index element={<LiveRunPage />} />
+          <Route path="report" element={<ReportPage />} />
+          <Route path="evidence" element={<EvidencePage />} />
+        </Route>
         <Route path="evaluation" element={<EvaluationPage />} />
         <Route path="usage" element={<UsagePage />} />
       </Route>

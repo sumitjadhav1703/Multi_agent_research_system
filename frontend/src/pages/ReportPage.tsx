@@ -8,13 +8,13 @@ import { ErrorText, NoticeCluster, PageHeader, RunStatusBar, UsageFiguresList } 
 import { formatElapsed } from "../domain/format";
 import { answerMarkdown, nextActionHint, noticeBanners, usageFromEvents } from "../domain/runView";
 import { useFirstVisitExpand } from "../hooks/useFirstVisitExpand";
-import { useRunChannel } from "../hooks/useRunChannel";
+import { useRunChannelContext } from "../hooks/runChannelContext";
 import { EMPTY_USAGE } from "../api/types";
 
 export function ReportPage() {
   const { runId = "" } = useParams();
   const expandSecondary = useFirstVisitExpand(`report:${runId || "none"}`);
-  const { runQuery, events, snapshot, connection } = useRunChannel(runId);
+  const { runQuery, events, snapshot, connection } = useRunChannelContext();
   const run = runQuery.data;
 
   if (runQuery.isPending) return <p role="status">Loading the saved run.</p>;

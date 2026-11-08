@@ -45,7 +45,11 @@ export function useRunChannel(runId: string | undefined) {
     if (!runId || !token || eventsQuery.isLoading) return;
     const controller = new AbortController();
     const after = maxSequence(runStore.get(runId)?.events ?? []);
-    runStore.setConnection(runId, "reconnecting");
+    // Only surface "Reconnecting" after a live drop — never on first connect or tab remount.
+    const prior = runStore.get(runId)?.connection ?? "idle";
+    if (prior === "live" || prior === "reconnecting") {
+      runStore.setConnection(runId, "reconnecting");
+    }
     void consumeRunStream({
       token,
       runId,
@@ -64,7 +68,14 @@ export function useRunChannel(runId: string | undefined) {
         void queryClient.invalidateQueries({ queryKey: ["run", runId] });
       },
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      const current = runStore.get(runId)?.connection;
+      // Avoid a stale "live" that would flash Reconnecting the next time this run mounts.
+      if (current === "live" || current === "reconnecting") {
+        runStore.setConnection(runId, "idle");
+      }
+    };
   }, [runId, token, eventsQuery.isLoading, clearToken, queryClient]);
 
   useEffect(() => {
