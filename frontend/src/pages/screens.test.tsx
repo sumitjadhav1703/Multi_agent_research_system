@@ -132,6 +132,7 @@ function renderAt(path: string) {
 
 beforeEach(() => {
   sseCalls.length = 0;
+  sessionStorage.clear();
   world.usage.one_use_consumed = false;
   world.usage.run_ids = [];
   world.run.status = "cancelled";

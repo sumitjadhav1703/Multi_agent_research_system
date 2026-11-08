@@ -127,7 +127,16 @@ export function RunStatusBar({
   );
 }
 
-export function UsageFiguresList({ usage, heading = "Usage" }: { usage: UsageFigures; heading?: string }) {
+export function UsageFiguresList({
+  usage,
+  heading = "Usage",
+  bare = false,
+}: {
+  usage: UsageFigures;
+  heading?: string;
+  /** Skip the outer panel when nested inside a CollapsiblePanel. */
+  bare?: boolean;
+}) {
   const rows: [string, number | string | null][] = [
     ["Model calls", usage.llm_calls],
     ["Prompt tokens", usage.prompt_tokens],
@@ -136,17 +145,21 @@ export function UsageFiguresList({ usage, heading = "Usage" }: { usage: UsageFig
     ["Search calls", usage.search_calls],
     ["Estimated cost (USD)", usage.estimated_cost_usd],
   ];
+  const body = (
+    <dl className="metric-list">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{formatUnknown(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+  if (bare) return body;
   return (
     <section className="panel">
       <h2>{heading}</h2>
-      <dl className="metric-list">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{formatUnknown(value)}</dd>
-          </div>
-        ))}
-      </dl>
+      {body}
     </section>
   );
 }

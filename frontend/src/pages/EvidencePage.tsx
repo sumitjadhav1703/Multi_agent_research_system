@@ -91,41 +91,45 @@ export function EvidencePage() {
         <div className="evidence-grid">
           <section className="panel">
             <SectionHeading kind="sources">Sources</SectionHeading>
-            <label className="field">
-              <span>Domain</span>
-              <select value={domain} onChange={(event) => setDomain(event.target.value)}>
-                <option value="all">All domains</option>
-                {domains.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Extraction</span>
-              <select value={method} onChange={(event) => setMethod(event.target.value)}>
-                <option value="all">All methods</option>
-                {methods.map((item) => (
-                  <option key={item} value={item}>
-                    {extractionLabel(item)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="evidence-filters">
+              <label className="field">
+                <span>Domain</span>
+                <select value={domain} onChange={(event) => setDomain(event.target.value)}>
+                  <option value="all">All domains</option>
+                  {domains.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Extraction</span>
+                <select value={method} onChange={(event) => setMethod(event.target.value)}>
+                  <option value="all">All methods</option>
+                  {methods.map((item) => (
+                    <option key={item} value={item}>
+                      {extractionLabel(item)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <div className="source-list">
               {filtered.map((source) => (
                 <button
                   key={source.source_id}
                   type="button"
+                  className="source-pill"
                   aria-pressed={source.source_id === activeSourceId}
                   onClick={() => setSelectedId(source.source_id)}
                 >
-                  {source.title || source.domain || "Untitled source"}
-                  <span className="meta">
-                    {" "}
+                  <span className="source-pill-title">
+                    {source.title || source.domain || "Untitled source"}
+                  </span>
+                  <span className="meta source-pill-meta">
                     {source.domain}
-                    <br />
+                    <span aria-hidden="true"> · </span>
                     {source.source_id}
                   </span>
                 </button>

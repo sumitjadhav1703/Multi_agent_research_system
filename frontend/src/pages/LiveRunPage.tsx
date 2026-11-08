@@ -1,6 +1,7 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { EMPTY_USAGE } from "../api/types";
+import { CollapsiblePanel } from "../components/CollapsiblePanel";
 import { ExpandableMarkdown } from "../components/ExpandableMarkdown";
 import { CancelRun } from "../components/ReviewForm";
 import { SectionHeading } from "../components/SectionMark";
@@ -18,12 +19,14 @@ import {
   usageFromEvents,
   workerCards,
 } from "../domain/runView";
+import { useFirstVisitExpand } from "../hooks/useFirstVisitExpand";
 import { useRunChannel } from "../hooks/useRunChannel";
 
 export function LiveRunPage() {
   const { runId = "" } = useParams();
   const location = useLocation();
   const reused = Boolean((location.state as { reused?: boolean } | null)?.reused);
+  const expandSecondary = useFirstVisitExpand(`live:${runId || "none"}`);
   const { runQuery, events, snapshot, connection } = useRunChannel(runId);
   const run = runQuery.data;
 
@@ -51,6 +54,7 @@ export function LiveRunPage() {
     ...(snapshot?.sources.flatMap((source) => [source.url, source.canonical_url]) ?? []),
   ];
   const doneCount = stages.filter((stage) => stage.state === "done").length;
+  const sourceCount = sources.length || discovered.length;
 
   return (
     <section className="stack">
@@ -78,17 +82,25 @@ export function LiveRunPage() {
         <div className="process-shell-head">
           <SectionHeading kind="flow">Process</SectionHeading>
           <p className="meta process-progress">
-            {doneCount} of {stages.length} stages complete
+            {doneCount} of {stages.length} stages
           </p>
         </div>
         <ol className="process-rail" aria-label="Research stages">
           {stages.map((stage, index) => (
-            <li key={stage.id} className={stage.state} aria-current={stage.state === "active" ? "step" : undefined}>
+            <li
+              key={stage.id}
+              className={`${stage.state} stage-${stage.id}`}
+              aria-current={stage.state === "active" ? "step" : undefined}
+            >
               {index > 0 ? <span className="step-connector" aria-hidden="true" /> : null}
+              <span className="step-index" aria-hidden="true">
+                {index + 1}
+              </span>
               <span className="step-icon" aria-hidden="true">
                 <StageMark kind={stageMarkKind(stage.id)} />
               </span>
               <span className="step-label">{stage.label}</span>
+              <span className="step-blurb">{stage.blurb}</span>
               <span className="step-state">
                 <span className="visually-hidden">Status: </span>
                 {stage.state}
@@ -131,10 +143,12 @@ export function LiveRunPage() {
           )}
         </article>
 
-        <aside className="stack">
-          <UsageFiguresList usage={usage} heading="Usage" />
-          <section className="panel">
-            <SectionHeading kind="sources">Sources</SectionHeading>
+        <aside className="live-drawers">
+          <CollapsiblePanel title="Usage" defaultOpen={expandSecondary}>
+            <UsageFiguresList usage={usage} bare />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Sources" defaultOpen={expandSecondary} count={sourceCount || null}>
             {sources.length === 0 && discovered.length === 0 ? <p>No sources saved yet.</p> : null}
             <ul className="feed">
               {sources.map((source) => (
@@ -152,47 +166,44 @@ export function LiveRunPage() {
                   ))
                 : null}
             </ul>
-          </section>
-        </aside>
-      </div>
+          </CollapsiblePanel>
 
-      <div className="split">
-        <section className="panel">
-          <h2>Activity</h2>
-          <p className="meta">
-            Elapsed {formatElapsed(run.started_at, run.finished_at)} · Attempts {run.attempts} ·{" "}
-            {run.stop_reason ?? "no stop reason"}
-          </p>
-          {events.length === 0 ? <p>No events saved yet.</p> : null}
-          <ul className="feed activity-feed" aria-live="polite">
-            {events.slice(-80).map((event) => (
-              <li key={event.sequence_id}>
-                <time dateTime={event.created_at}>{formatWhen(event.created_at)}</time>{" "}
-                <strong>{event.type}</strong>
-                <div>{summarizeEvent(event)}</div>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section className="panel">
-          <h2>Workers</h2>
-          {workers.length === 0 ? (
-            <p>No worker events yet. Provider name is unknown until an event includes one.</p>
-          ) : null}
-          <ul className="worker-rows">
-            {workers.map((worker) => (
-              <li key={worker.subquestionId}>
-                <strong>{worker.subquestionId}</strong>
-                <span className="meta">{worker.state}</span>
-                <span className="meta">
-                  Provider {worker.provider} · Sources{" "}
-                  {worker.sources === null ? "unknown" : worker.sources}
-                  {worker.error ? ` · ${worker.error}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+          <CollapsiblePanel title="Activity" defaultOpen={expandSecondary} count={events.length || null}>
+            <p className="meta">
+              Elapsed {formatElapsed(run.started_at, run.finished_at)} · Attempts {run.attempts} ·{" "}
+              {run.stop_reason ?? "no stop reason"}
+            </p>
+            {events.length === 0 ? <p>No events saved yet.</p> : null}
+            <ul className="feed activity-feed" aria-live="polite">
+              {events.slice(-80).map((event) => (
+                <li key={event.sequence_id}>
+                  <time dateTime={event.created_at}>{formatWhen(event.created_at)}</time>{" "}
+                  <strong>{event.type}</strong>
+                  <div>{summarizeEvent(event)}</div>
+                </li>
+              ))}
+            </ul>
+          </CollapsiblePanel>
+
+          <CollapsiblePanel title="Workers" defaultOpen={expandSecondary} count={workers.length || null}>
+            {workers.length === 0 ? (
+              <p>No worker events yet. Provider name is unknown until an event includes one.</p>
+            ) : null}
+            <ul className="worker-rows">
+              {workers.map((worker) => (
+                <li key={worker.subquestionId}>
+                  <strong>{worker.subquestionId}</strong>
+                  <span className="meta">{worker.state}</span>
+                  <span className="meta">
+                    Provider {worker.provider} · Sources{" "}
+                    {worker.sources === null ? "unknown" : worker.sources}
+                    {worker.error ? ` · ${worker.error}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CollapsiblePanel>
+        </aside>
       </div>
 
       {ACTIVE_STATUSES.has(run.status) ? <CancelRun runId={run.run_id} /> : null}

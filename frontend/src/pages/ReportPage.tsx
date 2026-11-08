@@ -1,16 +1,19 @@
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { CollapsiblePanel } from "../components/CollapsiblePanel";
 import { ExpandableMarkdown } from "../components/ExpandableMarkdown";
 import { ReviewForm } from "../components/ReviewForm";
 import { SectionHeading } from "../components/SectionMark";
 import { ErrorText, NoticeCluster, PageHeader, RunStatusBar, UsageFiguresList } from "../components/ui";
 import { formatElapsed } from "../domain/format";
 import { answerMarkdown, nextActionHint, noticeBanners, usageFromEvents } from "../domain/runView";
+import { useFirstVisitExpand } from "../hooks/useFirstVisitExpand";
 import { useRunChannel } from "../hooks/useRunChannel";
 import { EMPTY_USAGE } from "../api/types";
 
 export function ReportPage() {
   const { runId = "" } = useParams();
+  const expandSecondary = useFirstVisitExpand(`report:${runId || "none"}`);
   const { runQuery, events, snapshot, connection } = useRunChannel(runId);
   const run = runQuery.data;
 
@@ -106,8 +109,11 @@ export function ReportPage() {
         ) : null}
       </article>
 
-      <section className="panel">
-        <SectionHeading kind="critics">Critics</SectionHeading>
+      <CollapsiblePanel
+        title="Critics"
+        defaultOpen={expandSecondary}
+        count={conflicts.length + gaps.length || null}
+      >
         {conflicts.length === 0 && gaps.length === 0 ? (
           <p>No claim-level conflicts or insufficient gaps are stored for this run.</p>
         ) : null}
@@ -122,10 +128,13 @@ export function ReportPage() {
             {claim.verification_reason ? ` (${claim.verification_reason})` : ""}
           </p>
         ))}
-      </section>
+      </CollapsiblePanel>
 
-      <section className="panel">
-        <SectionHeading kind="sources">Sources</SectionHeading>
+      <CollapsiblePanel
+        title="Sources"
+        defaultOpen={expandSecondary}
+        count={snapshot?.sources.length ?? null}
+      >
         {snapshot?.sources.length ? (
           <ul className="feed">
             {snapshot.sources.map((source) => (
@@ -144,12 +153,11 @@ export function ReportPage() {
             Open evidence explorer
           </Link>
         </div>
-      </section>
+      </CollapsiblePanel>
 
-      <details className="details-panel report-secondary">
-        <summary>Run usage</summary>
-        <UsageFiguresList usage={usage ?? EMPTY_USAGE} heading="Figures" />
-      </details>
+      <CollapsiblePanel title="Run usage" defaultOpen={expandSecondary} className="report-secondary">
+        <UsageFiguresList usage={usage ?? EMPTY_USAGE} bare />
+      </CollapsiblePanel>
     </section>
   );
 }

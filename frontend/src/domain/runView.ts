@@ -16,6 +16,7 @@ export type BannerTone = "info" | "warning" | "danger" | "ok";
 export interface StageView {
   id: string;
   label: string;
+  blurb: string;
   state: StageState;
 }
 
@@ -43,14 +44,22 @@ export interface DiscoveredSource {
 const STAGES: {
   id: string;
   label: string;
+  blurb: string;
   start: string[];
   done: string[];
   fail?: string[];
 }[] = [
-  { id: "plan", label: "Plan", start: ["planner.started"], done: ["planner.completed"] },
+  {
+    id: "plan",
+    label: "Plan",
+    blurb: "Shape the question",
+    start: ["planner.started"],
+    done: ["planner.completed"],
+  },
   {
     id: "workers",
     label: "Workers",
+    blurb: "Parallel research",
     start: ["worker.started"],
     done: ["worker.completed"],
     fail: ["worker.failed"],
@@ -58,20 +67,35 @@ const STAGES: {
   {
     id: "sources",
     label: "Sources",
+    blurb: "Gather pages",
     start: ["source.discovered"],
     done: ["source.extracted", "source.discovered"],
   },
-  { id: "evidence", label: "Evidence", start: ["evidence.extracted"], done: ["evidence.extracted"] },
+  {
+    id: "evidence",
+    label: "Evidence",
+    blurb: "Extract passages",
+    start: ["evidence.extracted"],
+    done: ["evidence.extracted"],
+  },
   {
     id: "verify",
     label: "Verify",
+    blurb: "Check claims",
     start: ["claim.verified", "claim.conflicted"],
     done: ["claim.verified", "claim.conflicted"],
   },
-  { id: "report", label: "Report", start: ["writer.started"], done: ["writer.completed"] },
+  {
+    id: "report",
+    label: "Report",
+    blurb: "Write the answer",
+    start: ["writer.started"],
+    done: ["writer.completed"],
+  },
   {
     id: "review",
     label: "Review",
+    blurb: "Human gate",
     start: ["review.awaiting", "review.requested"],
     done: ["review.resumed", "run.completed"],
   },
@@ -124,7 +148,7 @@ export function stageStates(events: readonly RunEvent[], status: string): StageV
     else if (failed) state = "failed";
     else if (stage.start.some((type) => types.has(type))) state = "active";
     if (stage.id === "review" && status === "review_required") state = "active";
-    return { id: stage.id, label: stage.label, state };
+    return { id: stage.id, label: stage.label, blurb: stage.blurb, state };
   });
 }
 
