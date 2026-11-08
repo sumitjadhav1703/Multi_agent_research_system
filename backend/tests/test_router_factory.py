@@ -27,6 +27,18 @@ class RouterFactoryTests(unittest.TestCase):
             self.assertIn(model_id, settings.allowlist)
         self.assertTrue(any("rm-planner" in mapping for mapping in fallbacks))
 
+    def test_each_configured_fallback_is_one_hop(self) -> None:
+        settings = mock_settings()
+        _model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        seen: set[str] = set()
+        for mapping in fallbacks:
+            self.assertEqual(len(mapping), 1)
+            alias, targets = next(iter(mapping.items()))
+            self.assertEqual(targets, [f"{alias}-fallback"])
+            seen.add(alias)
+        self.assertEqual(seen, {"rm-planner", "rm-researcher", "rm-verifier", "rm-writer"})
+        self.assertNotIn("rm-eval-judge", seen)
+
     def test_create_router_returns_mock_when_configured(self) -> None:
         settings = mock_settings()
         router = create_router(settings)

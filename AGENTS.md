@@ -9,7 +9,7 @@
 - Use project subagents proactively with non-overlapping file ownership; default to at most two concurrent write-capable agents; use local Mac tooling when useful.
 - Prefer Singapore/Pacific (or nearest) cloud regions for Neon, Render, and Vercel; avoid US/Oregon placements when a Singapore or nearby option exists, for lower latency.
 - Treat the public site as a resume portfolio demo: no Sign-in/login pages on the landing; frontend polish over auth-product UX.
-- Match Research Console UI to the brief-pinned video landing theme (dark full-bleed, Bubbledot/Geist Pixel) rather than a separate utilitarian look.
+- Match the entire Research Console to the landing hero art style (black, Inter, Bubbledot/Geist Pixel, white pills) and keep the inside simple to understand; avoid generic AI-dashboard chrome.
 - Prefer a production-grade public GitHub tree: omit `.streamlit` and local Cursor/plan master docs from what is pushed; ship only deployable product artifacts.
 
 ## Learned Workspace Facts
@@ -20,7 +20,7 @@
 - V2 stack target: FastAPI + LiteLLM SDK Router (free-only allowlist, no paid fallback), LangGraph bounded research, PostgreSQL/Neon durable jobs/quotas/checkpoints, REST + SSE (no first-release WebSockets), React/Vite Research Console, thin Cloudflare MCP Worker, Render deployability with a public URL as definition-of-done.
 - Prefer Python 3.13 for the backend locally; Python 3.15 failed LiteLLM native builds in this environment.
 - LiteLLM Gemini id `gemini/gemini-2.0-flash` returned HTTP 404 (retired); point defaults at the current Flash alias and do not claim a live Gemini pass without a fresh verified call.
-- SSRF defenses remain V1-level (DNS/scheme checks with residual DNS-rebinding/connect-time risk); do not document SSRF as closed without egress-proxy or equivalent hardening.
+- SSRF fetch is a partial in-process IP dial (`backend/app/security/egress_fetch.py` via `tools.scrape_url`): each hop is resolved and dialed on the checked global IP, with Host/SNI kept as the original hostname. R04 stays open; there is no separate egress proxy, and other sockets bypass the helper. Do not document SSRF as closed.
 - Local Docker/Postgres is not always available; `FOR UPDATE SKIP LOCKED` lease behavior needs real Postgres and is not proven by SQLite-only paths.
 - Live Singapore deploy stack: Neon in `aws-ap-southeast-1`, Render API `https://researchmind-api-sg.onrender.com`, Vercel console `https://researchmind-console.vercel.app` (`sin1`, `VITE_API_BASE` → SG API), Cloudflare MCP Worker `https://researchmind-mcp.jadhavsumit534.workers.dev` (points at SG API).
 - Guest research still needs Turnstile keys on Render/Vercel; real LLM runs need provider keys on Render and `USE_MOCK_PROVIDER=false`.

@@ -47,16 +47,17 @@ PYTHONPATH=. /tmp/rm_v2_venv/bin/python evals/fixtures/make_runs.py
 
 Export `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the process environment. The command sets `DEEPEVAL_DISABLE_DOTENV=1`, `DEEPEVAL_TELEMETRY_OPT_OUT=1`, and `LITELLM_MODE=PRODUCTION` before import so DeepEval and LiteLLM do not read a `.env` file. Do not print those keys.
 
-DeepEval is not installed in `/tmp/rm_v2_venv` as part of this milestone. For a controlled run only:
+Keep DeepEval out of `/tmp/rm_v2_venv`. The unit test that expects exit code 3 runs with that interpreter and a clean `PYTHONPATH`. Install the judge extra in a separate environment. `deepeval==4.3.3` does not depend on LiteLLM, and `LiteLLMModel` imports it only when a completion runs, so `evals/requirements.txt` also pins `litellm==1.108.2` (the backend pin).
 
 ```text
-uv pip install --python /tmp/rm_v2_venv/bin/python -r evals/requirements.txt
+uv venv /tmp/rm_eval_judge --python python3.13
+uv pip install --python /tmp/rm_eval_judge/bin/python -r evals/requirements.txt
 ```
 
 Constructor check, no model call and no scores:
 
 ```text
-RM_EVAL_JUDGE=1 PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m evals.cli judge \
+RM_EVAL_JUDGE=1 PYTHONPATH=. /tmp/rm_eval_judge/bin/python -m evals.cli judge \
   --confirm-offline \
   --dry-run \
   --runs evals/fixtures/runs.json \
@@ -66,12 +67,12 @@ RM_EVAL_JUDGE=1 PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m evals.cli judge \
 A real judge call, still offline from the public API, and only against saved run artifacts (this does not start a research job):
 
 ```text
-RM_EVAL_JUDGE=1 PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m evals.cli judge \
+RM_EVAL_JUDGE=1 PYTHONPATH=. /tmp/rm_eval_judge/bin/python -m evals.cli judge \
   --confirm-offline \
   --runs path/to/saved-runs.json \
   --output evals/results/judge.json
 ```
 
-`evals/results/` is gitignored. Without the flag or `--confirm-offline`, the command exits 2. Without DeepEval installed, it exits 3. It does not call `deepeval.evaluate()`, which can sync to Confident AI. It calls `metric.measure()` on eligible metrics only.
+Load `GEMINI_API_KEY` or `GOOGLE_API_KEY` into that process with dotenv. Do not print the values. `LiteLLMModel` forwards `GOOGLE_API_KEY` when that variable is set. `evals/results/` is gitignored. Without the flag or `--confirm-offline`, the command exits 2. Without DeepEval installed, it exits 3. It does not call `deepeval.evaluate()`, which can sync to Confident AI. It calls `metric.measure()` on eligible metrics only.
 
-The judge was not executed against a live provider while this milestone was built. A dry run on 2026-11-07 constructed the metric classes and recorded only null scores. See `docs/evals/RESULTS.md`.
+A dry run on 2026-11-07 constructed the metric classes and recorded only null scores. On 2026-11-09 a two-fixture judge called `gemini/gemini-flash-latest` and recorded one numeric score. The other eligible scores stayed null. See `docs/evals/RESULTS.md`.

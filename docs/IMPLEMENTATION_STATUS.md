@@ -1,22 +1,36 @@
 # ResearchMind 2.0 — Implementation Status
 
-**Updated:** 2026-11-08  
-**Repository root:** `/workspace`  
-**Git:** feature branch for data retention (see latest commit)  
-**Current gate:** **Singapore public stack + MCP Worker are live.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP `https://researchmind-mcp.jadhavsumit534.workers.dev`. Oregon deleted. CORS OK. Turnstile + provider keys are configured on the hosts; live ready reports `use_mock_provider: false`.
+**Updated:** 2026-11-09  
+**Repository root:** `/Users/sumitjadhav/Multi_agent_research_system/repo`  
+**Git:** `main` (Singapore public stack)  
+**Current gate:** **First-release SoT gaps closed or residual-documented; whole-project offline matrix green; live Singapore smoke + bug bash recorded.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP Worker live. Retention env set on Render. Not “production-ready.”
+
+### Follow-up: remaining-SoT + whole-project test plan (2026-11-09)
+
+- **SSRF:** in-process egress-style IP dial in `backend/app/security/egress_fetch.py`; R04 remains **partial** (no separate egress proxy).
+- **Lifespan wake resilience:** DB/checkpointer/retention/consumer failures no longer kill Uvicorn; `/health/live` stays up; `/health/ready` follows DB. Tests in `backend/tests/test_lifespan_resilience.py`.
+- **Retention on Render:** `DATA_RETENTION_*` env vars applied to `researchmind-api-sg` (deploy `dep-dbocmqrm8hqs7386s740` live).
+- **Capability matrix:** `backend/scripts/live_capability_matrix.py` run 2026-11-09 — all roles failed with `all_providers_unavailable`; raw Gemini → HTTP **503**. Documented, not pretended green.
+- **DeepEval:** bounded N=2 fixture probe; one Answer Relevancy 1.0; aggregate still unmeasured (see `docs/evals/RESULTS.md`).
+- **Offline matrix:** `scripts/run_offline_suites.sh` — V1 16 OK; backend 142 OK (1 skipped Postgres durability); evals 14 OK; deterministic 20/20. Frontend vitest 18/18, build OK, eslint OK after `globals` install. MCP vitest 29/29.
+- **Bug bash:** `docs/BUG_BASH_LOG.md` — no open P0; Gemini 503 is external P1 ops.
+- **Security review:** PASS WITH CONDITIONS (R04 partial, Free sleep, no MCP OAuth). Markdown image allowlist fixed post-review.
+- **Test inventory:** `docs/TEST_INVENTORY.md` + `scripts/run_offline_suites.sh`.
 
 ### Follow-up: 2-day data retention
 
-- **IMPLEMENTED:** `backend/app/jobs/retention.py` purges research jobs older than `DATA_RETENTION_DAYS` (default **2**). Orphan guest identities are removed only after `expires_at` (preserves unexpired Turnstile tokens). Retention runs inside `QueueConsumer` (not on the critical FastAPI lifespan path that blocks `/docs`). Failed purge passes still advance the schedule so retries are not every poll tick.
+- **IMPLEMENTED:** `backend/app/jobs/retention.py` purges research jobs older than `DATA_RETENTION_DAYS` (default **2**). Orphan guest identities are removed only after `expires_at` (preserves unexpired Turnstile tokens). Periodic retention runs inside `QueueConsumer`; a best-effort pass may also run in the background DB-init task (never on the critical path that blocks `/docs`). Failed purge passes still advance the consumer schedule so retries are not every poll tick.
+- **Does not delete** `quota_guard`. Postgres LangGraph checkpoint cleanup is best-effort by `thread_id`.
+- **Env on Render:** set 2026-11-09 (`DATA_RETENTION_ENABLED=true`, days=2, interval=3600, batch=100).
 
 ### Follow-up: API cold-start / `/docs` hang (2026-11-08)
 
 - **Symptom:** `https://researchmind-api-sg.onrender.com/docs` (and all routes) timed out with **0 bytes** for 90–180s. TLS to the Render edge succeeded; no app logs were emitted until a manual redeploy.
 - **Dissection (not a classic git-bisect app crash):** Last successful cold start was `56b2f4d` / retention merge era; startup completed in logs. After Free spin-down (~15 min idle), wake requests hung at the edge with **no container logs**. Manual `trigger_deploy` brought the service back; `/docs` and `/openapi.json` returned **200**.
 - **Root hardenings (two layers):**
-  1. **Do not block Uvicorn bind on Neon.** FastAPI lifespan yields after non-DB setup; migrations, checkpointer, lease recovery, and queue consumer run in a background `asyncio` task (`to_thread` for sync SQLAlchemy). `/docs`, `/`, and `/health/live` stay up while `database: starting` (ready → 503). Postgres `connect_timeout=10`, checkpointer `wait_for` 30s, retention consumer-only, `HEAD /` + `HEAD /health/live` accepted.
+  1. **Do not block Uvicorn bind on Neon.** FastAPI lifespan yields after non-DB setup; migrations, checkpointer, lease recovery, optional retention pass, and queue consumer run in a background `asyncio` task (`to_thread` for sync SQLAlchemy). `/docs`, `/`, and `/health/live` stay up while `database: starting` (ready → 503). Postgres `connect_timeout=10`, checkpointer `wait_for` 30s, `HEAD /` + `HEAD /health/live` accepted.
   2. **Reduce Free spin-down.** `.github/workflows/keep-api-awake.yml` pings `/api/v1/health/live` every ~10 minutes (plus `workflow_dispatch`). Demo keep-alive, not an SLA; GitHub cron can drift.
-- **Tests:** `backend/tests/test_startup_hang_guards.py` (deferred init + docs-while-starting). Retention suite unchanged.
+- **Tests:** `backend/tests/test_startup_hang_guards.py` (deferred init + docs-while-starting) plus `backend/tests/test_lifespan_resilience.py`.
 - **Not claimed:** zero cold starts forever on Render Free; measured wake latency after this change until redeploy + idle interval.
 
 ---
@@ -43,15 +57,15 @@ Do not claim Opus 5.5 High or Sonnet 5 ran for M0, M1, M2, M3, the M3 security f
 | Milestone | Status | Evidence |
 |---|---|---|
 | Gate 0 audit | Complete (prior) | Baseline docs present |
-| M0 V1 freeze | **Pass** | Tag `v1-baseline`; V1 tests 13/13 OK; live metrics not measured |
-| M1 LiteLLM + FastAPI foundation | **Code+tests complete** | Backend package + original 23 offline tests still OK; V1 still 13/13 |
-| M2 LangGraph evidence graph | **Code+tests complete — awaiting parent review** | 47 backend tests at M2 handoff; still included in the M3 suite |  
-| M3 PostgreSQL, jobs, quotas | **Code+tests complete — security follow-up applied** | Independent review PASS WITH CONDITIONS. Follow-up suite: backend 73/73 OK; V1 14/14 OK |  
-| M4 React console and SSE | **Code+tests complete — awaiting parent review** | Frontend lint, typecheck, 16/16 unit tests, production build. Backend suite includes the new SSE tests. |
-| M5 evaluation half | **Code+tests complete — awaiting parent review** | 32-question golden set. Deterministic fixture self-check 20/20. Eval unit tests 14/14 OK. Judge scores not measured. |
-| M5 observability | **Code+tests complete — awaiting parent review** | Backend 85/85 OK in 2.129s, 0 skipped. DeepEval files were not edited. |
-| M6 remote MCP | **Code+tests complete — awaiting parent review** | Worker 29/29. Backend 88/88 OK in 2.284s. Wrangler 4.158.0 dry-run only. Not deployed. |
-| M7 deploy artifacts | **Artifacts written — not deployed** | Backend 95/95 OK in 2.293s. `render.yaml` schema 0 errors. No Docker image, no Render/Vercel/Neon/Worker URL. |
+| M0 V1 freeze | **Pass** | Tag `v1-baseline`; V1 offline still green (16 tests as of 2026-11-09) |
+| M1 LiteLLM + FastAPI foundation | **Pass (offline)** | Live capability matrix blocked by Gemini 503 / provider unavailability on 2026-11-09 |
+| M2 LangGraph evidence graph | **Pass (offline + parent accept this gate)** | Included in backend 142-test suite |
+| M3 PostgreSQL, jobs, quotas | **Pass (security follow-up + lifespan resilience)** | Neon `database: ok` on live ready; retention env on Render |
+| M4 React console and SSE | **Pass (offline + live shell)** | Vitest 18/18; build OK; live `/` and `/app` HTTP 200 |
+| M5 evaluation half | **Partial** | Deterministic OK; bounded judge probe N=2 one score; no V1/V2 mean |
+| M5 observability | **Pass (offline)** | Suite included; OTLP to live collector still not pointed |
+| M6 remote MCP | **Pass (deployed + auth smoke)** | Worker live; unauth → 401; vitest 29/29; MCP OAuth still deferred (ADR 0006) |
+| M7 deploy + polish | **Pass (public URLs + measured wake)** | SG stack live; wake TTFB ~0.34s after deploy; residuals documented |
 
 ---
 

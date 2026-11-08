@@ -21,6 +21,7 @@ from backend.app.db.engine import make_engine, make_session_factory
 from backend.app.db.migrate import apply_migrations
 from backend.app.db.models import (
     EvidencePassage,
+    JobEvent,
     ResearchClaim,
     ResearchJob,
     ResearchReport,
@@ -198,6 +199,85 @@ class SseStreamTests(unittest.TestCase):
 
         messy = self._stream({"Authorization": f"Bearer {self.token}", "Last-Event-ID": "nope"})
         self.assertIn("event: run.queued", messy)
+
+    def test_last_event_id_replays_only_later_monotonic_events(self) -> None:
+        now = utc_now()
+        with self.factory() as session:
+            for sequence, event_type in (
+                (2, "worker.started"),
+                (3, "evidence.stored"),
+                (4, "run.completed"),
+            ):
+                session.add(
+                    JobEvent(
+                        id=str(uuid.uuid4()),
+                        job_id=self.run_id,
+                        sequence_id=sequence,
+                        event_type=event_type,
+                        payload=json.dumps({"status": event_type, "sequence_id": sequence}),
+                        created_at=now,
+                    )
+                )
+            session.commit()
+
+        full = [item for item in _parse_sse(self._stream({"Authorization": f"Bearer {self.token}"})) if item.get("id")]
+        ids = [int(item["id"]) for item in full]
+        self.assertEqual(ids, [1, 2, 3, 4])
+        self.assertEqual(ids, sorted(set(ids)))
+        self.assertEqual(
+            [item["event"] for item in full],
+            ["run.queued", "worker.started", "evidence.stored", "run.completed"],
+        )
+
+        mid_body = self._stream({"Authorization": f"Bearer {self.token}", "Last-Event-ID": "2"})
+        mid = _parse_sse(mid_body)
+        replayed = [item for item in mid if item.get("id")]
+        self.assertEqual([item["id"] for item in replayed], ["3", "4"])
+        self.assertEqual([item["event"] for item in replayed], ["evidence.stored", "run.completed"])
+        for item in replayed:
+            payload = json.loads(item["data"])
+            self.assertEqual(item["id"], str(payload["sequence_id"]))
+            self.assertGreater(int(payload["sequence_id"]), 2)
+        kinds = [item.get("event") for item in mid]
+        self.assertNotIn("run.queued", kinds)
+        self.assertNotIn("worker.started", kinds)
+        self.assertIn("snapshot", kinds)
+        self.assertEqual(kinds[-1], "stream.closed")
+        self.assertFalse(any(item.get("event") == "snapshot" and item.get("id") for item in mid))
+
+        finished = _parse_sse(self._stream({"Authorization": f"Bearer {self.token}", "Last-Event-ID": "4"}))
+        self.assertEqual([item for item in finished if item.get("id")], [])
+        self.assertEqual([item.get("event") for item in finished if item.get("event")], ["snapshot", "stream.closed"])
+
+        ahead = _parse_sse(self._stream({"Authorization": f"Bearer {self.token}", "Last-Event-ID": "99"}))
+        self.assertEqual([item for item in ahead if item.get("id")], [])
+        self.assertIn("event: run.queued", self._stream({"Authorization": f"Bearer {self.token}", "Last-Event-ID": "0"}))
+        self.assertIn("event: run.queued", self._stream({"Authorization": f"Bearer {self.token}", "Last-Event-ID": "-3"}))
+        padded = [item for item in _parse_sse(self._stream({"Authorization": f"Bearer {self.token}", "Last-Event-ID": " 2 "})) if item.get("id")]
+        self.assertEqual([item["id"] for item in padded], ["3", "4"])
+
+        url = f"/api/v1/research-runs/{self.run_id}/events/stream?last_event_id=4&Last-Event-ID=4"
+        with self.client.stream("GET", url, headers={"Authorization": f"Bearer {self.token}"}) as response:
+            self.assertEqual(response.status_code, 200)
+            queried = "".join(response.iter_text())
+        self.assertIn("event: run.queued", queried)
+        self.assertIn("id: 1", queried)
+
+        page = self.client.get(
+            f"/api/v1/research-runs/{self.run_id}/events?after=2",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual([item["sequence_id"] for item in page.json()["events"]], [3, 4])
+
+        hidden = self.client.get(
+            f"/api/v1/research-runs/{self.run_id}/events/stream",
+            headers={"Authorization": f"Bearer {self.other}", "Last-Event-ID": "1"},
+        )
+        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(hidden.json()["code"], "run_not_found")
+        self.assertNotIn("evidence.stored", hidden.text)
+        self.assertNotIn("Stored title", hidden.text)
 
     def test_ownership_auth_and_query_token_are_rejected(self) -> None:
         url = f"/api/v1/research-runs/{self.run_id}/events/stream"

@@ -4,7 +4,7 @@
 **Authoring source:** `evals/dataset/golden_v0.py`  
 **Reviewed:** 2026-11-07 by the test engineer who wrote the set  
 **Independent second review:** no  
-**Page snapshot:** not frozen. `reference_passages[].fetched` is false. Texts are paraphrases, not copied articles.
+**Page snapshot:** not frozen. `snapshot_status` is `not_frozen` on every row. Checked again on 2026-11-09 during the Phase 1.4 judge prep: no page was fetched, no fixture was frozen, and `reference_passages[].fetched` is still false. Texts are paraphrases, not copied articles. A later V1 / V2-A / V2-B comparison still needs one shared frozen snapshot, or an explicit note that the retrieved pages differed.
 
 Commands, metric labels, and the judge gate are in `docs/evals/DATASET_CARD.md`.
 
@@ -30,5 +30,5 @@ Comparable system labels stored on each row are `v1`, `v2a`, and `v2b`. No row c
 - Grow the set toward 50 questions.
 - Replace paraphrases with frozen source snapshots taken on a named date, and keep that snapshot for V1, V2-A, and V2-B.
 - Get an independent second review. Until then the review status stays `author_reviewed`.
-- Re-check the UN Secretary-General and US president notes before any scored run. Those notes are dated 2026-11-07 and are not permanent answers.
+- Re-check the UN Secretary-General and US president notes before any scored run that includes those rows. Those notes are dated 2026-11-07 and are not permanent answers. The 2026-11-09 fixture judge did not include them.
 - Do not treat fixture files under `evals/fixtures/` as system scores. Their `system` field is `fixture`.

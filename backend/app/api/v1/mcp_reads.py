@@ -23,7 +23,10 @@ router = APIRouter(tags=["mcp-reads"])
 _MAX_CITATIONS = 20
 _MAX_PASSAGES = 20
 
-# Checked-in note from docs/evals/RESULTS.md (2026-11-07). Scores stay null.
+# Checked-in note from docs/evals/RESULTS.md (updated 2026-11-09).
+# Aggregate comparison stays unmeasured: no V1/V2-A/V2-B table and no mean.
+# A bounded fixture probe recorded one numeric Answer Relevancy on g001; that
+# single value is not published here as a quality score (nulls are not zeros).
 PUBLISHED_EVALUATION_SUMMARY: dict[str, object] = {
     "published": True,
     "visibility": "authenticated",
@@ -32,14 +35,20 @@ PUBLISHED_EVALUATION_SUMMARY: dict[str, object] = {
     "dataset_cases": 32,
     "systems_compared": [],
     "frozen_source_snapshot": False,
-    "run_date": "2026-11-07",
+    "run_date": "2026-11-09",
     "judge": {
         "measured": False,
         "deepeval_version": "4.3.3",
         "model": "gemini/gemini-flash-latest",
         "temperature": 0,
         "scores": None,
-        "note": "No mean, median, or per-category judge score exists. A null score is not a zero.",
+        "note": (
+            "No mean, median, or per-category judge score exists. "
+            "2026-11-09 bounded fixture probe (N=2) recorded one Answer Relevancy "
+            "of 1.0 on g001; seven other eligible metrics stayed null "
+            "(timeouts / Gemini HTTP 503). That probe is not a V1 versus V2 table. "
+            "A null score is not a zero."
+        ),
     },
     "deterministic": {
         "kind": "fixture_self_check",

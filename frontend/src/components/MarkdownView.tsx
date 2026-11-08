@@ -29,6 +29,7 @@ export function MarkdownView({
         }}
         components={{
           a: ({ href, children }) => renderLink(href, children, runId, allowed),
+          img: ({ src, alt }) => renderImage(src, alt, allowed),
         }}
       >
         {source}
@@ -60,4 +61,19 @@ function renderLink(
     );
   }
   return <span>{children}</span>;
+}
+
+function renderImage(
+  src: string | undefined,
+  alt: string | undefined,
+  allowed: Set<string>,
+) {
+  if (
+    src &&
+    (src.startsWith("https://") || src.startsWith("http://")) &&
+    allowed.has(src)
+  ) {
+    return <img src={src} alt={alt || ""} loading="lazy" />;
+  }
+  return alt ? <span>{alt}</span> : null;
 }

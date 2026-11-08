@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,8 +18,8 @@ from backend.app.api.v1.mcp_reads import router as mcp_reads_router
 from backend.app.api.v1.runs import router as runs_router
 from backend.app.api.v1.stream import router as stream_router
 from backend.app.api.v1.usage import router as usage_router
-from backend.app.core.config import clear_settings_cache, get_settings
-from backend.app.observability import configure_observability, shutdown_observability
+from backend.app.core.config import Settings, clear_settings_cache, get_settings
+from backend.app.observability import configure_observability, emit, shutdown_observability
 from backend.app.observability.middleware import RequestSpanMiddleware
 from backend.app.db.engine import make_engine, make_session_factory
 from backend.app.db.migrate import apply_migrations
@@ -26,9 +28,69 @@ from backend.app.jobs.consumer import QueueConsumer, consumer_enabled
 from backend.app.jobs.errors import JobServiceError
 from backend.app.jobs.executor import LifespanGraphExecutor
 from backend.app.jobs.lease import recover_expired_leases
+from backend.app.jobs.retention import run_retention_pass
 from backend.app.jobs.turnstile import build_turnstile_verifier
 
 logger = logging.getLogger(__name__)
+
+
+def _error_class(exc: BaseException) -> str:
+    """Class name only. Exception text can contain a database URL or secret."""
+    name = type(exc).__name__
+    if name.isidentifier() and len(name) <= 64:
+        return name
+    return "Exception"
+
+
+def _emit_failure(event: str, exc: BaseException) -> None:
+    emit(event, {"error.class": _error_class(exc)}, level=logging.ERROR)
+
+
+def _dispose_engine(engine: object) -> None:
+    dispose = getattr(engine, "dispose", None)
+    if not callable(dispose):
+        return
+    try:
+        dispose()
+    except Exception as exc:
+        _emit_failure("database.engine_dispose_failed", exc)
+
+
+def _startup_retention(session_factory: Callable[[], Any], settings: Settings) -> None:
+    """Best-effort purge. Failure must not discard a database that is already up."""
+    session = None
+    try:
+        session = session_factory()
+        run_retention_pass(
+            session,
+            retention_days=settings.data_retention_days,
+            batch_size=settings.data_retention_batch_size,
+        )
+        session.commit()
+    except Exception as exc:
+        if session is not None:
+            try:
+                session.rollback()
+            except Exception:
+                pass
+        _emit_failure("retention.startup_failed", exc)
+    finally:
+        if session is not None:
+            try:
+                session.close()
+            except Exception as exc:
+                _emit_failure("retention.startup_failed", exc)
+
+
+def _mark_database_unavailable(app: FastAPI, engine: object | None, exc: BaseException) -> None:
+    _emit_failure("database.startup_failed", exc)
+    app.state.database_startup_error = "database_unavailable"
+    app.state.session_factory = None
+    app.state.postgres_url = None
+    failed = getattr(app.state, "engine", None) or engine
+    app.state.engine = None
+    if failed is not None:
+        _dispose_engine(failed)
 
 
 def _start_queue_consumer(app: FastAPI, settings) -> QueueConsumer | None:
@@ -50,7 +112,16 @@ def _start_queue_consumer(app: FastAPI, settings) -> QueueConsumer | None:
         retention_interval_seconds=settings.data_retention_interval_seconds,
         retention_batch_size=settings.data_retention_batch_size,
     )
-    consumer.start()
+    try:
+        consumer.start()
+    except Exception as exc:
+        _emit_failure("queue.consumer_start_failed", exc)
+        try:
+            consumer.stop()
+        except Exception as stop_exc:
+            _emit_failure("queue.consumer_stop_failed", stop_exc)
+        app.state.consumer = None
+        return None
     app.state.consumer = consumer
     return consumer
 
@@ -60,18 +131,31 @@ def _recover_leases(session_factory) -> None:
     try:
         recover_expired_leases(session)
         session.commit()
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        raise
     finally:
-        session.close()
+        try:
+            session.close()
+        except Exception as close_exc:
+            _emit_failure("database.session_close_failed", close_exc)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Non-DB setup only on the critical path. Yield ASAP so Uvicorn can bind
     # and serve /docs + /health/live while Neon/Render Free wake in the background.
+    # Invalid settings (including CORS_ORIGINS) still fail closed. Database,
+    # checkpointer, retention, and consumer failures are logged by class and
+    # must not stop Uvicorn from serving /health/live.
     configure_observability()
     clear_settings_cache()
     settings = get_settings()
     app.state.settings = settings
+    app.state.database_startup_error = None
     if getattr(app.state, "turnstile_verifier", None) is None:
         app.state.turnstile_verifier = build_turnstile_verifier(
             secret=settings.turnstile_secret_key,
@@ -84,6 +168,7 @@ async def lifespan(app: FastAPI):
 
     async def _init_database() -> None:
         nonlocal owns_engine, consumer
+        engine = None
         try:
             engine = make_engine(settings.database_url or "")
             # Sync SQLAlchemy work off the event loop so /docs stays responsive.
@@ -94,20 +179,16 @@ async def lifespan(app: FastAPI):
             if (settings.database_url or "").startswith(("postgres://", "postgresql://")):
                 await setup_postgres_checkpointer(settings.database_url or "", timeout_seconds=30.0)
                 app.state.postgres_url = settings.database_url
-            # Lease recovery only. Retention runs in the queue consumer.
             await asyncio.to_thread(_recover_leases, app.state.session_factory)
-            consumer = _start_queue_consumer(app, settings)
             app.state.database_startup_error = None
-        except Exception:
-            logger.exception("Database startup failed; serving live/docs without durable store")
-            app.state.database_startup_error = "database_unavailable"
-            app.state.session_factory = None
-            engine = getattr(app.state, "engine", None)
-            if owns_engine and engine is not None:
-                with suppress(Exception):
-                    await asyncio.to_thread(engine.dispose)
-                owns_engine = False
-                app.state.engine = None
+        except Exception as exc:
+            owns_engine = False
+            _mark_database_unavailable(app, engine, exc)
+        else:
+            # Best-effort only; periodic retention still runs inside QueueConsumer.
+            if settings.data_retention_enabled and app.state.session_factory is not None:
+                await asyncio.to_thread(_startup_retention, app.state.session_factory, settings)
+            consumer = _start_queue_consumer(app, settings)
         finally:
             app.state.database_starting = False
 

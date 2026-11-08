@@ -22,4 +22,21 @@ describe("MarkdownView", () => {
       "/runs/run-1/evidence?passage=ev_sq1_1",
     );
   });
+
+  it("renders markdown images only for allowlisted http(s) URLs", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <MarkdownView
+          markdown={"Safe ![ok](https://example.test/transit) and bad ![x](https://attacker.example/p)"}
+          citationIds={[]}
+          allowedUrls={["https://example.test/transit"]}
+          runId="run-1"
+        />
+      </MemoryRouter>,
+    );
+    const images = container.querySelectorAll("img");
+    expect(images).toHaveLength(1);
+    expect(images[0]?.getAttribute("src")).toBe("https://example.test/transit");
+    expect(container.textContent).toContain("x");
+  });
 });

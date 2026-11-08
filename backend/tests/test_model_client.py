@@ -6,12 +6,14 @@ import unittest
 from backend.app.providers.client import ModelClient
 from backend.app.providers.errors import (
     AllProvidersUnavailable,
+    InvalidRequestError,
     ProviderAuthError,
     ProviderRateLimitError,
     UnsupportedCapabilityError,
 )
 from backend.app.providers.mock_router import (
     MockAuthError,
+    MockInvalidRequestError,
     MockRateLimitError,
     MockRouter,
     MockTimeoutError,
@@ -47,6 +49,55 @@ class ModelClientTests(unittest.TestCase):
         self.assertGreaterEqual(len(router.calls), 2)
         self.assertEqual(router.calls[0]["model"], "rm-planner")
         self.assertEqual(router.calls[1]["model"], "rm-planner-fallback")
+
+    def test_both_deployments_429_stop_after_one_fallback(self) -> None:
+        settings = mock_settings()
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(lambda: MockRateLimitError("limited", retry_after=12.5)),
+        )
+        client = ModelClient(settings=settings, router=router)
+        with self.assertRaises(ProviderRateLimitError) as caught:
+            client.complete("planner", [{"role": "user", "content": "x"}])
+        self.assertEqual(caught.exception.retry_after, 12.5)
+        self.assertEqual(caught.exception.error_class, "rate_limit")
+        self.assertEqual([call["model"] for call in router.calls], ["rm-planner", "rm-planner-fallback"])
+
+        judge = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(lambda: MockRateLimitError("judge limited", retry_after=3)),
+        )
+        judge_client = ModelClient(settings=settings, router=judge)
+        with self.assertRaises(ProviderRateLimitError) as judge_caught:
+            judge_client.complete("eval_judge", [{"role": "user", "content": "score"}])
+        self.assertEqual(judge_caught.exception.retry_after, 3)
+        self.assertEqual([call["model"] for call in judge.calls], ["rm-eval-judge"])
+
+    def test_auth_and_invalid_request_do_not_fall_back(self) -> None:
+        settings = mock_settings()
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        denied = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockAuthError),
+        )
+        client = ModelClient(settings=settings, router=denied)
+        with self.assertRaises(ProviderAuthError):
+            client.complete("researcher", [{"role": "user", "content": "x"}])
+        self.assertEqual([call["model"] for call in denied.calls], ["rm-researcher"])
+
+        invalid = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockInvalidRequestError),
+        )
+        invalid_client = ModelClient(settings=settings, router=invalid)
+        with self.assertRaises(InvalidRequestError):
+            invalid_client.complete("writer", [{"role": "user", "content": "x"}])
+        self.assertEqual([call["model"] for call in invalid.calls], ["rm-writer"])
 
     def test_timeout_then_fallback(self) -> None:
         settings = mock_settings()

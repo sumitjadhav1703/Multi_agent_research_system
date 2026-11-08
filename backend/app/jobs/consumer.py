@@ -162,17 +162,22 @@ class QueueConsumer:
                 _running_consumer = None
 
     def recover(self) -> list[str]:
-        session = self.session_factory()
+        session = None
         try:
+            session = self.session_factory()
             recovered = recover_expired_leases(session)
             session.commit()
             return recovered
         except Exception:
-            session.rollback()
+            if session is not None:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
             emit("job.lease_recovery_failed", {"error.class": "database_error"}, level=logging.ERROR)
             return []
         finally:
-            session.close()
+            _close_session(session)
 
     def maybe_purge_retention(self, *, force: bool = False) -> None:
         """Delete rows older than retention_days when the interval elapses."""
@@ -185,8 +190,9 @@ class QueueConsumer:
             now=now,
         ):
             return
-        session = self.session_factory()
+        session = None
         try:
+            session = self.session_factory()
             run_retention_pass(
                 session,
                 retention_days=self.retention_days,
@@ -195,17 +201,27 @@ class QueueConsumer:
             )
             session.commit()
         except Exception:
-            session.rollback()
+            if session is not None:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
             # Advance the schedule even on failure so a broken purge cannot
             # retry on every QUEUE_POLL_SECONDS tick (~0.5s).
             emit("retention.failed", {"error.class": "database_error"}, level=logging.ERROR)
         finally:
             self._last_retention_at = now
-            session.close()
+            _close_session(session)
 
     def _loop(self) -> None:
-        self.recover()
-        self.maybe_purge_retention(force=True)
+        try:
+            self.recover()
+        except Exception:
+            emit("job.lease_recovery_failed", {"error.class": "database_error"}, level=logging.ERROR)
+        try:
+            self.maybe_purge_retention(force=True)
+        except Exception:
+            emit("retention.failed", {"error.class": "database_error"}, level=logging.ERROR)
         while not self._stop.is_set():
             worked = False
             try:
@@ -224,6 +240,15 @@ class QueueConsumer:
                 emit("job.queue_iteration_failed", {"error.class": "database_error"}, level=logging.ERROR)
             if not worked:
                 self._stop.wait(self.poll_seconds)
+
+
+def _close_session(session: Any) -> None:
+    if session is None:
+        return
+    try:
+        session.close()
+    except Exception:
+        emit("job.session_close_failed", {"error.class": "database_error"}, level=logging.ERROR)
 
 
 def consumer_enabled(app_state: Any, configured: bool) -> bool:

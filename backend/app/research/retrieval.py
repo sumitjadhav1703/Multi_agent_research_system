@@ -2,8 +2,10 @@
 
 The default adapters mirror V1: Tavily for search and `tools.validate_public_url`
 plus `tools.scrape_url` for bounded public HTML. PDF bytes are never parsed.
-`scrape_url` pins the validated IPs for urllib3's `socket.getaddrinfo` during
-that one request. That is not an egress proxy and does not close SSRF.
+`scrape_url` resolves each hop once and dials that global IP, with the original
+hostname as Host and TLS SNI. The validate call in this module is an earlier
+gate only; it does not supply the address that is dialed. This is in-process
+only. It is not a separate egress proxy and does not close SSRF.
 """
 from __future__ import annotations
 

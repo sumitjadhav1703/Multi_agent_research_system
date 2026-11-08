@@ -20,7 +20,20 @@
 - Render Oregon `researchmind-api` (`srv-dbnlo1c9v7es73d4at5g`, https://researchmind-api-o2tw.onrender.com) — **deleted by user** (API now 404; absent from Render service list).
 - `render.yaml` region default is now `singapore`.
 
-Cold-start time, RSS, and hosted research-run latency were **not** measured in this session.
+### Follow-up measurements (2026-11-09)
+
+| Check | Result |
+|---|---|
+| Post-deploy wake `/health/live` | HTTP 200, TTFB **0.340s**, total 0.341s (service already warm after retention-env deploy) |
+| `/health/ready` | HTTP 200, TTFB **0.204s**, `database: ok`, `use_mock_provider: false`, `allow_paid_models: false` |
+| Warm second hit | live TTFB 0.275s; ready TTFB 0.181s |
+| During-deploy probe | connection reset (~120s) while `dep-dbocmqrm8hqs7386s740` was building — expected Free-tier blip |
+| Neon | project `lively-star-88380432`, branch `br-wandering-violet-a1ze5n7w`, endpoint host `ep-round-art-a1nye9fi` (direct) and `-pooler` host exists; `pooler_enabled: false` on compute. Connection string value not recorded. |
+| Retention env on Render | `DATA_RETENTION_ENABLED=true`, `DAYS=2`, `INTERVAL_SECONDS=3600`, `BATCH_SIZE=100` merged; deploy became **live** |
+| Live capability matrix | script `backend/scripts/live_capability_matrix.py`; keys present for groq/gemini/mistral/openrouter; **15/15 fail** `all_providers_unavailable`; raw Gemini `ServiceUnavailableError` **503** |
+| Console | `https://researchmind-console.vercel.app/` and `/app/` HTTP 200 (screenshots via browser) |
+| MCP unauth | POST `/mcp` without bearer → HTTP **401** |
+| Container RSS / image size | still **not** measured (no local Docker Desktop) |
 
 This report separates checks that ran from checks that did not.
 
@@ -127,7 +140,7 @@ No new secret was written to git. `.env` was not read.
 
 - One Render instance and one Uvicorn worker. This is a single-process demo. Free web services sleep and the disk is ephemeral. Jobs belong in Neon, not in the container filesystem.
 - Render Free was not upgraded. No memory or latency trigger was measured, so there is no basis to move to a paid plan.
-- HTML fetch still uses V1 `tools.py`. SSRF protection is unchanged: DNS and scheme checks, with residual rebinding risk. No egress proxy was added.
-- `gemini/gemini-flash-latest` is still not a fresh live capability pass. A deployment that sets `gemini/gemini-2.0-flash` as a role model can still receive HTTP 404.
-- The Worker does not run the research graph. Edge rate limits are per isolate. Quota remains in FastAPI and Postgres.
-- Judge scores are not measured. Do not present the evaluation summary as a quality score.
+- HTML fetch uses in-process egress-style IP dial (`backend/app/security/egress_fetch.py`) via `tools.scrape_url`. **No separate egress proxy** — R04 remains partially mitigated, not closed.
+- Live Gemini on 2026-11-09 returned HTTP **503** (`ServiceUnavailableError`). Capability matrix is recorded as failed that day; re-run when the provider recovers. Do not treat a prior Flash-latest eval probe as a full role matrix pass.
+- The Worker does not run the research graph. Edge rate limits are per isolate. Quota remains in FastAPI and Postgres. MCP OAuth is deferred (bearer guest only).
+- Aggregate judge scores are still unmeasured (no V1/V2 mean). A bounded N=2 fixture probe recorded one Answer Relevancy; see `docs/evals/RESULTS.md` and `docs/BUG_BASH_LOG.md`.

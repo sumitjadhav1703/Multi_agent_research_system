@@ -34,6 +34,7 @@ from backend.app.jobs.executor import ExecutionResult, GraphJobExecutor, _budget
 from backend.app.jobs.lease import recover_expired_leases
 from backend.app.jobs.persist import finalize_job
 from backend.app.jobs.quota import (
+    cancel_run,
     hash_guest_token,
     identity_from_token,
     issue_guest_identity,
@@ -190,6 +191,104 @@ class QuotaJobTests(unittest.TestCase):
             self.assertEqual(entitlement.status, "consumed")
         with self.assertRaises(JobServiceError) as caught:
             self._start(token, "Widget latency", "cancel-again")
+        self.assertEqual(caught.exception.code, "quota_consumed")
+
+    def test_same_key_different_topic_conflicts_and_keys_are_per_owner(self) -> None:
+        token = self._issue("ok")
+        job, reused = self._start(token, "Widget latency", "same-key")
+        self.assertFalse(reused)
+        with self.assertRaises(JobServiceError) as caught:
+            self._start(token, "A different topic", "same-key")
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(caught.exception.code, "idempotency_conflict")
+        self.assertEqual(self._job_count(), 1)
+        with self.factory() as session:
+            stored = session.get(ResearchJob, job.id)
+            self.assertEqual(stored.topic, "Widget latency")
+
+        first = self._issue("ok")
+        second = self._issue("ok")
+        left, left_reused = self._start(first, "Topic A", "shared-key", max_active=5, daily_cap=10)
+        right, right_reused = self._start(second, "Topic B", "shared-key", max_active=5, daily_cap=10)
+        self.assertFalse(left_reused)
+        self.assertFalse(right_reused)
+        self.assertNotEqual(left.id, right.id)
+        self.assertEqual(left.topic, "Topic A")
+        self.assertEqual(right.topic, "Topic B")
+
+    def test_cancel_after_provider_work_keeps_the_entitlement(self) -> None:
+        token = self._issue("ok")
+        job, _reused = self._start(token, "Widget latency", "cancel-after-work")
+        with self.factory() as session:
+            stored = session.get(ResearchJob, job.id)
+            stored.status = "running"
+            stored.provider_work_started = 1
+            stored.lease_owner = "worker-test"
+            session.commit()
+            owner = identity_from_token(session, token)
+            flagged = cancel_run(session, job.id, owner.id)
+            self.assertEqual(flagged.cancel_requested, 1)
+            self.assertEqual(flagged.status, "running")
+            self.assertEqual(session.get(DemoEntitlement, owner.id).status, "consumed")
+
+        finalize_job(
+            self.factory,
+            job.id,
+            ExecutionResult(status="completed", provider_work_started=True, approval_status="approved"),
+            worker_id="worker-test",
+        )
+        with self.factory() as session:
+            stored = session.get(ResearchJob, job.id)
+            owner = identity_from_token(session, token)
+            entitlement = session.get(DemoEntitlement, owner.id)
+            self.assertEqual(stored.status, "cancelled")
+            self.assertEqual(stored.error_code, "cancelled")
+            self.assertEqual(stored.provider_work_started, 1)
+            self.assertEqual(entitlement.status, "consumed")
+            self.assertEqual(entitlement.job_id, job.id)
+            self.assertFalse(refund_entitlement(session, stored, now=utc_now(), reason="cancel_after_work"))
+            session.commit()
+            self.assertEqual(session.get(QuotaGuard, 1).daily_count, 1)
+            self.assertEqual(session.get(DemoEntitlement, owner.id).status, "consumed")
+        with self.assertRaises(JobServiceError) as caught:
+            self._start(token, "Another topic", "after-worked-cancel")
+        self.assertEqual(caught.exception.code, "quota_consumed")
+
+    def test_failure_after_provider_work_does_not_refund(self) -> None:
+        token = self._issue("ok")
+        job, _reused = self._start(token, "Widget latency", "fail-after-work")
+
+        class _FailAfter:
+            def execute(self, _factory: object, job_id: str) -> ExecutionResult:
+                self.job_id = job_id
+                return ExecutionResult(
+                    status="failed",
+                    provider_work_started=True,
+                    error_code="provider_error",
+                    error_detail="provider_error",
+                )
+
+        worker = _FailAfter()
+        processed = process_one(
+            session_factory=self.factory,
+            executor=worker,
+            worker_id="worker-test",
+            lease_seconds=30,
+            heartbeat_seconds=30,
+        )
+        self.assertEqual(processed, job.id)
+        with self.factory() as session:
+            stored = session.get(ResearchJob, job.id)
+            owner = identity_from_token(session, token)
+            self.assertEqual(stored.status, "failed")
+            self.assertEqual(stored.provider_work_started, 1)
+            self.assertEqual(session.get(DemoEntitlement, owner.id).status, "consumed")
+            self.assertEqual(session.get(QuotaGuard, 1).daily_count, 1)
+            self.assertFalse(refund_entitlement(session, stored, now=utc_now(), reason="failed_after_provider"))
+            session.commit()
+            self.assertEqual(session.get(QuotaGuard, 1).daily_count, 1)
+        with self.assertRaises(JobServiceError) as caught:
+            self._start(token, "Widget latency", "fail-after-again")
         self.assertEqual(caught.exception.code, "quota_consumed")
 
     def test_failure_before_provider_refunds_one_use(self) -> None:
@@ -983,6 +1082,116 @@ class RunsApiTests(unittest.TestCase):
             headers={"Authorization": f"Bearer {other_token}"},
         )
         self.assertEqual(stolen.status_code, 404)
+
+    def test_cross_owner_review_is_hidden_and_usage_stays_separate(self) -> None:
+        guest = self.client.post("/api/v1/guest-identities", json={"turnstile_token": "ok"})
+        token = guest.json()["guest_token"]
+        other = self.client.post("/api/v1/guest-identities", json={"turnstile_token": "ok"})
+        other_token = other.json()["guest_token"]
+        created = self.client.post(
+            "/api/v1/research-runs",
+            json={"topic": "Private transit notes"},
+            headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "owner-key"},
+        )
+        self.assertEqual(created.status_code, 202)
+        run_id = created.json()["run_id"]
+
+        for action in ("approve", "revise", "reject"):
+            stolen = self.client.post(
+                f"/api/v1/research-runs/{run_id}/{action}",
+                json={"comments": "take over"},
+                headers={"Authorization": f"Bearer {other_token}"},
+            )
+            self.assertEqual(stolen.status_code, 404, action)
+            self.assertEqual(stolen.json()["code"], "run_not_found")
+            self.assertNotIn("Private transit notes", stolen.text)
+            self.assertNotIn(token, stolen.text)
+            anonymous = self.client.post(
+                f"/api/v1/research-runs/{run_id}/{action}",
+                json={"comments": "take over"},
+            )
+            self.assertEqual(anonymous.status_code, 401, action)
+            self.assertEqual(anonymous.json()["code"], "unauthorized")
+
+        owner_view = self.client.get(
+            f"/api/v1/research-runs/{run_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(owner_view.status_code, 200)
+        self.assertEqual(owner_view.json()["status"], "queued")
+        self.assertEqual(owner_view.json()["topic"], "Private transit notes")
+
+        other_usage = self.client.get("/api/v1/me/usage", headers={"Authorization": f"Bearer {other_token}"})
+        self.assertEqual(other_usage.status_code, 200)
+        self.assertNotIn(run_id, other_usage.json()["run_ids"])
+        self.assertFalse(other_usage.json()["one_use_consumed"])
+        self.assertNotIn("Private transit notes", other_usage.text)
+
+    def test_idempotency_conflict_and_cancel_after_work_consume_quota(self) -> None:
+        guest = self.client.post("/api/v1/guest-identities", json={"turnstile_token": "ok"})
+        token = guest.json()["guest_token"]
+        headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "http-key"}
+        created = self.client.post("/api/v1/research-runs", json={"topic": "Widget latency"}, headers=headers)
+        self.assertEqual(created.status_code, 202)
+        run_id = created.json()["run_id"]
+
+        conflict = self.client.post(
+            "/api/v1/research-runs",
+            json={"topic": "A different topic"},
+            headers=headers,
+        )
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json()["code"], "idempotency_conflict")
+        self.assertNotIn(run_id, conflict.text)
+
+        replay = self.client.post("/api/v1/research-runs", json={"topic": "Widget latency"}, headers=headers)
+        self.assertEqual(replay.status_code, 202)
+        self.assertTrue(replay.json()["reused"])
+        self.assertEqual(replay.json()["run_id"], run_id)
+
+        with self.factory() as session:
+            stored = session.get(ResearchJob, run_id)
+            stored.status = "running"
+            stored.provider_work_started = 1
+            stored.lease_owner = "worker-http"
+            session.commit()
+
+        cancelled = self.client.post(
+            f"/api/v1/research-runs/{run_id}/cancel",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(cancelled.status_code, 200)
+        self.assertTrue(cancelled.json()["cancel_requested"])
+        self.assertTrue(cancelled.json()["provider_work_started"])
+        self.assertEqual(cancelled.json()["status"], "running")
+
+        finalize_job(
+            self.factory,
+            run_id,
+            ExecutionResult(status="completed", provider_work_started=True, approval_status="approved"),
+            worker_id="worker-http",
+        )
+        finished = self.client.get(
+            f"/api/v1/research-runs/{run_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(finished.status_code, 200)
+        self.assertEqual(finished.json()["status"], "cancelled")
+        self.assertEqual(finished.json()["error_code"], "cancelled")
+        self.assertTrue(finished.json()["provider_work_started"])
+
+        again = self.client.post(
+            "/api/v1/research-runs",
+            json={"topic": "Widget latency"},
+            headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "http-key-2"},
+        )
+        self.assertEqual(again.status_code, 409)
+        self.assertEqual(again.json()["code"], "quota_consumed")
+        usage = self.client.get("/api/v1/me/usage", headers={"Authorization": f"Bearer {token}"})
+        self.assertTrue(usage.json()["one_use_consumed"])
+        self.assertFalse(usage.json()["one_use_refunded"])
+        self.assertEqual(usage.json()["global_daily_starts"], 1)
+        self.assertEqual(usage.json()["run_ids"], [run_id])
 
     def test_missing_idempotency_key_and_bad_turnstile(self) -> None:
         guest = self.client.post("/api/v1/guest-identities", json={"turnstile_token": "ok"})
