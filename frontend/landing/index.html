@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <title>Intelligence Designed To Evolve</title>
+    <title>ResearchMind</title>
     <link rel="icon" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,11 +26,12 @@
           type="video/mp4"
         />
       </video>
+      <div class="bg-scrim"></div>
     </div>
 
     <div class="page">
       <header class="header anim-header">
-        <a class="logo-btn" href="/" aria-label="Home">
+        <a class="logo-btn" href="/" aria-label="ResearchMind home">
           <img src="./assets/logo.webp" alt="" width="52" height="52" />
         </a>
 
@@ -67,39 +68,38 @@
       </header>
 
       <main class="hero">
+        <p class="brand-kicker anim" style="--d: 0.05s">Portfolio demo</p>
         <h1 class="headline">
-          <span class="headline-line" style="--d: 0.12s">Intelligence</span>
-          <span class="headline-line" style="--d: 0.3s">Designed To Evolve</span>
+          <span class="headline-line brand-name" style="--d: 0.12s">ResearchMind</span>
         </h1>
 
         <p class="subhead anim" style="--d: 0.28s">
-          Build applications that reason, adapt and collaborate using a modular
-          AI platform designed for production.
+          Multi-agent research with evidence gates, free-only providers, and a durable Postgres job trail.
         </p>
 
-        <a class="cta anim" style="--d: 0.4s" href="/app">Get Started</a>
+        <a class="cta anim" style="--d: 0.4s" href="/app">Open console</a>
       </main>
 
-      <footer class="stats" aria-label="Platform metrics">
-        <div class="stat anim" style="--d: 0.5s" data-target="120" data-suffix="ms" data-decimals="0">
-          <span class="stat-icon" aria-hidden="true">&lt;</span>
-          <span class="stat-value"><span class="stat-num">0</span><span class="stat-suffix">ms</span></span>
-          <span class="stat-label">Inference Time</span>
+      <footer class="stats" aria-label="What this demo proves">
+        <div class="stat anim" style="--d: 0.5s">
+          <span class="stat-icon" aria-hidden="true">0</span>
+          <span class="stat-value">Paid fallback</span>
+          <span class="stat-label">Free-only LLM allowlist</span>
         </div>
-        <div class="stat anim" style="--d: 0.58s" data-target="99.99" data-suffix="%" data-decimals="2">
-          <span class="stat-icon" aria-hidden="true">%</span>
-          <span class="stat-value"><span class="stat-num">0</span><span class="stat-suffix">%</span></span>
-          <span class="stat-label">Platform Uptime</span>
+        <div class="stat anim" style="--d: 0.58s">
+          <span class="stat-icon" aria-hidden="true">1</span>
+          <span class="stat-value">Guest run</span>
+          <span class="stat-label">One-use demo identity</span>
         </div>
-        <div class="stat anim" style="--d: 0.66s" data-target="24" data-suffix="/7" data-decimals="0">
-          <span class="stat-icon" aria-hidden="true">*</span>
-          <span class="stat-value"><span class="stat-num">0</span><span class="stat-suffix">/7</span></span>
-          <span class="stat-label">Autonomous Runtime</span>
+        <div class="stat anim" style="--d: 0.66s">
+          <span class="stat-icon" aria-hidden="true">PG</span>
+          <span class="stat-value">Durable jobs</span>
+          <span class="stat-label">Postgres source of truth</span>
         </div>
-        <div class="stat anim" style="--d: 0.74s" data-target="2.4" data-suffix="M" data-decimals="1">
-          <span class="stat-icon" aria-hidden="true">#</span>
-          <span class="stat-value"><span class="stat-num">0</span><span class="stat-suffix">M</span></span>
-          <span class="stat-label">Context Windows</span>
+        <div class="stat anim" style="--d: 0.74s">
+          <span class="stat-icon" aria-hidden="true">SSE</span>
+          <span class="stat-value">Live progress</span>
+          <span class="stat-label">Replayable run events</span>
         </div>
       </footer>
     </div>

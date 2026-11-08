@@ -55,7 +55,7 @@ export function EvidencePage() {
   const hint = nextActionHint(run, Boolean(answerBody), "evidence");
 
   return (
-    <section className="stack">
+    <section className="stack evidence-page">
       <div className="run-top">
         <PageHeader
           title={run.topic}
@@ -70,9 +70,6 @@ export function EvidencePage() {
         surface="evidence"
         compact
       />
-      <p className="evidence-lede">
-        Evidence explains what the answer is allowed to claim. Titles first; technical IDs stay in the meta line.
-      </p>
       {sources.length === 0 ? (
         <section className="panel">
           <SectionHeading kind="sources">Sources</SectionHeading>
@@ -175,7 +172,7 @@ export function EvidencePage() {
                   <button
                     key={claim.claim_id}
                     type="button"
-                    className="secondary"
+                    className={`claim-pill status-${claim.status}`}
                     aria-pressed={claim.claim_id === (claimId ?? requestedClaim)}
                     onClick={() => {
                       setClaimId(claim.claim_id);
@@ -183,17 +180,18 @@ export function EvidencePage() {
                       if (passage) setSelectedId(passage.source_id);
                     }}
                   >
-                    <strong>{claim.text}</strong>
-                    <span className="meta">
-                      {" "}
-                      {claim.status} · {claim.claim_id}
+                    <span className="claim-pill-text">{claim.text}</span>
+                    <span className="meta claim-pill-meta">
+                      {claim.status}
+                      <span aria-hidden="true"> · </span>
+                      {claim.claim_id}
                     </span>
                   </button>
                 ))}
               </div>
             )}
             {activeClaim ? (
-              <p style={{ marginTop: "0.75rem" }}>{activeClaim.verification_reason ?? "No verification note stored."}</p>
+              <p className="claim-note">{activeClaim.verification_reason ?? "No verification note stored."}</p>
             ) : null}
           </section>
         </div>
