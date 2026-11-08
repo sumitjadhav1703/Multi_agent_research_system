@@ -5,9 +5,15 @@
 **Git:** feature branch for data retention (see latest commit)  
 **Current gate:** **Singapore public stack + MCP Worker are live.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP `https://researchmind-mcp.jadhavsumit534.workers.dev`. Oregon deleted. CORS OK. Turnstile + provider keys are configured on the hosts; live ready reports `use_mock_provider: false`.
 
-### Follow-up: 2-day data retention (this change)
+### Follow-up: 2-day data retention
 
-- **IMPLEMENTED:** `backend/app/jobs/retention.py` purges research jobs older than `DATA_RETENTION_DAYS` (default **2**). Orphan guest identities are removed only after `expires_at` (preserves unexpired Turnstile tokens). Runs on lifespan startup and periodically inside `QueueConsumer` (`DATA_RETENTION_INTERVAL_SECONDS`, default 3600). Failed purge passes still advance the schedule so retries are not every poll tick.  
+- **IMPLEMENTED:** `backend/app/jobs/retention.py` purges research jobs older than `DATA_RETENTION_DAYS` (default **2**). Orphan guest identities are removed only after `expires_at` (preserves unexpired Turnstile tokens). Retention runs inside `QueueConsumer` (not on the critical FastAPI lifespan path that blocks `/docs`). Failed purge passes still advance the schedule so retries are not every poll tick.
+
+### Follow-up: API cold-start / `/docs` hang (2026-11-08)
+
+- **Symptom:** `https://researchmind-api-sg.onrender.com/docs` (and all routes) timed out with **0 bytes** for 90–180s. TLS to the Render edge succeeded; no app logs were emitted until a manual redeploy.
+- **Dissection (not a classic git-bisect app crash):** Last successful cold start was `56b2f4d` / retention merge era; startup completed in logs. After Free spin-down (~15 min idle), wake requests hung at the edge with **no container logs**. Manual `trigger_deploy` brought the service back; `/docs` and `/openapi.json` returned **200**.
+- **Code hardenings:** Postgres `connect_timeout=10`, checkpointer setup `asyncio.wait_for(..., 30s)`, retention removed from lifespan (consumer-only), `HEAD /` and `HEAD /api/v1/health/live` accepted (Render probed `HEAD /` and got 405 before).
 - **Does not delete** `quota_guard`. Postgres LangGraph checkpoint cleanup is best-effort by `thread_id`.  
 - **Env:** `DATA_RETENTION_ENABLED`, `DATA_RETENTION_DAYS`, `DATA_RETENTION_INTERVAL_SECONDS`, `DATA_RETENTION_BATCH_SIZE` (also set in `render.yaml` / `.env.example`).  
 - **Tests:** `backend/tests/test_retention.py`. Full backend offline suite on this change: **108 tests, 2 skipped (local Postgres durability), OK** (`USE_MOCK_PROVIDER=true`, Python 3.12 venv).  

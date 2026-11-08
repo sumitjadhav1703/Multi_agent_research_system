@@ -54,7 +54,16 @@ async def open_async_postgres_checkpointer(database_url: str) -> Any:
         yield saver
 
 
-async def setup_postgres_checkpointer(database_url: str) -> None:
-    """Run LangGraph's checkpoint migrations. Safe to call more than once."""
-    async with open_async_postgres_checkpointer(database_url) as saver:
-        await saver.setup()
+async def setup_postgres_checkpointer(database_url: str, *, timeout_seconds: float = 30.0) -> None:
+    """Run LangGraph's checkpoint migrations. Safe to call more than once.
+
+    Bounded so a sleeping Neon compute cannot block Uvicorn from accepting
+    traffic (including /docs and /api/v1/health/live).
+    """
+    import asyncio
+
+    async def _setup() -> None:
+        async with open_async_postgres_checkpointer(database_url) as saver:
+            await saver.setup()
+
+    await asyncio.wait_for(_setup(), timeout=max(timeout_seconds, 1.0))

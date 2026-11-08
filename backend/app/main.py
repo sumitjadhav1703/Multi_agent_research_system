@@ -24,13 +24,14 @@ from backend.app.jobs.consumer import QueueConsumer, consumer_enabled
 from backend.app.jobs.errors import JobServiceError
 from backend.app.jobs.executor import LifespanGraphExecutor
 from backend.app.jobs.lease import recover_expired_leases
-from backend.app.jobs.retention import run_retention_pass
 from backend.app.jobs.turnstile import build_turnstile_verifier
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Fail closed on invalid free-only config before serving traffic.
+    # Keep this path short: Render Free + Neon scale-to-zero must still bind
+    # /docs and /health/live even when the database is waking up.
     configure_observability()
     clear_settings_cache()
     settings = get_settings()
@@ -49,17 +50,13 @@ async def lifespan(app: FastAPI):
             app.state.session_factory = make_session_factory(engine)
             owns_engine = True
             if (settings.database_url or "").startswith(("postgres://", "postgresql://")):
-                await setup_postgres_checkpointer(settings.database_url or "")
+                await setup_postgres_checkpointer(settings.database_url or "", timeout_seconds=30.0)
                 app.state.postgres_url = settings.database_url
             session = app.state.session_factory()
             try:
+                # Lease recovery only. Retention runs in the queue consumer after
+                # the server is already accepting HTTP (including Swagger /docs).
                 recover_expired_leases(session)
-                if settings.data_retention_enabled:
-                    run_retention_pass(
-                        session,
-                        retention_days=settings.data_retention_days,
-                        batch_size=settings.data_retention_batch_size,
-                    )
                 session.commit()
             finally:
                 session.close()
@@ -130,8 +127,9 @@ def create_app() -> FastAPI:
     async def _job_error(_request: Request, exc: JobServiceError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"code": exc.code, "message": exc.message})
 
-    @application.get("/")
+    @application.api_route("/", methods=["GET", "HEAD"])
     def root() -> dict[str, str]:
+        # Render probes HEAD / during port detection; 405 confused cold starts.
         return {"service": "researchmind", "version": __version__}
 
     return application
