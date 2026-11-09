@@ -241,10 +241,11 @@ describe("research console screens", () => {
     expect(
       await screen.findByRole("heading", { name: /Offline harness results|Offline evaluation snapshot/i }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/not measured|skipped/i).length).toBeGreaterThan(3);
     expect(screen.queryByRole("button", { name: /benchmark/i })).toBeNull();
     expect(screen.queryByText(/%/)).toBeNull();
     expect(screen.getByText(/20\/20 matched expectations|matched expectations/i)).toBeInTheDocument();
+    // Bundled publish may include Muse means; skipped/trace metrics stay non-numeric labels.
+    expect(screen.getAllByText(/skipped/i).length).toBeGreaterThan(0);
   });
 
   it("starts a run with headers rather than a query token", async () => {

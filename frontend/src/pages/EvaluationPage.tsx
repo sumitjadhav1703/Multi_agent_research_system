@@ -63,7 +63,10 @@ export function EvaluationPage() {
     staleTime: 60_000,
   });
   const summary = query.data ?? FALLBACK;
-  const chartPoints = summary.deterministic?.chart ?? [];
+  const chartPoints =
+    summary.judge?.measured && summary.judge.chart?.length
+      ? summary.judge.chart
+      : (summary.deterministic?.chart ?? []);
   const title = summary.judge?.measured
     ? "Offline evaluation snapshot"
     : "Offline harness results (LLM judge not measured)";

@@ -38,7 +38,7 @@ _FALLBACK_EVALUATION_SUMMARY: dict[str, object] = {
     "judge": {
         "measured": False,
         "deepeval_version": "4.3.3",
-        "model": "meta_llama/Llama-3.3-8B-Instruct",
+        "model": "meta/muse-spark-1.3-contributor",
         "temperature": 0,
         "scores": None,
         "note": "Published summary file was not found in this deployment.",

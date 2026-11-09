@@ -5,5 +5,7 @@ package to score a user run.
 """
 
 DATASET_VERSION = "golden-v0.1"
-EVALUATOR_MODEL = "meta_llama/Llama-3.3-8B-Instruct"
+# Meta Model API (https://dev.meta.ai) via LiteLLM `meta/` route.
+# Contributor tier is the cheap eval path; not on the public free allowlist.
+EVALUATOR_MODEL = "meta/muse-spark-1.3-contributor"
 DEEPEVAL_PIN = "4.3.3"

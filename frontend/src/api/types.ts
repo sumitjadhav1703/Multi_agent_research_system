@@ -132,8 +132,11 @@ export interface EvaluationSummary {
     scores?: Record<string, number> | null;
     cases_judged?: number;
     numeric_scores?: number;
+    status_counts?: Record<string, number>;
+    error_count?: number;
     note?: string;
     metrics?: { name: string; result: string }[];
+    chart?: { label: string; count: number }[];
   };
   deterministic?: {
     kind?: string;
