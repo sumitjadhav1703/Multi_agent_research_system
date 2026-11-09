@@ -33,6 +33,13 @@
 - **Tests:** `backend/tests/test_startup_hang_guards.py` (deferred init + docs-while-starting) plus `backend/tests/test_lifespan_resilience.py`.
 - **Not claimed:** zero cold starts forever on Render Free; measured wake latency after this change until redeploy + idle interval.
 
+### Follow-up: provisional answer + Meta offline judge (2026-11-09)
+
+- **Bug:** weak/empty evidence produced only “Insufficient evidence / No evidence-backed claim could be assessed,” dropping any writer narrative (`assemble_report` kept only supported findings).
+- **Fix:** writer may emit `kind: caveat`; `assemble_report` keeps sanitized provisional answers and always pairs them with a gap warning; unsupported findings can be salvaged as caveat text. Console banner mentions provisional text when present.
+- **Eval:** offline DeepEval `EVALUATOR_MODEL=meta_llama/Llama-3.3-8B-Instruct` via `LLAMA_API_KEY` (not on the public free allowlist). Dry-run judge OK in the cloud agent; measured Meta scores **not** recorded here because the key was absent from the agent process env.
+- **Tests:** backend 152 OK (2 skipped); evals 14 OK (1 skipped); frontend 23 OK. Mock graph smoke for the PostgreSQL-queue topic produced caveat+gap.
+
 ---
 
 ## Model attribution (honest)
