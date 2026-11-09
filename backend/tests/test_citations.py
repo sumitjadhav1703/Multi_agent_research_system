@@ -7,11 +7,13 @@ from backend.app.graph.limits import GraphLimits
 from backend.app.research.evidence import (
     assemble_report,
     claim_grounded,
+    claims_from_passages,
     enforce_claim_assessments,
     finalize_ledger,
     materialize_hits,
     merge_worker_outputs,
     passage_evidence_id,
+    synthesize_provisional_body,
     validate_citations,
 )
 from backend.app.schemas.research import Claim, FetchResult, Passage, ReportDraft, ReportSection, SearchHit, SourceRecord
@@ -550,6 +552,157 @@ class CitationTests(unittest.TestCase):
         self.assertFalse(any(section.kind == "caveat" for section in repaired.sections))
         self.assertTrue(any(section.kind == "finding" for section in repaired.sections))
         self.assertFalse(any("synthesized provisional" in note.lower() for note in repairs))
+
+    def test_empty_claims_with_passages_surface_excerpts_under_topic(self) -> None:
+        """Fusion-style run: 6 sources, 0 claims, writer titled the ledger — still show excerpts."""
+        topic = "What are the main barriers to practical fusion energy?"
+        passages = [
+            Passage(
+                evidence_id=f"ev_sq1_{index}",
+                source_id=f"src_sq1_{index}",
+                subquestion_id="sq1",
+                quote=(
+                    "Plasma confinement and material durability under neutron flux remain "
+                    f"primary engineering barriers for commercial fusion plants note {index}."
+                ),
+                url=f"https://example{index}.com/fusion",
+                relevance_reason="overlap",
+                term_overlap=4,
+            )
+            for index in range(1, 7)
+        ]
+        report = ReportDraft(
+            title="Verified Claim Ledger Report",
+            sections=[
+                ReportSection(
+                    section_id="sec_caveat",
+                    heading="Provisional answer (unverified)",
+                    body="No verified claims are available to provide a definitive answer.",
+                    evidence_ids=[],
+                    claim_ids=[],
+                    kind="caveat",
+                )
+            ],
+        )
+        body = synthesize_provisional_body(topic, [], passages)
+        self.assertIn(topic, body)
+        self.assertIn("Plasma confinement", body)
+        self.assertIn("ev_sq1_1", body)
+
+        auto = claims_from_passages(passages)
+        self.assertEqual(len(auto), 4)
+        self.assertTrue(all(claim.status == "insufficient" for claim in auto))
+        self.assertIn("Plasma confinement", auto[0].text)
+
+        repaired, repairs = assemble_report(report, [], passages, topic=topic)
+        self.assertEqual(repaired.title, topic)
+        self.assertNotEqual(repaired.title, "Verified Claim Ledger Report")
+        caveats = [section for section in repaired.sections if section.kind == "caveat"]
+        self.assertEqual(len(caveats), 1)
+        self.assertIn("Plasma confinement", caveats[0].body)
+        self.assertIn(topic, caveats[0].body)
+        gaps = [section for section in repaired.sections if section.kind == "gap"]
+        self.assertTrue(gaps)
+        self.assertTrue(any("Stored passages still exist" in section.body for section in gaps))
+        self.assertTrue(any("synthesized" in note.lower() for note in repairs))
+
+    def test_generic_writer_caveat_is_replaced_when_passages_exist(self) -> None:
+        topic = "What are the main barriers to practical fusion energy?"
+        passages = [
+            Passage(
+                evidence_id="ev_sq1_1",
+                source_id="src_sq1_1",
+                subquestion_id="sq1",
+                quote=(
+                    "Plasma confinement and material durability under neutron flux remain "
+                    "primary engineering barriers for commercial fusion plants."
+                ),
+                url="https://example1.com/fusion",
+                relevance_reason="overlap",
+                term_overlap=4,
+            )
+        ]
+        report = ReportDraft(
+            title="Verified Claim Ledger Report",
+            sections=[
+                ReportSection(
+                    section_id="sec_caveat",
+                    heading="Provisional answer (unverified)",
+                    body="Public sources did not settle this question in enough detail for a definitive answer.",
+                    evidence_ids=[],
+                    claim_ids=[],
+                    kind="caveat",
+                )
+            ],
+        )
+        repaired, repairs = assemble_report(report, [], passages, topic=topic)
+        caveats = [section for section in repaired.sections if section.kind == "caveat"]
+        self.assertEqual(len(caveats), 1)
+        self.assertIn("Plasma confinement", caveats[0].body)
+        self.assertIn(topic, caveats[0].body)
+        self.assertNotIn("did not settle this question", caveats[0].body)
+        self.assertTrue(any("replaced generic writer caveat" in note.lower() for note in repairs))
+
+    def test_auto_passage_claims_cannot_become_supported(self) -> None:
+        passage = Passage(
+            evidence_id="ev1",
+            source_id="src1",
+            subquestion_id="sq1",
+            quote=(
+                "Plasma confinement and material durability under neutron flux remain "
+                "primary engineering barriers for commercial fusion plants."
+            ),
+            url="https://example.com/lab",
+            relevance_reason="overlap",
+            term_overlap=4,
+        )
+        auto = claims_from_passages([passage])
+        self.assertTrue(auto)
+        forced = [
+            claim.model_copy(update={"status": "supported", "verification_reason": "Exact quote match."})
+            for claim in auto
+        ]
+        repaired, notes = enforce_claim_assessments(forced, [passage])
+        self.assertTrue(all(claim.status == "insufficient" for claim in repaired))
+        self.assertTrue(any("passage excerpt seed" in note.lower() for note in notes))
+        self.assertFalse(any(claim.status == "supported" for claim in repaired))
+
+    def test_ungrounded_gap_with_supported_claims_does_not_deny_verified_rows(self) -> None:
+        supported = Claim(
+            claim_id="cl_ok",
+            text="Widget latency fell in the lab report.",
+            evidence_ids=["ev1"],
+            status="supported",
+            verification_reason="Quoted.",
+        )
+        report = ReportDraft(
+            title="Widget latency",
+            sections=[
+                ReportSection(
+                    section_id="sec_good",
+                    heading="Finding",
+                    body=supported.text,
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_ok"],
+                    kind="finding",
+                ),
+                ReportSection(
+                    section_id="sec_gap",
+                    heading="Gaps",
+                    body="Totally unrelated inventiveness about resume behavior protocols.",
+                    evidence_ids=[],
+                    claim_ids=[],
+                    kind="gap",
+                ),
+            ],
+        )
+        repaired, repairs = assemble_report(report, [supported], [_passage()], topic="Widget latency")
+        gaps = [section for section in repaired.sections if section.kind == "gap"]
+        self.assertTrue(gaps)
+        self.assertTrue(any("Supported findings are listed above" in section.body for section in gaps))
+        self.assertFalse(any("No claim ledger rows were verified" in section.body for section in gaps))
+        self.assertTrue(any("ungrounded writer gap" in note.lower() for note in repairs))
+        self.assertTrue(any(section.kind == "finding" for section in repaired.sections))
 
 
 if __name__ == "__main__":

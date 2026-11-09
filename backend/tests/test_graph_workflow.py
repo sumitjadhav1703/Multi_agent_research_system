@@ -299,6 +299,89 @@ class GraphWorkflowTests(unittest.TestCase):
         self.assertIn("planner.completed", seen)
         self.assertNotIn(LAB_SENTENCE * 20, " ".join(seen))
 
+    def test_empty_claims_with_six_sources_still_surface_passage_notes(self) -> None:
+        """Fusion screenshot path: sources exist, extractor returns nothing, writer meta-refuses."""
+        topic = "What are the main barriers to practical fusion energy?"
+        hits = [
+            SearchHit(
+                title=f"Fusion source {index}",
+                url=f"https://example{index}.com/fusion",
+                snippet=(
+                    "Plasma confinement and material durability under neutron flux remain "
+                    f"primary engineering barriers for commercial fusion plants note {index}."
+                ),
+            )
+            for index in range(1, 7)
+        ]
+        pages = {hit.url: hit.snippet for hit in hits}
+
+        class _StagedFusionRetrieval(FixtureRetrieval):
+            """Serve distinct 2-hit batches (fetch cap is 2) so merge can keep six sources."""
+
+            def __init__(self) -> None:
+                super().__init__(hits, pages)
+                self._batches = [hits[0:2], hits[2:4], hits[4:6], hits[0:2]]
+
+            def search(self, query: str, *, max_results: int) -> list[SearchHit]:
+                with self._lock:
+                    self._current += 1
+                    self.max_overlap = max(self.max_overlap, self._current)
+                    self.searches.append(query)
+                    batch = self._batches.pop(0) if self._batches else hits[:max_results]
+                try:
+                    return list(batch[:max_results])
+                finally:
+                    with self._lock:
+                        self._current -= 1
+
+        def _ledger_writer(user: str) -> str:
+            del user
+            return dumps(
+                {
+                    "title": "Verified Claim Ledger Report",
+                    "sections": [
+                        {
+                            "heading": "Provisional answer (unverified)",
+                            "body": "No verified claims are available to provide a definitive answer.",
+                            "evidence_ids": [],
+                            "claim_ids": [],
+                            "kind": "caveat",
+                        },
+                        {
+                            "heading": "Gaps",
+                            "body": "No claim ledger rows were available to describe this coverage gap.",
+                            "evidence_ids": [],
+                            "claim_ids": [],
+                            "kind": "gap",
+                        },
+                    ],
+                }
+            )
+
+        roles = {
+            "planner": planner_payload(3),
+            "researcher": lambda _user: dumps({"claims": []}),
+            "verifier": verifier_status("insufficient"),
+            "writer": _ledger_writer,
+        }
+        # max_fetches_per_worker is hard-capped at 2; three workers × 2 unique hits = 6 sources.
+        limits = GraphLimits(max_fetches_per_worker=2, max_search_results=3, max_parallel_workers=2)
+        runner, _router = _runner(roles, _StagedFusionRetrieval(), limits)
+        paused = runner.start(topic, run_id="fusion-empty-claims")
+        self.assertTrue(paused.interrupted)
+        self.assertGreaterEqual(len(paused.state.get("sources") or []), 6)
+        self.assertGreaterEqual(len(paused.state.get("passages") or []), 6)
+        self.assertTrue(paused.state.get("claims"), "extractor empty path must seed passage claims")
+        report = paused.state["report_draft"]
+        self.assertEqual(report["title"], topic)
+        self.assertNotEqual(report["title"], "Verified Claim Ledger Report")
+        bodies = _bodies(paused.state)
+        self.assertIn("Plasma confinement", bodies)
+        self.assertNotIn("No unsupported claim texts were available", bodies)
+        caveats = [section for section in report["sections"] if section["kind"] == "caveat"]
+        self.assertTrue(caveats)
+        self.assertIn(topic, caveats[0]["body"])
+
 
 def _types(events: list[dict]) -> set[str]:
     return {event["type"] for event in events}

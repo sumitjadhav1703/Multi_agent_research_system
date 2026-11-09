@@ -56,6 +56,13 @@
 - **Fix:** unique `ev_{subquestion}_{source_hash}_{offset}` passage IDs; refuse meta-refusal provisionals and synthesize a claim-based caveat only for unsupported claims; ground retained writer `gap` text against the claim ledger; banner matches `## Provisional answer` only; View more/less is a display-font pill with chevron; notices stay in-flow so they do not cover Claims.
 - **Tests:** backend + frontend offline suites green on this branch.
 
+### Follow-up: fusion empty Answer with sources (2026-11-09)
+
+- **Bug (screenshot):** “What are the main barriers to practical fusion energy?” completed with **Sources 6**, title **Verified Claim Ledger Report**, body only “could not be formed… No unsupported claim texts were available” / “No claim ledger rows…”. Writer never saw passages; extractor returned zero claims; `assemble_report` synthesized from empty claims and used the ledger-style report title as the question.
+- **Fix:** `synthesize_provisional_body` / `provisional_caveat_section` fall back to stored passage excerpts under the real topic; `claims_from_passages` seeds insufficient claims when the extractor returns none; `write_node` passes passages + forces `title=topic`; `citation_node` / `assemble_report` / `finalize_ledger` take `topic=` so the Answer panel always shows research notes when passages exist.
+- **Runtime evidence:** empty-claims + 6 fusion passages assemble/finalize now title the topic and include “Plasma confinement…” excerpts; extract→write→citation mock pipeline seeds auto-claims and surfaces them in the provisional body.
+- **Tests:** `test_empty_claims_with_passages_surface_excerpts_under_topic`; full backend offline suite **168 OK** (2 skipped).
+
 ### Remaining (honest residual — not blocking this publish)
 
 | Item | Status |

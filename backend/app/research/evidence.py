@@ -376,7 +376,16 @@ def enforce_claim_assessments(claims: list[Claim], passages: list[Passage]) -> t
         status = claim.status
         reason = claim.verification_reason
         evidence_ids = [passage.evidence_id for passage in known]
-        if status == "supported":
+        if is_auto_passage_claim(claim):
+            # Quote-as-claim seeds always overlap their own passage; never promote them.
+            if status != "insufficient":
+                notes.append(f"Kept {claim.claim_id} insufficient (passage excerpt seed)")
+            status = "insufficient"
+            reason = (
+                "Deterministic passage excerpt seed. Not a supported finding and not "
+                "eligible for verification upgrade."
+            )
+        elif status == "supported":
             grounded = [passage for passage in known if claim_grounded(claim.text, passage.quote)]
             if not grounded:
                 status = "insufficient"
@@ -562,43 +571,115 @@ def unsupported_claims(claims: list[Claim]) -> list[Claim]:
     ]
 
 
-def synthesize_provisional_body(topic: str, claims: list[Claim], *, max_claims: int = 4) -> str:
-    """Deterministic unverified write-up from unsupported claim texts only."""
+def synthesize_provisional_body(
+    topic: str,
+    claims: list[Claim],
+    passages: list[Passage] | None = None,
+    *,
+    max_claims: int = 4,
+    max_passages: int = 4,
+) -> str:
+    """Deterministic unverified write-up from unsupported claims, else stored passages."""
     topic_text = (topic or "this question").strip() or "this question"
-    lead = (
-        f"A definitive, evidence-backed answer to “{topic_text}” could not be formed from "
-        "the stored passages. The notes below are unverified working claims from this run, "
-        "not supported findings."
-    )
     useful = unsupported_claims(claims)
-    if not useful:
-        return (
+    if useful:
+        lead = (
             f"A definitive, evidence-backed answer to “{topic_text}” could not be formed from "
-            "the stored passages. No unsupported claim texts were available; treat this as a "
-            "coverage gap only."
-        )[:2000]
-    lines = [lead, ""]
-    for claim in useful[:max_claims]:
-        label = claim.status or "unverified"
-        lines.append(f"- ({label}) {claim.text.strip()}")
-    return "\n".join(lines)[:2000]
+            "the stored passages. The notes below are unverified working claims from this run, "
+            "not supported findings."
+        )
+        lines = [lead, ""]
+        for claim in useful[:max_claims]:
+            label = claim.status or "unverified"
+            lines.append(f"- ({label}) {claim.text.strip()}")
+        return "\n".join(lines)[:2000]
+
+    usable_passages = [passage for passage in (passages or []) if passage.quote.strip()]
+    if usable_passages:
+        lead = (
+            f"A definitive, evidence-backed answer to “{topic_text}” could not be formed "
+            "(no verified claims). The excerpts below are unverified notes taken from stored "
+            "passages only — not supported findings."
+        )
+        lines = [lead, ""]
+        for passage in usable_passages[:max_passages]:
+            quote = " ".join(passage.quote.split())[:420]
+            lines.append(f"- [{passage.evidence_id}] {quote}")
+        return "\n".join(lines)[:2000]
+
+    return (
+        f"A definitive, evidence-backed answer to “{topic_text}” could not be formed from "
+        "the stored passages. No unsupported claim texts or passage excerpts were available; "
+        "treat this as a coverage gap only."
+    )[:2000]
 
 
-def provisional_caveat_section(topic: str, claims: list[Claim], *, section_id: str = "sec_provisional") -> ReportSection | None:
-    """Build a provisional caveat only when unsupported claims exist (or the ledger is empty)."""
+def provisional_caveat_section(
+    topic: str,
+    claims: list[Claim],
+    passages: list[Passage] | None = None,
+    *,
+    section_id: str = "sec_provisional",
+) -> ReportSection | None:
+    """Build a provisional caveat when unsupported claims or passages can ground it."""
     if claims and not unsupported_claims(claims):
         return None
+    if not claims and not any(passage.quote.strip() for passage in (passages or [])):
+        # Still emit a topic-correct coverage note so the Answer panel is never blank.
+        body = synthesize_provisional_body(topic, claims, passages)
+        return ReportSection(
+            section_id=section_id,
+            heading="Provisional answer (unverified)",
+            body=body,
+            evidence_ids=[],
+            claim_ids=[],
+            kind="caveat",
+        )
     return ReportSection(
         section_id=section_id,
         heading="Provisional answer (unverified)",
-        body=synthesize_provisional_body(topic, claims),
+        body=synthesize_provisional_body(topic, claims, passages),
         evidence_ids=[],
         claim_ids=[],
         kind="caveat",
     )
 
 
-def _ledger_gap_body(claims: list[Claim]) -> str:
+def is_auto_passage_claim(claim: Claim) -> bool:
+    """True for deterministic passage seeds — never eligible to become supported findings."""
+    return claim.claim_id.startswith("cl_auto_")
+
+
+def claims_from_passages(passages: list[Passage], *, max_claims: int = 4) -> list[Claim]:
+    """Deterministic insufficient claims from passage quotes when the extractor returns none.
+
+    These seeds exist so the writer/provisional path has excerpt text. They must stay
+    insufficient: the quote is copied as the claim text, so a naive verifier would
+    otherwise mark them supported and skip follow-up search.
+    """
+    proposals: list[Claim] = []
+    for passage in passages:
+        quote = " ".join(passage.quote.split())
+        if len(quote) < 40:
+            continue
+        proposals.append(
+            Claim(
+                claim_id=f"cl_auto_{len(proposals) + 1}",
+                text=quote[:500],
+                evidence_ids=[passage.evidence_id],
+                status="insufficient",
+                verification_reason=(
+                    "Deterministic passage excerpt seed. Not a supported finding and not "
+                    "eligible for verification upgrade."
+                ),
+            )
+        )
+        if len(proposals) >= max_claims:
+            break
+    return proposals
+
+
+def _ledger_gap_body(claims: list[Claim], passages: list[Passage] | None = None) -> str:
     gaps = [claim for claim in claims if claim.status == "insufficient" and claim.text.strip()]
     conflicts = [claim for claim in claims if claim.status == "contradictory" and claim.text.strip()]
     if gaps:
@@ -607,7 +688,41 @@ def _ledger_gap_body(claims: list[Claim]) -> str:
         return " ".join(
             f"{claim.claim_id}: {claim.text} {claim.verification_reason}".strip() for claim in conflicts
         )[:2000]
+    supported = [claim for claim in claims if claim.status == "supported" and claim.text.strip()]
+    if supported:
+        return (
+            "Supported findings are listed above. This coverage note replaces ungrounded "
+            "writer gap text and does not mean the ledger lacked verified rows."
+        )
+    usable = [passage for passage in (passages or []) if passage.quote.strip()]
+    if usable:
+        return (
+            "No claim ledger rows were verified. Stored passages still exist for this run; "
+            "see the provisional excerpts above."
+        )
     return "No claim ledger rows were available to describe this coverage gap."
+
+
+def _caveat_already_grounded(
+    body: str,
+    claims: list[Claim],
+    passages: list[Passage],
+) -> bool:
+    """True when a writer caveat already carries claim text or passage excerpt ids."""
+    text = body.strip()
+    if not text:
+        return False
+    for passage in passages:
+        if passage.quote.strip() and passage.evidence_id in text:
+            return True
+        quote = " ".join(passage.quote.split())[:48]
+        if len(quote) >= 24 and quote in text:
+            return True
+    for claim in unsupported_claims(claims):
+        snippet = claim.text.strip()[:48]
+        if len(snippet) >= 24 and snippet in text:
+            return True
+    return False
 
 
 def _gap_body_grounded(body: str, claims: list[Claim]) -> bool:
@@ -648,7 +763,7 @@ def _sanitize_writer_caveat(section: ReportSection) -> tuple[ReportSection | Non
 
 
 def _sanitize_writer_gap(
-    section: ReportSection, claims: list[Claim]
+    section: ReportSection, claims: list[Claim], passages: list[Passage] | None = None
 ) -> tuple[ReportSection | None, str | None]:
     body = _usable_provisional_body(section.body)
     if body is None:
@@ -666,7 +781,7 @@ def _sanitize_writer_gap(
     # Do not retain assertive writer gap text that is not on the ledger.
     replaced = section.model_copy(
         update={
-            "body": _ledger_gap_body(claims),
+            "body": _ledger_gap_body(claims, passages),
             "evidence_ids": [],
             "claim_ids": [claim.claim_id for claim in unsupported_claims(claims)],
             "kind": "gap",
@@ -675,7 +790,13 @@ def _sanitize_writer_gap(
     return replaced, f"Replaced ungrounded writer gap with ledger coverage text: {section.section_id}"
 
 
-def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Passage]) -> tuple[ReportDraft, list[str]]:
+def assemble_report(
+    report: ReportDraft,
+    claims: list[Claim],
+    passages: list[Passage],
+    *,
+    topic: str | None = None,
+) -> tuple[ReportDraft, list[str]]:
     known = {passage.evidence_id for passage in passages}
     supported = {claim.claim_id: claim for claim in claims if claim.status == "supported"}
     repairs: list[str] = []
@@ -692,7 +813,7 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 kept_caveats.append(sanitized)
             continue
         if section.kind == "gap":
-            sanitized, note = _sanitize_writer_gap(section, claims)
+            sanitized, note = _sanitize_writer_gap(section, claims, passages)
             if note:
                 repairs.append(note)
             if sanitized is not None:
@@ -749,11 +870,23 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
             repairs.append(f"Added deterministic finding for {claim.claim_id}")
     has_supported_finding = bool(kept)
     sections: list[ReportSection] = []
+    answer_topic = (topic or report.title or "this question").strip()
     if has_supported_finding:
         sections.extend(kept)
         sections.extend(kept_caveats)
     elif kept_caveats:
-        sections.extend(kept_caveats)
+        # Prefer passage/claim-backed synthesis over a generic writer caveat that
+        # survived sanitize but still carries no excerpts (fusion empty-answer path).
+        synthesized = provisional_caveat_section(answer_topic, claims, passages)
+        if (
+            synthesized is not None
+            and any(passage.quote.strip() for passage in passages)
+            and not any(_caveat_already_grounded(caveat.body, claims, passages) for caveat in kept_caveats)
+        ):
+            sections.append(synthesized)
+            repairs.append("Replaced generic writer caveat with passage-backed provisional")
+        else:
+            sections.extend(kept_caveats)
     elif salvaged_bodies:
         sections.append(
             ReportSection(
@@ -767,10 +900,10 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
         )
         repairs.append("Salvaged dropped finding as provisional caveat")
     elif not has_supported_finding:
-        synthesized = provisional_caveat_section(report.title, claims)
+        synthesized = provisional_caveat_section(answer_topic, claims, passages)
         if synthesized is not None:
             sections.append(synthesized)
-            repairs.append("Synthesized provisional answer from claim texts")
+            repairs.append("Synthesized provisional answer from claims or passages")
     conflicts = [claim for claim in claims if claim.status == "contradictory"]
     gaps = [claim for claim in claims if claim.status == "insufficient"]
     if conflicts:
@@ -802,7 +935,9 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
             ReportSection(
                 section_id="sec_gaps",
                 heading="Insufficient evidence",
-                body="No evidence-backed claim could be assessed. Any provisional text is unverified.",
+                body=_ledger_gap_body(claims, passages)
+                if passages
+                else "No evidence-backed claim could be assessed. Any provisional text is unverified.",
                 kind="gap",
             )
         )
@@ -815,8 +950,9 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 kind="gap",
             )
         )
+    answer_title = (topic or report.title or "Research").strip()[:180] or "Research"
     return (
-        report.model_copy(update={"sections": sections, "wording": EVIDENCE_WORDING}),
+        report.model_copy(update={"title": answer_title, "sections": sections, "wording": EVIDENCE_WORDING}),
         repairs,
     )
 
@@ -876,10 +1012,12 @@ def finalize_ledger(
     passages: list[Passage],
     sources: list[SourceRecord],
     report: ReportDraft,
+    *,
+    topic: str | None = None,
 ) -> tuple[list[Claim], ReportDraft, dict]:
     claims, assessment_notes = enforce_claim_assessments(claims, passages)
     claims, link_issues = link_claims_to_sources(claims, passages, sources)
-    report, repairs = assemble_report(report, claims, passages)
+    report, repairs = assemble_report(report, claims, passages, topic=topic or report.title)
     issues = link_issues + validate_citations(report, claims, passages, sources)
     return claims, report, {
         "ok": not issues,
