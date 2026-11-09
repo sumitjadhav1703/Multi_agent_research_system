@@ -33,11 +33,17 @@ export function EvalSnapshotPanel({ compact = false }: { compact?: boolean }) {
         </li>
         <li>
           <strong>{SUMMARY.judge?.numeric_scores ?? "—"}</strong>
-          <span>Judge scores · 0 errors</span>
+          <span>
+            Judge numeric scores · errors=
+            {SUMMARY.judge?.error_count ?? "—"}
+            {SUMMARY.judge?.status_counts?.skipped != null
+              ? ` · skipped=${SUMMARY.judge.status_counts.skipped}`
+              : ""}
+          </span>
         </li>
       </ul>
       <p className="meta">
-        Model: {SUMMARY.judge?.model ?? "unknown"} ·{" "}
+        Model: {SUMMARY.judge?.model ?? "unknown"} · means exclude null/skipped ·{" "}
         <Link to="/evaluation">Open Evaluation</Link>
       </p>
     </section>

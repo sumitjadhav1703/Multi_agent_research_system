@@ -1,9 +1,18 @@
 # ResearchMind 2.0 — Implementation Status
 
-**Updated:** 2026-11-09  
+**Updated:** 2026-11-10  
 **Repository root:** `/Users/sumitjadhav/Multi_agent_research_system/repo`  
 **Git:** `main` (Singapore public stack)  
 **Current gate:** **First-release SoT gaps closed or residual-documented; whole-project offline matrix green; live Singapore smoke + bug bash recorded.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP Worker live. Retention env set on Render. Not “production-ready.”
+
+### Follow-up: post-merge delta bug check (2026-11-10)
+
+- **Scope:** Offline + discovery gates; LangGraph edge re-verify; audit provisional/passage/Meta/eval upstream only; fix clear new P0/P1 only.
+- **Offline:** `RUN_NODE_SUITES=1 bash scripts/run_offline_suites.sh` — V1 16; backend 179 OK (1 skipped); evals 14; frontend vitest 36; MCP 29. Discovery p1/p2 + graph workflow 25 OK; frontend discovery 3 OK.
+- **Graph:** Connected after provisional/passage changes; no new orphan/dead-end; no new graph P0/P1.
+- **New fix:** BI-P1-20 Evaluation chart honesty (judge means ≠ fixture runs) + EvalSnapshotPanel error/skipped labels. Regression `EvaluationPage.discovery.test.tsx`.
+- **Live smoke:** API live/ready 200; console `/` `/app` 200; MCP unauth 401. No Turnstile consume.
+- **Still open:** BI-P1-6, BI-P2-7/8/16/18/19, R04/R10/R12, MCP OAuth. Register: [`docs/BUG_INVENTORY.md`](BUG_INVENTORY.md).
 
 ### Follow-up: bug fix wave (2026-11-09, late)
 

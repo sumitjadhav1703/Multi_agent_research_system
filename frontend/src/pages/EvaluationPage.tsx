@@ -63,10 +63,10 @@ export function EvaluationPage() {
     staleTime: 60_000,
   });
   const summary = query.data ?? FALLBACK;
-  const chartPoints =
-    summary.judge?.measured && summary.judge.chart?.length
-      ? summary.judge.chart
-      : (summary.deterministic?.chart ?? []);
+  const chartIsJudgeMeans = Boolean(summary.judge?.measured && summary.judge.chart?.length);
+  const chartPoints = chartIsJudgeMeans
+    ? (summary.judge?.chart ?? [])
+    : (summary.deterministic?.chart ?? []);
   const title = summary.judge?.measured
     ? "Offline evaluation snapshot"
     : "Offline harness results (LLM judge not measured)";
@@ -83,7 +83,10 @@ export function EvaluationPage() {
           Live summary unavailable; showing the bundled publish.
         </p>
       ) : null}
-      <ScoreChart points={chartPoints} />
+      <ScoreChart
+        points={chartPoints}
+        valueKind={chartIsJudgeMeans ? "mean_score" : "fixture_runs"}
+      />
       <div className="table-wrap panel">
         <table>
           <caption className="meta">Evaluation metrics</caption>
@@ -151,16 +154,35 @@ export function EvaluationPage() {
   );
 }
 
-export function ScoreChart({ points }: { points: { label: string; count: number }[] }) {
+export type ScoreChartValueKind = "mean_score" | "fixture_runs";
+
+/** Judge chart points are 0–1 means; deterministic charts are integer fixture counts. */
+export function ScoreChart({
+  points,
+  valueKind = "fixture_runs",
+}: {
+  points: { label: string; count: number }[];
+  valueKind?: ScoreChartValueKind;
+}) {
   if (points.length === 0) return <p>No score series to chart.</p>;
+  const seriesName = valueKind === "mean_score" ? "mean score (0–1)" : "fixture runs";
+  const allowDecimals = valueKind === "mean_score";
   return (
-    <div className="panel h-56">
+    <div
+      className="panel h-56"
+      data-testid="score-chart"
+      data-value-kind={valueKind}
+      aria-label={seriesName}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={points}>
           <XAxis dataKey="label" />
-          <YAxis allowDecimals={false} />
+          <YAxis
+            allowDecimals={allowDecimals}
+            domain={valueKind === "mean_score" ? [0, 1] : undefined}
+          />
           <Tooltip />
-          <Bar dataKey="count" fill="#0f4f66" name="fixture runs" />
+          <Bar dataKey="count" fill="#0f4f66" name={seriesName} />
         </BarChart>
       </ResponsiveContainer>
     </div>
