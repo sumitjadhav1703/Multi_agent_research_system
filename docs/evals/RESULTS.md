@@ -7,6 +7,8 @@
 
 ## LLM-judge metrics
 
+The offline judge is now configured to Meta Llama 8B: `EVALUATOR_MODEL = meta_llama/Llama-3.3-8B-Instruct` with `LLAMA_API_KEY` in the process environment. That model is not on the public free allowlist and is not a frontend provider. A Meta 8B scoring run has not been recorded yet; the numeric cell below remains the earlier Gemini fixture probe and is not a Meta result.
+
 A controlled judge did run. It scored two hand-built fixture artifacts, not a research system. A null score below is a null. It is not a zero, and it is not included in any average.
 
 | Field | Value |

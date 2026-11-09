@@ -43,12 +43,16 @@ class PlanningTests(unittest.TestCase):
         self.assertTrue(all(row["kind"] == "llm_judge" for row in plan_judge_metrics(factual, {})))
 
     def test_disabled_and_missing_key_do_not_score(self) -> None:
-        saved = {key: os.environ.get(key) for key in ("RM_EVAL_JUDGE", "GEMINI_API_KEY", "GOOGLE_API_KEY")}
+        saved = {
+            key: os.environ.get(key)
+            for key in ("RM_EVAL_JUDGE", "LLAMA_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
+        }
         try:
             os.environ.pop("RM_EVAL_JUDGE", None)
             with self.assertRaises(JudgeDisabled):
                 execute_judge(CASES[:1], [{"case_id": "g001", "system": "fixture"}], measure=False)
             os.environ["RM_EVAL_JUDGE"] = "1"
+            os.environ.pop("LLAMA_API_KEY", None)
             os.environ.pop("GEMINI_API_KEY", None)
             os.environ.pop("GOOGLE_API_KEY", None)
             with self.assertRaises(JudgeConfigError):
@@ -144,7 +148,7 @@ class CommandGateTests(unittest.TestCase):
             self.assertNotIn("needle-do-not-load", completed.stderr)
             report = json.loads(text)
         self.assertFalse(report["measured"])
-        self.assertEqual(report["evaluator_model"], "gemini/gemini-flash-latest")
+        self.assertEqual(report["evaluator_model"], "meta_llama/Llama-3.3-8B-Instruct")
         self.assertEqual(report["deepeval_version"], "4.3.3")
         self.assertEqual(report["constructor_probe"]["faithfulness"], "FaithfulnessMetric")
         self.assertEqual(report["constructor_probe"]["plan_adherence"], "PlanAdherenceMetric")

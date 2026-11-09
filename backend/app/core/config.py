@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
     mistral_api_key: str | None = Field(default=None, alias="MISTRAL_API_KEY")
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
+    llama_api_key: str | None = Field(default=None, alias="LLAMA_API_KEY")
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
 
     free_model_allowlist: str = Field(

@@ -2,7 +2,9 @@
 
 Importing this module does not import DeepEval. Metric objects are built only
 after RM_EVAL_JUDGE=1, --confirm-offline, and prepare_eval_environment().
-Nothing here is called from the public FastAPI path.
+The judge uses Meta Llama via EVALUATOR_MODEL and LLAMA_API_KEY from the
+process environment. It does not load a .env file. Nothing here is called
+from the public FastAPI path.
 """
 from __future__ import annotations
 
@@ -122,8 +124,8 @@ def execute_judge(
     prepare_eval_environment()
     if measure and metric_builder is None and not _credential_present():
         raise JudgeConfigError(
-            "Export GEMINI_API_KEY or GOOGLE_API_KEY in the process environment. "
-            "This command does not read a .env file."
+            "Export LLAMA_API_KEY in the process environment for EVALUATOR_MODEL "
+            "(Meta Llama API, offline DeepEval only). This command does not read a .env file."
         )
     version = None
     builder = metric_builder
@@ -205,7 +207,7 @@ def execute_judge(
 
 
 def _credential_present() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    return bool(os.environ.get("LLAMA_API_KEY"))
 
 
 def _import_deepeval_version(allow_version_mismatch: bool) -> str:
@@ -230,7 +232,8 @@ def _import_deepeval_version(allow_version_mismatch: bool) -> str:
 def _build_model() -> Any:
     from deepeval.models import LiteLLMModel
 
-    # Do not pass api_key. LiteLLM reads the process environment at call time.
+    # Do not pass api_key and do not load .env. LiteLLM reads LLAMA_API_KEY
+    # from the process environment at call time for meta_llama/ models.
     return LiteLLMModel(model=EVALUATOR_MODEL, temperature=0)
 
 

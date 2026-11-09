@@ -37,6 +37,8 @@ def _api_key_for_model(settings: Settings, model_id: str) -> str | None:
         return settings.mistral_api_key
     if lowered.startswith("openrouter/"):
         return settings.openrouter_api_key
+    if lowered.startswith("meta_llama/"):
+        return settings.llama_api_key
     if lowered.startswith("mock/"):
         return "mock-key"
     return None

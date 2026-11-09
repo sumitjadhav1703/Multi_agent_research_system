@@ -518,12 +518,42 @@ def _body_matches_supported(body: str, supported_claims: list[Claim]) -> bool:
     return content_body <= content_claim
 
 
+def _usable_provisional_body(body: str) -> str | None:
+    text = body.strip()
+    if not text:
+        return None
+    if any(marker in text.lower() for marker in _INSTRUCTION_MARKERS):
+        return None
+    return text[:2000]
+
+
+def _sanitize_writer_caveat(section: ReportSection) -> tuple[ReportSection | None, str | None]:
+    body = _usable_provisional_body(section.body)
+    if body is None:
+        if section.body.strip() and any(marker in section.body.lower() for marker in _INSTRUCTION_MARKERS):
+            return None, f"Dropped untrusted instruction text from {section.section_id}"
+        return None, None
+    sanitized = section.model_copy(
+        update={"body": body, "evidence_ids": [], "claim_ids": [], "kind": "caveat"}
+    )
+    return sanitized, None
+
+
 def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Passage]) -> tuple[ReportDraft, list[str]]:
     known = {passage.evidence_id for passage in passages}
     supported = {claim.claim_id: claim for claim in claims if claim.status == "supported"}
     repairs: list[str] = []
     kept: list[ReportSection] = []
+    kept_caveats: list[ReportSection] = []
+    salvaged_bodies: list[str] = []
     for section in report.sections:
+        if section.kind == "caveat":
+            sanitized, note = _sanitize_writer_caveat(section)
+            if note:
+                repairs.append(note)
+            if sanitized is not None:
+                kept_caveats.append(sanitized)
+            continue
         if section.kind != "finding":
             continue
         invented = [evidence_id for evidence_id in section.evidence_ids if evidence_id not in known]
@@ -533,6 +563,9 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
             repairs.append(f"Removed invented citation(s): {', '.join(invented)}")
         if not linked:
             repairs.append(f"Dropped finding without supported claim: {section.section_id}")
+            salvaged = _usable_provisional_body(section.body)
+            if salvaged:
+                salvaged_bodies.append(salvaged)
             continue
         supported_claims = [supported[claim_id] for claim_id in linked]
         supported_text = " ".join(claim.text for claim in supported_claims).strip()
@@ -547,6 +580,9 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 body = supported_text
         if not evidence_ids or not body:
             repairs.append(f"Dropped finding without evidence: {section.section_id}")
+            salvaged = _usable_provisional_body(body or section.body)
+            if salvaged:
+                salvaged_bodies.append(salvaged)
             continue
         kept.append(
             section.model_copy(
@@ -567,7 +603,25 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 )
             )
             repairs.append(f"Added deterministic finding for {claim.claim_id}")
-    sections = list(kept)
+    has_supported_finding = bool(kept)
+    sections: list[ReportSection] = []
+    if has_supported_finding:
+        sections.extend(kept)
+        sections.extend(kept_caveats)
+    elif kept_caveats:
+        sections.extend(kept_caveats)
+    elif salvaged_bodies:
+        sections.append(
+            ReportSection(
+                section_id="sec_provisional",
+                heading="Provisional answer (unverified)",
+                body=salvaged_bodies[0],
+                evidence_ids=[],
+                claim_ids=[],
+                kind="caveat",
+            )
+        )
+        repairs.append("Salvaged dropped finding as provisional caveat")
     conflicts = [claim for claim in claims if claim.status == "contradictory"]
     gaps = [claim for claim in claims if claim.status == "insufficient"]
     if conflicts:
@@ -589,6 +643,15 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 body=" ".join(f"{claim.claim_id}: {claim.text}" for claim in gaps)[:2000],
                 evidence_ids=sorted({eid for claim in gaps for eid in claim.evidence_ids}),
                 claim_ids=[claim.claim_id for claim in gaps],
+                kind="gap",
+            )
+        )
+    if not has_supported_finding and not any(section.kind == "gap" for section in sections):
+        sections.append(
+            ReportSection(
+                section_id="sec_gaps",
+                heading="Insufficient evidence",
+                body="No evidence-backed claim could be assessed. Any provisional text is unverified.",
                 kind="gap",
             )
         )
