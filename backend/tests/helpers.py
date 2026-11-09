@@ -21,6 +21,11 @@ def mock_settings(**overrides: object) -> Settings:
         "EVAL_JUDGE_FALLBACK_MODEL": None,
         "USE_MOCK_PROVIDER": "true",
         "LITELLM_NUM_RETRIES": "0",
+        # Isolate from process env Meta/Llama keys so last-resort stays off unless opted in.
+        "META_API_KEY": "",
+        "MODEL_API_KEY": "",
+        "LLAMA_API_KEY": "",
+        "META_LAST_RESORT_ENABLED": "false",
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]

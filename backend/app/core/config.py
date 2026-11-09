@@ -70,7 +70,18 @@ class Settings(BaseSettings):
     mistral_api_key: str | None = Field(default=None, alias="MISTRAL_API_KEY")
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     llama_api_key: str | None = Field(default=None, alias="LLAMA_API_KEY")
+    # Meta Model API (https://dev.meta.ai). Preferred for LiteLLM meta/ Muse routes.
+    # MODEL_API_KEY / LLAMA_API_KEY remain accepted aliases via resolved_meta_api_key().
+    meta_api_key: str | None = Field(default=None, alias="META_API_KEY")
+    model_api_key: str | None = Field(default=None, alias="MODEL_API_KEY")
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
+    # Post-chain last resort after free primary+fallback exhaust. Not on FREE_MODEL_ALLOWLIST.
+    # None = auto-enable when a Meta key is present.
+    meta_last_resort_enabled: bool | None = Field(default=None, alias="META_LAST_RESORT_ENABLED")
+    meta_last_resort_model: str = Field(
+        default="meta/muse-spark-1.3-contributor",
+        alias="META_LAST_RESORT_MODEL",
+    )
 
     free_model_allowlist: str = Field(
         default=",".join(DEFAULT_FREE_ALLOWLIST),
@@ -157,11 +168,32 @@ class Settings(BaseSettings):
             return value.strip().lower() in {"1", "true", "yes", "on"}
         return value
 
-    @field_validator("database_url", "turnstile_secret_key", mode="before")
+    @field_validator("meta_last_resort_enabled", mode="before")
+    @classmethod
+    def _parse_optional_bool(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            return stripped.lower() in {"1", "true", "yes", "on"}
+        return value
+
+    @field_validator(
+        "database_url",
+        "turnstile_secret_key",
+        "meta_api_key",
+        "model_api_key",
+        "llama_api_key",
+        mode="before",
+    )
     @classmethod
     def _blank_to_none(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
+        if isinstance(value, str):
+            return value.strip()
         return value
 
     @field_validator("turnstile_verify_url", mode="before")
@@ -219,6 +251,25 @@ class Settings(BaseSettings):
             "eval_judge": (self.eval_judge_primary_model, self.eval_judge_fallback_model),
         }
 
+    def resolved_meta_api_key(self) -> str | None:
+        """Preferred META_API_KEY, then MODEL_API_KEY / LLAMA_API_KEY aliases."""
+        for candidate in (self.meta_api_key, self.model_api_key, self.llama_api_key):
+            if candidate and candidate.strip():
+                return candidate.strip()
+        return None
+
+    def meta_last_resort_active(self) -> bool:
+        """True when last-resort Muse may run after the free chain is exhausted."""
+        key = self.resolved_meta_api_key()
+        if not key:
+            return False
+        if self.meta_last_resort_enabled is False:
+            return False
+        if self.meta_last_resort_enabled is True:
+            return True
+        # None = auto-enable when a Meta key is present.
+        return True
+
     def configured_model_ids(self) -> list[str]:
         models: list[str] = []
         for primary, fallback in self.role_models().values():
@@ -240,6 +291,14 @@ class Settings(BaseSettings):
 
         for model_id in self.configured_model_ids():
             _assert_model_allowed(model_id, allow)
+        last_resort = (self.meta_last_resort_model or "").strip()
+        if not last_resort:
+            raise ValueError("META_LAST_RESORT_MODEL cannot be empty.")
+        if not last_resort.lower().startswith("meta/"):
+            raise ValueError(
+                "META_LAST_RESORT_MODEL must be a LiteLLM meta/ Muse route "
+                f"(got '{last_resort}'). Refusing so a Meta key is never sent elsewhere."
+            )
         if self.data_retention_days < 1:
             raise ValueError("DATA_RETENTION_DAYS must be at least 1.")
         if self.data_retention_interval_seconds < 1:

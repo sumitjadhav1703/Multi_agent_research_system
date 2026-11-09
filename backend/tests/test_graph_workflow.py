@@ -97,6 +97,34 @@ class GraphWorkflowTests(unittest.TestCase):
         self.assertEqual(retrieval.searches, [])
         self.assertIn("run.failed", _types(outcome.events))
 
+    def test_planner_timeout_recovers_via_meta_last_resort(self) -> None:
+        from backend.app.providers.client import ModelClient
+        from backend.app.providers.mock_router import MockRouter
+        from backend.tests.helpers import mock_settings
+
+        def _timeout(model, messages, kwargs):
+            raise MockTimeoutError()
+
+        rescue = scripted_behavior(success_roles())
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del model, api_key, kwargs
+            return rescue("meta/muse-spark-1.3-contributor", messages, {})
+
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        client = ModelClient(
+            settings=settings,
+            router=MockRouter(behavior=_timeout),
+            last_resort_complete=last_resort,
+        )
+        retrieval = FixtureRetrieval(LAB_HITS, LAB_PAGES)
+        runner = ResearchGraphRunner(model_client=client, retrieval=retrieval)
+        paused = runner.start("Widget latency", run_id="timeout-rescue")
+        self.assertTrue(paused.interrupted)
+        self.assertEqual(paused.approval_status, "awaiting_review")
+        self.assertGreaterEqual(len(retrieval.searches), 1)
+        self.assertGreaterEqual(paused.state["usage"]["llm_calls"], 1)
+
     def test_malformed_planner_output_fails_closed(self) -> None:
         client, _router = client_for(scripted_behavior({"planner": "not json"}))
         retrieval = FixtureRetrieval(LAB_HITS, LAB_PAGES)

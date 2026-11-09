@@ -37,6 +37,10 @@ def _api_key_for_model(settings: Settings, model_id: str) -> str | None:
         return settings.mistral_api_key
     if lowered.startswith("openrouter/"):
         return settings.openrouter_api_key
+    # LiteLLM Meta Model API Muse routes (e.g. meta/muse-spark-1.3-contributor).
+    if lowered.startswith("meta/"):
+        return settings.resolved_meta_api_key()
+    # Legacy Llama API preview prefix (api.llama.com); not Muse.
     if lowered.startswith("meta_llama/"):
         return settings.llama_api_key
     if lowered.startswith("mock/"):
