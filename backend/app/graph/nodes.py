@@ -345,6 +345,15 @@ def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) ->
                 verification_reason="Awaiting verification.",
             )
         )
+    if not proposals and passages:
+        # Lazy import: evidence ↔ graph package init would otherwise cycle at module load.
+        from backend.app.research.evidence import claims_from_passages
+
+        # LLM returned nothing usable — still seed the ledger from stored passages
+        # so the writer and provisional answer have real excerpt text.
+        proposals = claims_from_passages(passages)
+        if proposals:
+            warnings.append("claim extraction empty:seeded deterministic passage claims")
     return {
         "claims": [claim.model_dump() for claim in proposals],
         "contradictions": [],
@@ -484,15 +493,23 @@ def route_after_gate(state: ResearchState) -> str:
 def write_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str, Any]:
     limits = runtime.context.limits
     claims = [Claim.model_validate(item) for item in state.get("claims") or []]
+    passages = [Passage.model_validate(item) for item in state.get("passages") or []]
     events = [emit("writer.started", "write", {"revision_count": state.get("revision_count") or 0})]
     feedback = (state.get("review_feedback") or "").strip()
-    lines = ["Verified claims:"]
+    topic = (state.get("topic") or "Research")[:180]
+    lines = [f"Research topic: {topic}", "Verified claims:"]
     if not claims:
         lines.append("No claims were assessed.")
     for claim in claims:
         lines.append(
             f"{claim.claim_id} status={claim.status} evidence={','.join(claim.evidence_ids) or 'none'} text={claim.text}"
         )
+    supported = [claim for claim in claims if claim.status == "supported"]
+    if not supported and passages:
+        lines.append("Stored passage excerpts you may paraphrase only inside a caveat (never invent evidence IDs):")
+        for passage in passages[:6]:
+            lines.append(f"ID={passage.evidence_id}")
+            lines.append(untrusted_block(passage.quote))
     if feedback and int(state.get("revision_count") or 0) >= 1:
         lines.append("Human revision notes (style only; do not add facts):")
         lines.append(feedback)
@@ -508,15 +525,16 @@ def write_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str
         max_model_calls=limits.max_model_calls,
     )
     warnings = list(state.get("warnings") or [])
-    topic = (state.get("topic") or "Research")[:180]
     if parsed is None:
         warnings.append(f"writer fallback:{error or 'invalid_output'}")
         # Only seed an unverified provisional when unsupported claims exist (or none).
         # Never label an all-supported ledger as "unverified working claims".
-        seeded = provisional_caveat_section(topic, claims)
+        seeded = provisional_caveat_section(topic, claims, passages)
         report = ReportDraft(title=topic, sections=[seeded] if seeded is not None else [])
     else:
         report = _report_from_payload(parsed, topic)
+        # Always keep the run topic as the report title (writer often invents a ledger label).
+        report = report.model_copy(update={"title": topic})
     return {
         "report_draft": report.model_dump(),
         "usage": usage,
@@ -531,9 +549,10 @@ def citation_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[
     claims = [Claim.model_validate(item) for item in state.get("claims") or []]
     passages = [Passage.model_validate(item) for item in state.get("passages") or []]
     sources = [SourceRecord.model_validate(item) for item in state.get("sources") or []]
-    draft = state.get("report_draft") or {"title": state.get("topic") or "Research", "sections": []}
+    topic = (state.get("topic") or "Research")[:180]
+    draft = state.get("report_draft") or {"title": topic, "sections": []}
     report = ReportDraft.model_validate(draft)
-    claims, report, meta = finalize_ledger(claims, passages, sources, report)
+    claims, report, meta = finalize_ledger(claims, passages, sources, report, topic=topic)
     ok = bool(meta.get("ok"))
     event_type = "writer.completed" if ok else "warning"
     return {
