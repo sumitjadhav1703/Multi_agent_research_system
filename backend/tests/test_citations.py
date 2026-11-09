@@ -482,7 +482,7 @@ class CitationTests(unittest.TestCase):
         self.assertTrue(any("meta-refusal" in note.lower() or "synthesized" in note.lower() for note in repairs))
         self.assertTrue(any(section.kind == "gap" for section in repaired.sections))
 
-    def test_usable_writer_gap_is_kept_when_no_claim_gaps(self) -> None:
+    def test_ungrounded_writer_gap_is_replaced_with_ledger_text(self) -> None:
         report = ReportDraft(
             title="T",
             sections=[
@@ -499,10 +499,57 @@ class CitationTests(unittest.TestCase):
         repaired, repairs = assemble_report(report, [], [])
         gaps = [section for section in repaired.sections if section.kind == "gap"]
         self.assertTrue(gaps)
-        self.assertTrue(any("resume behavior" in section.body for section in gaps))
+        self.assertTrue(any("No claim ledger rows were available" in section.body for section in gaps))
+        self.assertFalse(any("resume behavior" in section.body for section in gaps))
+        self.assertTrue(any("ungrounded writer gap" in note.lower() for note in repairs))
         caveats = [section for section in repaired.sections if section.kind == "caveat"]
         self.assertTrue(caveats)
         self.assertTrue(any("synthesized" in note.lower() for note in repairs))
+
+    def test_grounded_writer_gap_is_kept_against_claim_ledger(self) -> None:
+        insufficient = Claim(
+            claim_id="cl_gap",
+            text="Public pages discussed protocols but never compared resume behavior.",
+            evidence_ids=[],
+            status="insufficient",
+            verification_reason="Not enough overlap.",
+        )
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_writer_gap",
+                    heading="Coverage gap",
+                    body="Public pages discussed protocols but never compared resume behavior.",
+                    evidence_ids=[],
+                    claim_ids=["cl_gap"],
+                    kind="gap",
+                )
+            ],
+        )
+        repaired, repairs = assemble_report(report, [insufficient], [])
+        # Claim-derived gap section is preferred when insufficient claims exist.
+        gaps = [section for section in repaired.sections if section.kind == "gap"]
+        self.assertTrue(gaps)
+        self.assertTrue(any("resume behavior" in section.body for section in gaps))
+        self.assertFalse(any("ungrounded writer gap" in note.lower() for note in repairs))
+
+    def test_all_supported_claims_do_not_get_unverified_provisional(self) -> None:
+        from backend.app.research.evidence import provisional_caveat_section
+
+        supported = Claim(
+            claim_id="cl_ok",
+            text="Widget latency fell in the lab report.",
+            evidence_ids=["ev1"],
+            status="supported",
+            verification_reason="Quoted.",
+        )
+        self.assertIsNone(provisional_caveat_section("Widget latency", [supported]))
+        report = ReportDraft(title="Widget latency", sections=[])
+        repaired, repairs = assemble_report(report, [supported], [_passage()])
+        self.assertFalse(any(section.kind == "caveat" for section in repaired.sections))
+        self.assertTrue(any(section.kind == "finding" for section in repaired.sections))
+        self.assertFalse(any("synthesized provisional" in note.lower() for note in repairs))
 
 
 if __name__ == "__main__":

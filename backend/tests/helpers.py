@@ -27,7 +27,10 @@ def mock_settings(**overrides: object) -> Settings:
         "GOOGLE_API_KEY": "",
         "MISTRAL_API_KEY": "",
         "OPENROUTER_API_KEY": "",
+        "META_API_KEY": "",
+        "MODEL_API_KEY": "",
         "LLAMA_API_KEY": "",
+        "META_LAST_RESORT_ENABLED": "false",
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]

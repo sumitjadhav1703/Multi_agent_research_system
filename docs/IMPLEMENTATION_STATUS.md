@@ -41,11 +41,20 @@
 - **Tests:** backend suite + evals + frontend green on this branch. Mock graph smoke for the PostgreSQL-queue topic produced caveat+gap.
 - **Surfaces:** README Evaluation section; landing hero footer stats; Evaluation console page; Evidence empty-state `EvalSnapshotPanel`.
 
+### Follow-up: Meta Muse Spark last-resort (2026-11-09)
+
+- **Behavior:** After each role’s free primary + one free fallback are exhausted (timeout / rate-limit / unavailable), `ModelClient` may call `META_LAST_RESORT_MODEL` (default `meta/muse-spark-1.3-contributor`) once when a Meta key is present and last-resort is not disabled.
+- **Not** on `FREE_MODEL_ALLOWLIST`; not a role primary/fallback; `ALLOW_PAID_MODELS` stays false for the free path.
+- **Keys:** `META_API_KEY` (aliases `MODEL_API_KEY` / `LLAMA_API_KEY`). Env: `META_LAST_RESORT_ENABLED`, `META_LAST_RESORT_MODEL`.
+- **Surfaces:** ADR 0002, SoT provider resilience row, README known limits. No landing “paid Meta” marketing.
+- **Deploy:** set `META_API_KEY` on Render for last-resort (same key as offline eval).
+- **Tests:** backend offline suite **159 OK** (2 skipped Postgres durability) after last-resort unit + graph recovery coverage.
+
 ### Follow-up: empty Report answer + View less (2026-11-09)
 
 - **Bug:** completed runs with many sources could still show a useless provisional (“No verified claims…”) plus gap-only markdown. Passage IDs were `ev_{subquestion}_{offset}` only, so multi-source hits under one subquestion collided and merge kept ~two passages. Meta-refusal caveats were kept; writer fallback left `sections=[]`. The insufficient banner treated any “unverified” gap wording as a provisional answer. View more/less was a generic underlined Inter link.
-- **Fix:** unique `ev_{subquestion}_{source_hash}_{offset}` passage IDs; refuse meta-refusal provisionals and synthesize a claim-based caveat; seed writer fallback with that caveat; keep usable writer `gap` sections; banner matches `## Provisional answer` only; View more/less is a display-font pill with chevron.
-- **Tests:** backend offline suite **155 OK** (2 skipped); frontend vitest **23/23**.
+- **Fix:** unique `ev_{subquestion}_{source_hash}_{offset}` passage IDs; refuse meta-refusal provisionals and synthesize a claim-based caveat only for unsupported claims; ground retained writer `gap` text against the claim ledger; banner matches `## Provisional answer` only; View more/less is a display-font pill with chevron; notices stay in-flow so they do not cover Claims.
+- **Tests:** backend + frontend offline suites green on this branch.
 
 ### Remaining (honest residual — not blocking this publish)
 

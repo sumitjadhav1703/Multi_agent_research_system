@@ -206,6 +206,161 @@ class ModelClientTests(unittest.TestCase):
         result = client.complete("eval_judge", [{"role": "user", "content": "score"}])
         self.assertTrue(result.usage.is_unknown)
 
+    def test_timeout_exhaustion_uses_meta_last_resort(self) -> None:
+        from backend.app.providers.mock_router import MockChoice, MockMessage, MockResponse, MockUsage
+
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockTimeoutError),
+        )
+        calls: list[str] = []
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, kwargs
+            calls.append(model)
+            self.assertEqual(api_key, "meta-test-key")
+            return MockResponse(
+                choices=[MockChoice(message=MockMessage(content="rescued"))],
+                model=model,
+                usage=MockUsage(1, 1, 2),
+            )
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        result = client.complete("planner", [{"role": "user", "content": "plan"}])
+        self.assertEqual(result.content, "rescued")
+        self.assertTrue(result.last_resort)
+        self.assertEqual(result.model, "meta/muse-spark-1.3-contributor")
+        self.assertEqual(calls, ["meta/muse-spark-1.3-contributor"])
+        self.assertEqual(
+            [call["model"] for call in router.calls],
+            ["rm-planner", "rm-planner-fallback"],
+        )
+
+    def test_rate_limit_exhaustion_uses_meta_last_resort(self) -> None:
+        from backend.app.providers.mock_router import MockChoice, MockMessage, MockResponse, MockUsage
+
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(lambda: MockRateLimitError("down")),
+        )
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, api_key, kwargs
+            return MockResponse(
+                choices=[MockChoice(message=MockMessage(content="meta-ok"))],
+                model=model,
+                usage=MockUsage(1, 1, 2),
+            )
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        result = client.complete("writer", [{"role": "user", "content": "write"}])
+        self.assertEqual(result.content, "meta-ok")
+        self.assertTrue(result.last_resort)
+
+    def test_last_resort_disabled_stays_unavailable(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="false")
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockTimeoutError),
+        )
+        calls: list[str] = []
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, api_key, kwargs
+            calls.append(model)
+            raise AssertionError("last resort must not run when disabled")
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        with self.assertRaises(AllProvidersUnavailable):
+            client.complete("planner", [{"role": "user", "content": "plan"}])
+        self.assertEqual(calls, [])
+
+    def test_invalid_request_does_not_call_meta_last_resort(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockInvalidRequestError),
+        )
+        calls: list[str] = []
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, api_key, kwargs
+            calls.append(model)
+            raise AssertionError("invalid requests must not burn Meta")
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        with self.assertRaises(InvalidRequestError):
+            client.complete("writer", [{"role": "user", "content": "x"}])
+        self.assertEqual(calls, [])
+
+    def test_mock_provider_builtin_last_resort_without_injector(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockTimeoutError),
+        )
+        client = ModelClient(settings=settings, router=router)
+        result = client.complete("researcher", [{"role": "user", "content": "q"}])
+        self.assertTrue(result.last_resort)
+        self.assertIn("last-resort:", result.content)
+        self.assertEqual(result.model, "meta/muse-spark-1.3-contributor")
+
+    def test_eval_judge_never_uses_meta_last_resort(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockTimeoutError),
+        )
+        calls: list[str] = []
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, api_key, kwargs
+            calls.append(model)
+            raise AssertionError("eval_judge must not escalate to Meta")
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        with self.assertRaises(AllProvidersUnavailable):
+            client.complete("eval_judge", [{"role": "user", "content": "score"}])
+        self.assertEqual(calls, [])
+        self.assertEqual([call["model"] for call in router.calls], ["rm-eval-judge"])
+
+    def test_last_resort_refuses_non_meta_model_override(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        # Bypass startup validator to prove the invoke-time guard.
+        settings.meta_last_resort_model = "groq/openai/gpt-oss-20b"
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockTimeoutError),
+        )
+        calls: list[str] = []
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, kwargs
+            calls.append(f"{model}:{api_key}")
+            raise AssertionError("must not call LiteLLM with Meta key for a non-meta model")
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        with self.assertRaises(AllProvidersUnavailable) as caught:
+            client.complete("planner", [{"role": "user", "content": "plan"}])
+        self.assertIn("meta/", str(caught.exception).lower())
+        self.assertEqual(calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()

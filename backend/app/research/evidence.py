@@ -554,24 +554,28 @@ def _usable_provisional_body(body: str) -> str | None:
     return text[:2000]
 
 
+def unsupported_claims(claims: list[Claim]) -> list[Claim]:
+    return [
+        claim
+        for claim in claims
+        if claim.status in {"insufficient", "contradictory"} and claim.text.strip()
+    ]
+
+
 def synthesize_provisional_body(topic: str, claims: list[Claim], *, max_claims: int = 4) -> str:
-    """Deterministic unverified write-up from claim texts when the writer fails or refuses."""
+    """Deterministic unverified write-up from unsupported claim texts only."""
     topic_text = (topic or "this question").strip() or "this question"
     lead = (
         f"A definitive, evidence-backed answer to “{topic_text}” could not be formed from "
         "the stored passages. The notes below are unverified working claims from this run, "
         "not supported findings."
     )
-    useful = [
-        claim
-        for claim in claims
-        if claim.status in {"insufficient", "contradictory"} and claim.text.strip()
-    ]
-    if not useful:
-        useful = [claim for claim in claims if claim.text.strip()]
+    useful = unsupported_claims(claims)
     if not useful:
         return (
-            f"{lead} No claim texts were stored either; treat the report as a coverage gap only."
+            f"A definitive, evidence-backed answer to “{topic_text}” could not be formed from "
+            "the stored passages. No unsupported claim texts were available; treat this as a "
+            "coverage gap only."
         )[:2000]
     lines = [lead, ""]
     for claim in useful[:max_claims]:
@@ -580,7 +584,10 @@ def synthesize_provisional_body(topic: str, claims: list[Claim], *, max_claims: 
     return "\n".join(lines)[:2000]
 
 
-def provisional_caveat_section(topic: str, claims: list[Claim], *, section_id: str = "sec_provisional") -> ReportSection:
+def provisional_caveat_section(topic: str, claims: list[Claim], *, section_id: str = "sec_provisional") -> ReportSection | None:
+    """Build a provisional caveat only when unsupported claims exist (or the ledger is empty)."""
+    if claims and not unsupported_claims(claims):
+        return None
     return ReportSection(
         section_id=section_id,
         heading="Provisional answer (unverified)",
@@ -589,6 +596,41 @@ def provisional_caveat_section(topic: str, claims: list[Claim], *, section_id: s
         claim_ids=[],
         kind="caveat",
     )
+
+
+def _ledger_gap_body(claims: list[Claim]) -> str:
+    gaps = [claim for claim in claims if claim.status == "insufficient" and claim.text.strip()]
+    conflicts = [claim for claim in claims if claim.status == "contradictory" and claim.text.strip()]
+    if gaps:
+        return " ".join(f"{claim.claim_id}: {claim.text}" for claim in gaps)[:2000]
+    if conflicts:
+        return " ".join(
+            f"{claim.claim_id}: {claim.text} {claim.verification_reason}".strip() for claim in conflicts
+        )[:2000]
+    return "No claim ledger rows were available to describe this coverage gap."
+
+
+def _gap_body_grounded(body: str, claims: list[Claim]) -> bool:
+    """Writer gap text may only restate terms already present on the claim ledger."""
+    if not claims:
+        return False
+    claim_text = " ".join(claim.text for claim in claims if claim.text.strip())
+    if not claim_text.strip():
+        return False
+    body_terms = _report_match_terms(body)
+    claim_terms = _report_match_terms(claim_text)
+    if not body_terms:
+        return False
+    if (body_terms & _NEGATION_TOKENS) != (claim_terms & _NEGATION_TOKENS):
+        # Allow extra "not/no" in gap language about missing coverage when claims lack them.
+        extra_negation = (body_terms & _NEGATION_TOKENS) - (claim_terms & _NEGATION_TOKENS)
+        if extra_negation - {"not", "no", "none", "without"}:
+            return False
+    content_body = body_terms - _NEGATION_TOKENS
+    content_claim = claim_terms - _NEGATION_TOKENS
+    if not content_body:
+        return False
+    return content_body <= content_claim
 
 
 def _sanitize_writer_caveat(section: ReportSection) -> tuple[ReportSection | None, str | None]:
@@ -605,7 +647,9 @@ def _sanitize_writer_caveat(section: ReportSection) -> tuple[ReportSection | Non
     return sanitized, None
 
 
-def _sanitize_writer_gap(section: ReportSection) -> tuple[ReportSection | None, str | None]:
+def _sanitize_writer_gap(
+    section: ReportSection, claims: list[Claim]
+) -> tuple[ReportSection | None, str | None]:
     body = _usable_provisional_body(section.body)
     if body is None:
         if section.body.strip() and any(marker in section.body.lower() for marker in _INSTRUCTION_MARKERS):
@@ -613,10 +657,22 @@ def _sanitize_writer_gap(section: ReportSection) -> tuple[ReportSection | None, 
         if section.body.strip() and any(marker in section.body.lower() for marker in _REFUSAL_MARKERS):
             return None, f"Dropped meta-refusal gap from {section.section_id}"
         return None, None
-    sanitized = section.model_copy(
-        update={"body": body, "evidence_ids": [], "claim_ids": list(section.claim_ids), "kind": "gap"}
+    claim_ids = [claim_id for claim_id in section.claim_ids if any(claim.claim_id == claim_id for claim in claims)]
+    if _gap_body_grounded(body, claims):
+        sanitized = section.model_copy(
+            update={"body": body, "evidence_ids": [], "claim_ids": claim_ids, "kind": "gap"}
+        )
+        return sanitized, None
+    # Do not retain assertive writer gap text that is not on the ledger.
+    replaced = section.model_copy(
+        update={
+            "body": _ledger_gap_body(claims),
+            "evidence_ids": [],
+            "claim_ids": [claim.claim_id for claim in unsupported_claims(claims)],
+            "kind": "gap",
+        }
     )
-    return sanitized, None
+    return replaced, f"Replaced ungrounded writer gap with ledger coverage text: {section.section_id}"
 
 
 def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Passage]) -> tuple[ReportDraft, list[str]]:
@@ -636,7 +692,7 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 kept_caveats.append(sanitized)
             continue
         if section.kind == "gap":
-            sanitized, note = _sanitize_writer_gap(section)
+            sanitized, note = _sanitize_writer_gap(section, claims)
             if note:
                 repairs.append(note)
             if sanitized is not None:
@@ -711,8 +767,10 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
         )
         repairs.append("Salvaged dropped finding as provisional caveat")
     elif not has_supported_finding:
-        sections.append(provisional_caveat_section(report.title, claims))
-        repairs.append("Synthesized provisional answer from claim texts")
+        synthesized = provisional_caveat_section(report.title, claims)
+        if synthesized is not None:
+            sections.append(synthesized)
+            repairs.append("Synthesized provisional answer from claim texts")
     conflicts = [claim for claim in claims if claim.status == "contradictory"]
     gaps = [claim for claim in claims if claim.status == "insufficient"]
     if conflicts:

@@ -511,8 +511,10 @@ def write_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str
     topic = (state.get("topic") or "Research")[:180]
     if parsed is None:
         warnings.append(f"writer fallback:{error or 'invalid_output'}")
-        # Seed a deterministic provisional so assemble_report is not gap-only.
-        report = ReportDraft(title=topic, sections=[provisional_caveat_section(topic, claims)])
+        # Only seed an unverified provisional when unsupported claims exist (or none).
+        # Never label an all-supported ledger as "unverified working claims".
+        seeded = provisional_caveat_section(topic, claims)
+        report = ReportDraft(title=topic, sections=[seeded] if seeded is not None else [])
     else:
         report = _report_from_payload(parsed, topic)
     return {
