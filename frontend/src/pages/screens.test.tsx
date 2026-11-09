@@ -238,10 +238,14 @@ describe("research console screens", () => {
   it("does not offer a guest benchmark or invent an accuracy figure", async () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     renderAt("/evaluation");
-    expect(await screen.findByRole("heading", { name: "No benchmark yet" })).toBeInTheDocument();
-    expect(screen.getAllByText("not measured").length).toBeGreaterThan(3);
+    expect(
+      await screen.findByRole("heading", { name: /Offline harness results|Offline evaluation snapshot/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /benchmark/i })).toBeNull();
     expect(screen.queryByText(/%/)).toBeNull();
+    expect(screen.getByText(/20\/20 matched expectations|matched expectations/i)).toBeInTheDocument();
+    // Bundled publish may include Muse means; skipped/trace metrics stay non-numeric labels.
+    expect(screen.getAllByText(/skipped/i).length).toBeGreaterThan(0);
   });
 
   it("starts a run with headers rather than a query token", async () => {

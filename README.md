@@ -41,6 +41,7 @@ with durable Postgres jobs, guest quotas, and a thin MCP Worker.
 - [Quick start (local)](#quick-start-local)
 - [Environment variables](#environment-variables)
 - [Testing](#testing)
+- [Evaluation](#evaluation)
 - [Public demo walkthrough](#public-demo-walkthrough)
 - [Deployment](#deployment)
 - [Security and known limits](#security-and-known-limits)
@@ -64,10 +65,12 @@ ResearchMind 2.0 is a **portfolio / student demo** with a public Singapore stack
 | Real LLM runs | Need provider keys on Render and `USE_MOCK_PROVIDER=false` |
 | Cold starts | Render Free can sleep after idle; wake can take about a minute |
 | “Production-ready” | **Not claimed.** Measured behavior and known limits are documented honestly |
+| Offline evaluation | Fixture DeepEval + deterministic checks **published** (not a V1 vs V2 table) |
 
 Authoritative product/architecture text: [`docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md).  
 Live execution board: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).  
-Measured hosts: [`docs/deployment-report.md`](docs/deployment-report.md).
+Measured hosts: [`docs/deployment-report.md`](docs/deployment-report.md).  
+Eval write-up: [`docs/evals/RESULTS.md`](docs/evals/RESULTS.md).
 
 ---
 
@@ -288,6 +291,32 @@ CI workflow: [`.github/workflows/tests.yml`](.github/workflows/tests.yml).
 
 ---
 
+## Evaluation
+
+Offline harness results (2026-11-09). These score **hand-built fixture artifacts**, not live V1/V2 research runs.
+
+| Check | Result |
+| --- | --- |
+| Deterministic fixture self-check | **20/20** matched (`golden-v0.1`, 32 cases in the set) |
+| DeepEval judge | `meta/muse-spark-1.3-contributor` (Meta Model API) |
+| Faithfulness mean | **0.925** (n=20) |
+| Answer relevancy mean | **0.700** (n=20) |
+| Contextual precision mean | **0.833** (n=18) |
+| Contextual recall mean | **0.667** (n=18) |
+| Numeric scores / errors | **80** scored · **0** errors |
+| Trace metrics | Skipped (public graph is not DeepEval-traced) |
+| V1 vs V2 comparison | **Not measured** |
+
+Published JSON (API + console Evaluation page): [`docs/evals/published-summary.json`](docs/evals/published-summary.json).  
+Narrative + history: [`docs/evals/RESULTS.md`](docs/evals/RESULTS.md).
+
+```bash
+PYTHONPATH=. python -m evals.cli deterministic
+RM_EVAL_JUDGE=1 PYTHONPATH=. python -m evals.cli judge --confirm-offline
+```
+
+---
+
 ## Public demo walkthrough
 
 1. Open https://researchmind-console.vercel.app/ — portfolio landing (video hero).
@@ -350,7 +379,7 @@ Deeper checklist: [`docs/deployment-report.md`](docs/deployment-report.md).
 | SSRF | V1-level DNS/scheme checks; residual DNS-rebinding / connect-time risk — **not** claimed closed without an egress proxy |
 | Hosting | Render Free idle sleep; cold start not a measured SLA |
 | Data | Demo for public topics only — do not submit private or sensitive content |
-| Eval | DeepEval harness exists for controlled runs; not part of every public request |
+| Eval | Offline fixture DeepEval + deterministic results published on README / Evaluation / Evidence empty state; not part of every public request |
 
 ---
 

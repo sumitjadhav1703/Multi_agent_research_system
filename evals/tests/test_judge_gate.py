@@ -43,12 +43,25 @@ class PlanningTests(unittest.TestCase):
         self.assertTrue(all(row["kind"] == "llm_judge" for row in plan_judge_metrics(factual, {})))
 
     def test_disabled_and_missing_key_do_not_score(self) -> None:
-        saved = {key: os.environ.get(key) for key in ("RM_EVAL_JUDGE", "GEMINI_API_KEY", "GOOGLE_API_KEY")}
+        saved = {
+            key: os.environ.get(key)
+            for key in (
+                "RM_EVAL_JUDGE",
+                "META_API_KEY",
+                "MODEL_API_KEY",
+                "LLAMA_API_KEY",
+                "GEMINI_API_KEY",
+                "GOOGLE_API_KEY",
+            )
+        }
         try:
             os.environ.pop("RM_EVAL_JUDGE", None)
             with self.assertRaises(JudgeDisabled):
                 execute_judge(CASES[:1], [{"case_id": "g001", "system": "fixture"}], measure=False)
             os.environ["RM_EVAL_JUDGE"] = "1"
+            os.environ.pop("META_API_KEY", None)
+            os.environ.pop("MODEL_API_KEY", None)
+            os.environ.pop("LLAMA_API_KEY", None)
             os.environ.pop("GEMINI_API_KEY", None)
             os.environ.pop("GOOGLE_API_KEY", None)
             with self.assertRaises(JudgeConfigError):
@@ -92,9 +105,13 @@ class CommandGateTests(unittest.TestCase):
             ["-m", "evals.cli", "judge", "--confirm-offline", "--dry-run"],
             extra_env={"RM_EVAL_JUDGE": "1"},
         )
-        self.assertEqual(flagged.returncode, 3, flagged.stderr)
-        self.assertIn("evals/requirements.txt", flagged.stderr)
-        self.assertNotIn("score", flagged.stdout)
+        # Return 3 when DeepEval is missing; 0 when it is installed and dry-run constructs metrics.
+        if flagged.returncode == 3:
+            self.assertIn("evals/requirements.txt", flagged.stderr)
+            self.assertNotIn("score", flagged.stdout)
+        else:
+            self.assertEqual(flagged.returncode, 0, flagged.stderr)
+            self.assertIn("llm_judge", flagged.stdout)
 
     def test_public_trees_and_ci_do_not_reference_deepeval(self) -> None:
         import_deepeval = re.compile(r"^\s*(?:import deepeval\b|from deepeval\b)", re.MULTILINE)
@@ -144,7 +161,7 @@ class CommandGateTests(unittest.TestCase):
             self.assertNotIn("needle-do-not-load", completed.stderr)
             report = json.loads(text)
         self.assertFalse(report["measured"])
-        self.assertEqual(report["evaluator_model"], "gemini/gemini-flash-latest")
+        self.assertEqual(report["evaluator_model"], "meta/muse-spark-1.3-contributor")
         self.assertEqual(report["deepeval_version"], "4.3.3")
         self.assertEqual(report["constructor_probe"]["faithfulness"], "FaithfulnessMetric")
         self.assertEqual(report["constructor_probe"]["plan_adherence"], "PlanAdherenceMetric")

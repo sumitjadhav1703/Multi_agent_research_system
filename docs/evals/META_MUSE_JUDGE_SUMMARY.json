@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-11-09T16:04:10.423424+00:00",
+  "evaluator_model": "meta/muse-spark-1.3-contributor",
+  "deepeval": "4.3.3",
+  "case_count": 20,
+  "status_counts": {
+    "scored": 80,
+    "skipped": 100
+  },
+  "metric_means": {
+    "faithfulness": {
+      "mean": 0.925,
+      "n": 20
+    },
+    "answer_relevancy": {
+      "mean": 0.7,
+      "n": 20
+    },
+    "contextual_precision": {
+      "mean": 0.8333,
+      "n": 18
+    },
+    "contextual_recall": {
+      "mean": 0.6667,
+      "n": 18
+    },
+    "tool_correctness": {
+      "mean": 0.25,
+      "n": 2
+    },
+    "argument_correctness": {
+      "mean": 0.0,
+      "n": 2
+    },
+    "task_completion": {
+      "mean": null,
+      "n": 0
+    },
+    "plan_adherence": {
+      "mean": null,
+      "n": 0
+    },
+    "step_efficiency": {
+      "mean": null,
+      "n": 0
+    }
+  },
+  "error_samples": []
+}

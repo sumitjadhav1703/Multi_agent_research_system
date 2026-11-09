@@ -150,6 +150,28 @@ def writer_clean(user: str) -> str:
 
     ids = re.findall(r"ev_[A-Za-z0-9_]+", user)
     evidence_ids = [ids[0]] if ids else []
+    if not evidence_ids:
+        return dumps(
+            {
+                "title": "Widget latency",
+                "sections": [
+                    {
+                        "heading": "Provisional answer (unverified)",
+                        "body": "No verified sources were retrieved for this topic.",
+                        "evidence_ids": [],
+                        "claim_ids": [],
+                        "kind": "caveat",
+                    },
+                    {
+                        "heading": "Insufficient evidence",
+                        "body": "The claim ledger has no supported claims.",
+                        "evidence_ids": [],
+                        "claim_ids": [],
+                        "kind": "gap",
+                    },
+                ],
+            }
+        )
     return dumps(
         {
             "title": "Widget latency",
@@ -159,6 +181,7 @@ def writer_clean(user: str) -> str:
                     "body": LAB_SENTENCE,
                     "evidence_ids": evidence_ids,
                     "claim_ids": ["cl1"],
+                    "kind": "finding",
                 }
             ],
         }

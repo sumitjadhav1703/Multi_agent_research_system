@@ -6,6 +6,7 @@ import unittest
 from backend.app.providers.mock_router import MockRouter
 from backend.app.providers.router_factory import (
     ROLE_ALIASES,
+    _api_key_for_model,
     build_model_list_and_fallbacks,
     create_router,
 )
@@ -43,6 +44,16 @@ class RouterFactoryTests(unittest.TestCase):
         settings = mock_settings()
         router = create_router(settings)
         self.assertIsInstance(router, MockRouter)
+
+    def test_meta_llama_prefix_maps_to_llama_api_key_without_allowlisting(self) -> None:
+        settings = mock_settings()
+        self.assertIsNone(_api_key_for_model(settings, "meta_llama/Llama-3.3-8B-Instruct"))
+        keyed = mock_settings(LLAMA_API_KEY="llama-test-key")
+        self.assertEqual(
+            _api_key_for_model(keyed, "meta_llama/Llama-3.3-8B-Instruct"),
+            "llama-test-key",
+        )
+        self.assertNotIn("meta_llama/Llama-3.3-8B-Instruct", keyed.allowlist)
 
 
 if __name__ == "__main__":

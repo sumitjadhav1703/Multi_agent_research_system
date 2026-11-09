@@ -5,82 +5,66 @@
 **Systems compared:** none. V1, V2-A, and V2-B have not been run on this set.  
 **Frozen source snapshot:** no. `snapshot_status` remains `not_frozen`.
 
-## LLM-judge metrics
+## LLM-judge metrics (Meta Model API — current)
 
-A controlled judge did run. It scored two hand-built fixture artifacts, not a research system. A null score below is a null. It is not a zero, and it is not included in any average.
+Offline DeepEval scored the **20 hand-built fixture runs** (`system: fixture`) with Meta Model API Muse Spark **contributor** via LiteLLM. This is **not** a V1 versus V2 research-system table. Means exclude skipped/null rows. A null is not a zero. Contributor tier may allow Meta training on prompts; fixtures are synthetic.
 
 | Field | Value |
 |---|---|
 | Date | 2026-11-09 |
 | Dataset | `golden-v0.1` |
-| Cases judged | 2 of 32 (`clean_factual` / g001, `contradiction_kept` / g014) |
-| `system` | `fixture` (`is_benchmark` false) |
-| DeepEval | 4.3.3, matching the pin |
-| LiteLLM | 1.108.2 |
-| Evaluator | `gemini/gemini-flash-latest`, temperature 0 |
-| Threshold | 0.5, DeepEval 4.3.3's library default, not a calibrated ResearchMind bar |
-| Python | 3.13.14, `/tmp/rm_eval_judge` |
-| Wall time | about 534 seconds |
-| Process exit | 1, because at least one metric status was `error` |
-| Numeric scores | 1 |
-| Eligible metrics left null | 7 |
-| Metrics skipped by the harness | 10 |
+| Fixture runs judged | 20 |
+| `system` | `fixture` |
+| DeepEval | 4.3.3 |
+| Evaluator | `meta/muse-spark-1.3-contributor`, temperature 0 |
+| Auth | `META_API_KEY` (aliases `MODEL_API_KEY` / `LLAMA_API_KEY`), process env only |
+| Threshold | 0.5 (DeepEval library default, not a calibrated ResearchMind bar) |
+| Wall time | about 1912 seconds |
+| Process exit | 0 |
+| Numeric scores | 80 |
+| Errors | 0 |
+| Published summary | `docs/evals/published-summary.json` (also API + Evaluation console) |
 
-Keys were loaded from the local `.env` with python-dotenv into the process environment and were not printed. The command set `RM_EVAL_JUDGE=1`, `DEEPEVAL_DISABLE_DOTENV=1`, `DEEPEVAL_TELEMETRY_OPT_OUT=1`, and `LITELLM_MODE=PRODUCTION`. It called `metric.measure()` only. It did not call `deepeval.evaluate()`.
+### Metric means (numeric rows only)
 
-LiteLLM logged a deprecation warning that temperature still works for Gemini 3+ (`gemini-flash-latest`). That warning is not a score.
+| Metric | Mean | n |
+|---|---|---|
+| Faithfulness | 0.925 | 20 |
+| Answer relevancy | 0.700 | 20 |
+| Contextual precision | 0.833 | 18 |
+| Contextual recall | 0.667 | 18 |
+| Tool correctness | 0.250 | 2 |
+| Argument correctness | 0.000 | 2 |
+| Task completion | skipped | no DeepEval trace on fixtures |
+| Plan adherence | skipped | no DeepEval trace on fixtures |
+| Step efficiency | skipped | no DeepEval trace on fixtures |
 
-### Scores that were returned
+Raw JSON is local/gitignored: `evals/results/meta-muse-full.json`. Compact means: `docs/evals/META_MUSE_JUDGE_SUMMARY.json`.
 
-| Run | Case | Category | Metric | Score |
-|---|---|---|---|---|
-| `clean_factual` | g001 | factual | Answer Relevancy | 1.0 |
+### Note on retired `meta_llama/` route
 
-The judge's reason for that single score was that the fixture report answered the Australia-capital question with relevant information. One observed value has no mean or median across cases. g014 has no Answer Relevancy score.
+Meta retired the Llama API public preview (`api.llama.com`). Keys from https://dev.meta.ai/ are **Meta Model API** keys (`LLM_…`) and must use LiteLLM `meta/muse-spark-…` with `META_API_KEY`, not `meta_llama/Llama-3.3-8B-Instruct`.
 
-No other metric returned a number. There is no faithfulness mean, no contextual-precision mean, no contextual-recall mean, and no category table beyond the one cell above.
+## Historical Gemini fixture probe (archive)
 
-### Eligible metrics left null
-
-| Run | Metric | Status | Why the score is null |
-|---|---|---|---|
-| `clean_factual` | Faithfulness | error | `TimeoutError`: call timed out after 88.5s per attempt |
-| `clean_factual` | Contextual Precision | error | same 88.5s timeout |
-| `clean_factual` | Contextual Recall | error | same 88.5s timeout |
-| `contradiction_kept` | Faithfulness | error | same 88.5s timeout |
-| `contradiction_kept` | Answer Relevancy | error | LiteLLM `ServiceUnavailableError`, Gemini HTTP 503, high demand |
-| `contradiction_kept` | Contextual Precision | error | same HTTP 503 |
-| `contradiction_kept` | Contextual Recall | error | same HTTP 503 |
-
-The raw JSON is local and gitignored: `evals/results/judge-subset-2026-11-09.json`.
-
-### Skipped on purpose
-
-Both fixtures have empty `tool_calls` and `trace: null`. Tool Correctness, Argument Correctness, Task Completion, Plan Adherence, and Step Efficiency stayed skipped. Ten skip rows, five on each case. Their scores are null.
-
-### What this run is not
-
-It is not a V1 versus V2 comparison. It is not a 32-question benchmark. The passages are still paraphrases. The 2026-11-07 dry run, which constructed `LiteLLMModel` and the nine metric classes and stored only nulls, is still not a quality result. A repeat dry run on 2026-11-09 with `/tmp/rm_eval_judge` covered all 20 fixture runs: `measured` false, DeepEval 4.3.3, 180 metric rows, 0 non-null scores.
+Earlier the same day, a bounded Gemini Flash probe on 2 fixtures recorded one Answer Relevancy of 1.0 and left other eligible metrics null (timeouts / HTTP 503). That probe is superseded by the Meta Muse run above for the published Evaluation page.
 
 ## Deterministic checks
 
-These are pass/fail codes on hand-built fixture artifacts (`system: fixture`), not quality scores for a research system.
+Pass/fail codes on hand-built fixture artifacts (`system: fixture`), not quality scores for a research system.
 
-On 2026-11-09 the fixture self-check reported `dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0`. `python -m unittest discover -s evals/tests -v` reported 14 tests, OK, in 3.228s, with 0 skipped and 0 failed. Those counts check the harness and the fixtures. They are not a baseline-versus-V2 table.
+On 2026-11-09 the fixture self-check reported `dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0`. Raw: `evals/results/deterministic-2026-11-09.json`. Published with the judge summary above.
 
 ## Commands
 
 ```text
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s evals/tests -v
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m evals.cli deterministic
+PYTHONPATH=. python -m unittest discover -s evals/tests -v
+PYTHONPATH=. python -m evals.cli deterministic
+RM_EVAL_JUDGE=1 PYTHONPATH=. python -m evals.cli judge --confirm-offline --output evals/results/meta-muse-full.json
 ```
-
-The judge used `/tmp/rm_eval_judge/bin/python -m evals.cli judge --confirm-offline` on a two-run subset. DeepEval stays out of `/tmp/rm_v2_venv` so the missing-install test still exits 3.
 
 ## What is still required for a comparison report
 
 - Saved outputs for V1, V2-A, and V2-B on the same questions.
 - A frozen source snapshot, or an explicit note that search results differed.
-- A judge run that returns numeric scores for the metrics being compared, with the same model, DeepEval pin, dataset version, case count, and date.
-- The 2026-11-09 run does not supply those scores. Timeouts and HTTP 503 left seven eligible scores null.
-- Deterministic citation results reported separately from judge scores.
+- The Meta Muse fixture run above is a harness probe, not that comparison.

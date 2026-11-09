@@ -118,7 +118,14 @@ class GraphWorkflowTests(unittest.TestCase):
         self.assertTrue(paused.interrupted)
         self.assertEqual(len(retrieval.searches), 2)
         self.assertEqual(paused.state["evidence_retry_count"], 1)
-        self.assertTrue(any(section["kind"] == "gap" for section in paused.state["report_draft"]["sections"]))
+        sections = paused.state["report_draft"]["sections"]
+        self.assertTrue(any(section["kind"] == "gap" for section in sections))
+        caveats = [section for section in sections if section["kind"] == "caveat"]
+        self.assertTrue(caveats)
+        self.assertIn("provisional", caveats[0]["heading"].lower())
+        self.assertTrue(caveats[0]["body"].strip())
+        self.assertEqual(caveats[0]["evidence_ids"], [])
+        self.assertEqual(caveats[0]["claim_ids"], [])
         self.assertNotIn("exfiltrate", " ".join(retrieval.searches))
 
     def test_search_failure_is_not_approvable(self) -> None:

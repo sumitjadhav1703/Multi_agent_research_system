@@ -307,11 +307,17 @@ export function runBanners(input: {
     });
   }
   if (insufficientEvidence(input.events, input.snapshot)) {
+    const hasProvisional = Boolean(
+      input.snapshot?.report?.markdown &&
+        /provisional answer|unverified/i.test(input.snapshot.report.markdown),
+    );
     banners.push({
       id: "insufficient",
       tone: "warning",
       title: "Insufficient evidence",
-      detail: "Stored passages do not support a stronger claim. This is not an absolute fact-check.",
+      detail: hasProvisional
+        ? "A provisional answer is shown below. It is not evidence-backed. This is not an absolute fact-check."
+        : "Stored passages do not support a stronger claim. This is not an absolute fact-check.",
     });
   }
   const notice = providerNotice(input.events);

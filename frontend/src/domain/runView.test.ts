@@ -74,6 +74,35 @@ describe("run view", () => {
     expect(titles("completed", [event(3, "worker.failed")])).toContain("Partial result");
     expect(titles("completed")).toContain("Insufficient evidence");
     expect(titles("completed")).not.toContain("Reconnecting");
+
+    const provisionalBanners = runBanners({
+      run: run("completed"),
+      events: [],
+      snapshot: {
+        run_id: "run-1",
+        wording: "Evidence assessed against stored passages. This is not an absolute fact-check.",
+        report: {
+          version: 1,
+          markdown: "# T\n\n## Provisional answer (unverified)\n\nQueues help resume work.\n\n## Insufficient evidence\n\nNo evidence-backed claim could be assessed.\n",
+          approval_state: "awaiting_review",
+          created_at: "2026-11-09T00:00:00Z",
+        },
+        sources: [],
+        passages: [],
+        claims: [{ claim_id: "cl1", text: "A claim", status: "insufficient", verification_reason: null, evidence_ids: [] }],
+        usage: {
+          llm_calls: null,
+          prompt_tokens: null,
+          completion_tokens: null,
+          total_tokens: null,
+          search_calls: null,
+          estimated_cost_usd: null,
+        },
+      },
+      connection: "closed",
+    });
+    const insufficient = provisionalBanners.find((banner) => banner.id === "insufficient");
+    expect(insufficient?.detail).toContain("provisional answer");
   });
 
   it("does not invent a provider name", () => {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { EvalSnapshotPanel } from "../components/EvalSnapshotPanel";
 import { SectionHeading } from "../components/SectionMark";
 import { ErrorText, NoticeCluster, PageHeader, RunStatusBar } from "../components/ui";
 import { extractionLabel, formatWhen } from "../domain/format";
@@ -72,19 +73,22 @@ export function EvidencePage() {
         <NoticeCluster notices={notices} stickyHint={hint} scope={run.run_id} />
       </div>
       {sources.length === 0 ? (
-        <section className="panel">
-          <SectionHeading kind="sources">Sources</SectionHeading>
-          <p>No stored sources for this run yet.</p>
-          {discovered.length === 0 ? null : (
-            <ul className="feed">
-              {discovered.map((source) => (
-                <li key={source.sourceId}>
-                  {source.sourceId} · {extractionLabel(source.extractionMethod)} · progress event, not a stored passage
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <>
+          <EvalSnapshotPanel />
+          <section className="panel">
+            <SectionHeading kind="sources">Sources</SectionHeading>
+            <p>No stored sources for this run yet.</p>
+            {discovered.length === 0 ? null : (
+              <ul className="feed">
+                {discovered.map((source) => (
+                  <li key={source.sourceId}>
+                    {source.sourceId} · {extractionLabel(source.extractionMethod)} · progress event, not a stored passage
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
       ) : (
         <div className="evidence-grid">
           <section className="panel">

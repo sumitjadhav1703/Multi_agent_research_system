@@ -195,7 +195,7 @@ class McpReadRouteTests(unittest.TestCase):
         self.assertEqual(again.status_code, 409)
         self.assertEqual(again.json()["code"], "quota_consumed")
 
-    def test_evaluation_summary_is_authenticated_and_unmeasured(self) -> None:
+    def test_evaluation_summary_is_authenticated_and_shared(self) -> None:
         missing = self.client.get("/api/v1/evaluation/summary")
         self.assertEqual(missing.status_code, 401)
 
@@ -206,12 +206,14 @@ class McpReadRouteTests(unittest.TestCase):
         self.assertEqual(first.json(), second.json())
         body = first.json()
         self.assertTrue(body["published"])
-        self.assertFalse(body["measured"])
-        self.assertIsNone(body["judge"]["scores"])
-        self.assertFalse(body["judge"]["measured"])
         self.assertEqual(body["deterministic"]["system"], "fixture")
         self.assertEqual(body["systems_compared"], [])
+        # Published offline harness may be measured (Meta Muse fixture probe) or not.
+        self.assertIn("measured", body)
+        self.assertIn("judge", body)
+        self.assertEqual(body["judge"].get("measured"), body.get("measured"))
         encoded = json.dumps(body)
         self.assertNotIn(self.token, encoded)
-        self.assertNotIn("\"score\":", encoded)
         self.assertNotIn(self.token, first.text)
+        # Do not invent a percent accuracy field for guests.
+        self.assertNotIn("accuracy_percent", encoded)

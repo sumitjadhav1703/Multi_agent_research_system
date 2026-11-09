@@ -275,6 +275,133 @@ class CitationTests(unittest.TestCase):
         self.assertTrue(any("pdf_snippet_only" in warning for warning in warnings))
         self.assertFalse(GraphLimits(pdf_enabled=True).clamped().pdf_enabled)
 
+    def test_empty_claims_keep_writer_caveat_and_gap(self) -> None:
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_caveat",
+                    heading="Provisional answer (unverified)",
+                    body="Public sources did not confirm the latency figure.",
+                    evidence_ids=["ev-invented"],
+                    claim_ids=["cl-invented"],
+                    kind="caveat",
+                )
+            ],
+        )
+        repaired, repairs = assemble_report(report, [], [])
+        kinds = [section.kind for section in repaired.sections]
+        self.assertIn("caveat", kinds)
+        self.assertIn("gap", kinds)
+        caveat = next(section for section in repaired.sections if section.kind == "caveat")
+        self.assertEqual(caveat.heading, "Provisional answer (unverified)")
+        self.assertEqual(caveat.body, "Public sources did not confirm the latency figure.")
+        self.assertEqual(caveat.evidence_ids, [])
+        self.assertEqual(caveat.claim_ids, [])
+        gap = next(section for section in repaired.sections if section.kind == "gap")
+        self.assertEqual(gap.heading, "Insufficient evidence")
+        self.assertIn("unverified", gap.body.lower())
+        self.assertFalse(any(section.kind == "finding" for section in repaired.sections))
+        self.assertFalse(repairs)
+
+    def test_insufficient_finding_is_salvaged_as_provisional_caveat(self) -> None:
+        passage = _passage()
+        insufficient = Claim(
+            claim_id="cl_gap",
+            text="The lab did not measure widget latency.",
+            evidence_ids=["ev1"],
+            status="insufficient",
+            verification_reason="Not enough overlap.",
+        )
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_bad",
+                    heading="Finding",
+                    body="Widget latency looks lower in informal notes, but that is unverified.",
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_gap"],
+                    kind="finding",
+                )
+            ],
+        )
+        repaired, repairs = assemble_report(report, [insufficient], [passage])
+        self.assertFalse(any(section.kind == "finding" for section in repaired.sections))
+        caveats = [section for section in repaired.sections if section.kind == "caveat"]
+        self.assertEqual(len(caveats), 1)
+        self.assertEqual(caveats[0].heading, "Provisional answer (unverified)")
+        self.assertEqual(caveats[0].body, "Widget latency looks lower in informal notes, but that is unverified.")
+        self.assertEqual(caveats[0].evidence_ids, [])
+        self.assertEqual(caveats[0].claim_ids, [])
+        self.assertTrue(any(section.kind == "gap" and "cl_gap" in section.claim_ids for section in repaired.sections))
+        self.assertTrue(any("sec_bad" in note for note in repairs))
+        self.assertTrue(any("provisional caveat" in note.lower() for note in repairs))
+
+    def test_supported_path_keeps_findings_with_evidence(self) -> None:
+        passage = _passage()
+        supported = Claim(
+            claim_id="cl_ok",
+            text="Widget latency fell in the lab report.",
+            evidence_ids=["ev1"],
+            status="supported",
+            verification_reason="Quoted.",
+        )
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_good",
+                    heading="Finding",
+                    body="Widget latency fell in the lab report.",
+                    evidence_ids=["ev1"],
+                    claim_ids=["cl_ok"],
+                    kind="finding",
+                ),
+                ReportSection(
+                    section_id="sec_caveat",
+                    heading="Provisional answer (unverified)",
+                    body="Treat this as a limit note, not a finding.",
+                    evidence_ids=[],
+                    claim_ids=[],
+                    kind="caveat",
+                ),
+            ],
+        )
+        repaired, _repairs = assemble_report(report, [supported], [passage])
+        findings = [section for section in repaired.sections if section.kind == "finding"]
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].section_id, "sec_good")
+        self.assertEqual(findings[0].evidence_ids, ["ev1"])
+        self.assertEqual(findings[0].claim_ids, ["cl_ok"])
+        self.assertEqual(findings[0].body, supported.text)
+        caveats = [section for section in repaired.sections if section.kind == "caveat"]
+        self.assertEqual(len(caveats), 1)
+        self.assertEqual(caveats[0].evidence_ids, [])
+        finding_index = next(index for index, section in enumerate(repaired.sections) if section.kind == "finding")
+        caveat_index = next(index for index, section in enumerate(repaired.sections) if section.kind == "caveat")
+        self.assertLess(finding_index, caveat_index)
+
+    def test_caveat_without_evidence_is_not_a_citation_issue(self) -> None:
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_caveat",
+                    heading="Provisional answer (unverified)",
+                    body="No evidence-backed claim could be assessed.",
+                    evidence_ids=[],
+                    claim_ids=[],
+                    kind="caveat",
+                )
+            ],
+        )
+        issues = validate_citations(report, [], [], [])
+        codes = {issue.code for issue in issues}
+        self.assertNotIn("missing_evidence", codes)
+        self.assertNotIn("finding_without_evidence", codes)
+        self.assertNotIn("invented_citation", codes)
+
 
 if __name__ == "__main__":
     unittest.main()

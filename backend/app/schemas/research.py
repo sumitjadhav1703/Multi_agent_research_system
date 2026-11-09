@@ -86,7 +86,7 @@ class ReportSection(BaseModel):
     body: str
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
-    kind: Literal["finding", "conflict", "gap"] = "finding"
+    kind: Literal["finding", "conflict", "gap", "caveat"] = "finding"
 
 
 class ReportDraft(BaseModel):

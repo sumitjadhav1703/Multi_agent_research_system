@@ -11,7 +11,7 @@
 - **Lifespan wake resilience:** DB/checkpointer/retention/consumer failures no longer kill Uvicorn; `/health/live` stays up; `/health/ready` follows DB. Tests in `backend/tests/test_lifespan_resilience.py`.
 - **Retention on Render:** `DATA_RETENTION_*` env vars applied to `researchmind-api-sg` (deploy `dep-dbocmqrm8hqs7386s740` live).
 - **Capability matrix:** `backend/scripts/live_capability_matrix.py` run 2026-11-09 — all roles failed with `all_providers_unavailable`; raw Gemini → HTTP **503**. Documented, not pretended green.
-- **DeepEval:** bounded N=2 fixture probe; one Answer Relevancy 1.0; aggregate still unmeasured (see `docs/evals/RESULTS.md`).
+- **DeepEval:** Meta Muse Spark contributor full fixture judge published (20 runs / 80 scores / 0 errors; faithfulness 0.925, answer relevancy 0.700). Surfaced on README, landing hero footer, Evaluation page, and Evidence empty-state snapshot. Not a V1/V2 comparison.
 - **Offline matrix:** `scripts/run_offline_suites.sh` — V1 16 OK; backend 142 OK (1 skipped Postgres durability); evals 14 OK; deterministic 20/20. Frontend vitest 18/18, build OK, eslint OK after `globals` install. MCP vitest 29/29.
 - **Bug bash:** `docs/BUG_BASH_LOG.md` — no open P0; Gemini 503 is external P1 ops.
 - **Security review:** PASS WITH CONDITIONS (R04 partial, Free sleep, no MCP OAuth). Markdown image allowlist fixed post-review.
@@ -32,6 +32,28 @@
   2. **Reduce Free spin-down.** `.github/workflows/keep-api-awake.yml` pings `/api/v1/health/live` every ~10 minutes (plus `workflow_dispatch`). Demo keep-alive, not an SLA; GitHub cron can drift.
 - **Tests:** `backend/tests/test_startup_hang_guards.py` (deferred init + docs-while-starting) plus `backend/tests/test_lifespan_resilience.py`.
 - **Not claimed:** zero cold starts forever on Render Free; measured wake latency after this change until redeploy + idle interval.
+
+### Follow-up: provisional answer + Meta offline judge (2026-11-09)
+
+- **Bug:** weak/empty evidence produced only “Insufficient evidence / No evidence-backed claim could be assessed,” dropping any writer narrative (`assemble_report` kept only supported findings).
+- **Fix:** writer may emit `kind: caveat`; `assemble_report` keeps sanitized provisional answers and always pairs them with a gap warning; unsupported findings can be salvaged as caveat text. Console banner mentions provisional text when present.
+- **Eval:** offline DeepEval `EVALUATOR_MODEL=meta/muse-spark-1.3-contributor` via Meta Model API (`META_API_KEY` / aliases). Full fixture judge **20 runs, 80 numeric scores, 0 errors** published to `docs/evals/published-summary.json`, API, and Evaluation console. Deterministic self-check **20/20**. Not a V1/V2 comparison table.
+- **Tests:** backend suite + evals + frontend green on this branch. Mock graph smoke for the PostgreSQL-queue topic produced caveat+gap.
+- **Surfaces:** README Evaluation section; landing hero footer stats; Evaluation console page; Evidence empty-state `EvalSnapshotPanel`.
+
+### Remaining (honest residual — not blocking this publish)
+
+| Item | Status |
+|---|---|
+| Merge + redeploy this branch (API / Vercel / Worker if needed) | Ops — PR open |
+| Live Gemini / free-provider matrix green | External P1 — providers were 503 / unavailable when last measured |
+| Turnstile keys on guest demo path | Required for public guest research; env-ops |
+| SSRF R04 closed with egress proxy | Partial — in-process dial only |
+| MCP OAuth | Deferred (ADR 0006) |
+| V1 vs V2 DeepEval comparison table | Optional; user declined as mandatory |
+| Dataset freeze / second review / expand toward 50 | Open research hygiene (`evals/DATASET_CARD.md`) |
+| PDF parsing | Still open from earlier milestones |
+| “Production-ready” / SLA / paid upgrade | Explicitly not claimed |
 
 ---
 

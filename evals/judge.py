@@ -2,7 +2,9 @@
 
 Importing this module does not import DeepEval. Metric objects are built only
 after RM_EVAL_JUDGE=1, --confirm-offline, and prepare_eval_environment().
-Nothing here is called from the public FastAPI path.
+The judge uses Meta Model API (Muse Spark contributor) via EVALUATOR_MODEL and
+META_API_KEY / MODEL_API_KEY / LLAMA_API_KEY from the process environment.
+It does not load a .env file. Nothing here is called from the public FastAPI path.
 """
 from __future__ import annotations
 
@@ -51,6 +53,17 @@ def prepare_eval_environment() -> None:
     os.environ["DEEPEVAL_DISABLE_DOTENV"] = "1"
     os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"
     os.environ["LITELLM_MODE"] = "PRODUCTION"
+    # Meta Model API keys (dev.meta.ai) often arrive with a trailing newline.
+    for name in ("META_API_KEY", "MODEL_API_KEY", "LLAMA_API_KEY"):
+        raw = os.environ.get(name)
+        if raw:
+            os.environ[name] = raw.strip().strip('"').strip("'")
+    # LiteLLM's `meta/` provider reads META_API_KEY.
+    if not os.environ.get("META_API_KEY"):
+        for name in ("MODEL_API_KEY", "LLAMA_API_KEY"):
+            if os.environ.get(name):
+                os.environ["META_API_KEY"] = os.environ[name]
+                break
 
 
 def plan_judge_metrics(golden: dict, run: dict | None) -> list[dict[str, Any]]:
@@ -122,7 +135,8 @@ def execute_judge(
     prepare_eval_environment()
     if measure and metric_builder is None and not _credential_present():
         raise JudgeConfigError(
-            "Export GEMINI_API_KEY or GOOGLE_API_KEY in the process environment. "
+            "Export META_API_KEY (or MODEL_API_KEY / LLAMA_API_KEY) for EVALUATOR_MODEL "
+            "(Meta Model API / Muse Spark, offline DeepEval only). "
             "This command does not read a .env file."
         )
     version = None
@@ -205,7 +219,11 @@ def execute_judge(
 
 
 def _credential_present() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    return bool(
+        os.environ.get("META_API_KEY")
+        or os.environ.get("MODEL_API_KEY")
+        or os.environ.get("LLAMA_API_KEY")
+    )
 
 
 def _import_deepeval_version(allow_version_mismatch: bool) -> str:
@@ -230,8 +248,13 @@ def _import_deepeval_version(allow_version_mismatch: bool) -> str:
 def _build_model() -> Any:
     from deepeval.models import LiteLLMModel
 
-    # Do not pass api_key. LiteLLM reads the process environment at call time.
-    return LiteLLMModel(model=EVALUATOR_MODEL, temperature=0)
+    # Do not load .env. Prefer META_API_KEY for LiteLLM's meta/ Muse route.
+    api_key = (
+        os.environ.get("META_API_KEY")
+        or os.environ.get("MODEL_API_KEY")
+        or os.environ.get("LLAMA_API_KEY")
+    )
+    return LiteLLMModel(model=EVALUATOR_MODEL, api_key=api_key, temperature=0)
 
 
 def _build_metric(name: str, model: Any) -> Any:

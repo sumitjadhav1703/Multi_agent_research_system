@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from langgraph.runtime import Runtime
 from langgraph.types import Send, interrupt
@@ -668,11 +668,20 @@ def _planner_stop(error: str | None) -> str:
     return "provider_failure"
 
 
+_SECTION_KINDS: dict[str, Literal["finding", "conflict", "gap", "caveat"]] = {
+    "finding": "finding",
+    "conflict": "conflict",
+    "gap": "gap",
+    "caveat": "caveat",
+}
+
+
 def _report_from_payload(payload: dict[str, Any], fallback_title: str) -> ReportDraft:
     sections: list[ReportSection] = []
     for index, row in enumerate(payload.get("sections") or [], start=1):
         if not isinstance(row, dict):
             continue
+        kind_raw = str(row.get("kind") or "finding").strip().lower()
         sections.append(
             ReportSection(
                 section_id=f"sec{index}",
@@ -680,7 +689,7 @@ def _report_from_payload(payload: dict[str, Any], fallback_title: str) -> Report
                 body=str(row.get("body") or "")[:2000],
                 evidence_ids=[str(item) for item in row.get("evidence_ids") or []],
                 claim_ids=[str(item) for item in row.get("claim_ids") or []],
-                kind="finding",
+                kind=_SECTION_KINDS.get(kind_raw, "finding"),
             )
         )
     title = str(payload.get("title") or fallback_title)[:180]
