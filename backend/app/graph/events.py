@@ -26,10 +26,27 @@ def emit(event_type: str, node: str, payload: dict[str, Any] | None = None) -> d
 
 
 def number_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Assign stable event_id values. Never renumber existing ids from 1.
+
+    Resume paths append new events onto a checkpoint that already carried
+    numbered events. Renumbering from 1 collides with ids already persisted
+    (for example review.awaiting vs review.resumed) and the job log drops
+    the later event.
+    """
+    next_id = 1
+    for event in events:
+        existing = event.get("event_id")
+        if isinstance(existing, int) and existing >= next_id:
+            next_id = existing + 1
     numbered: list[dict[str, Any]] = []
-    for index, event in enumerate(events, start=1):
+    for event in events:
         item = dict(event)
-        item["event_id"] = index
+        existing = item.get("event_id")
+        if isinstance(existing, int) and existing > 0:
+            numbered.append(item)
+            continue
+        item["event_id"] = next_id
+        next_id += 1
         numbered.append(item)
     return numbered
 

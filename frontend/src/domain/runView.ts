@@ -8,7 +8,7 @@ import type {
 import { EMPTY_USAGE } from "../api/types";
 
 export const ACTIVE_STATUSES = new Set(["queued", "running", "review_required"]);
-export const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "expired"]);
+export const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "expired", "rejected"]);
 
 export type StageState = "pending" | "active" | "done" | "failed";
 export type BannerTone = "info" | "warning" | "danger" | "ok";
@@ -117,6 +117,8 @@ export function statusLabel(status: string): string {
       return "Cancelled";
     case "expired":
       return "Expired";
+    case "rejected":
+      return "Rejected";
     default:
       return status || "Unknown";
   }
@@ -337,6 +339,14 @@ export function noticeBanners(input: Parameters<typeof runBanners>[0]): Banner[]
   return runBanners(input).filter((banner) => banner.id !== "queued" && banner.id !== "running");
 }
 
+function failureDetail(run: ResearchRun): string {
+  const errorCode = run.error_code?.trim() ?? "";
+  if (errorCode) return `Error code: ${errorCode}.`;
+  const stopReason = run.stop_reason?.trim() ?? "";
+  if (stopReason) return `Stop reason: ${stopReason}.`;
+  return "The run failed before a report was approved.";
+}
+
 function statusBanner(run: ResearchRun): Banner {
   if (run.status === "queued") {
     return {
@@ -383,10 +393,10 @@ function statusBanner(run: ResearchRun): Banner {
       id: "failed",
       tone: "danger",
       title: "Failed",
-      detail: run.error_code ? `Error code: ${run.error_code}.` : "The run failed before a report was approved.",
+      detail: failureDetail(run),
     };
   }
-  if (isRejected(run)) {
+  if (run.status === "rejected" || isRejected(run)) {
     return {
       id: "rejected",
       tone: "danger",
@@ -451,6 +461,8 @@ export function nextActionHint(
       return "This run was cancelled.";
     case "expired":
       return "This run expired before it finished.";
+    case "rejected":
+      return "This run was rejected.";
     default:
       return null;
   }

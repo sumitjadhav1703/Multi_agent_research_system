@@ -33,6 +33,6 @@ ADR 0001 reserved the name `0003-queue-and-persistence.md`. Milestone 2 already 
 ## Consequences
 
 - Jobs, events, and evidence rows survive a process restart on SQLite and Postgres. Graph checkpoints survive a new connection only on Postgres.
-- A paused review is `review_required` and does not hold a lease. Approve, revise, or reject queues the same job again. The global active slot stays taken until the run reaches a terminal status.
+- A paused review is `review_required` and does not hold a lease. Approve, revise, or reject queues the same job again. The global active slot counts only `queued` and `running` (not `review_required`), so one guest awaiting review does not block every other start.
 - `QUEUE_CONSUMER_ENABLED=false` serves the API without leasing work. A deployment that wants runs to finish must leave it true and set `DATABASE_URL`.
 - No Redis, pgvector, WebSockets, or SSE in this milestone.

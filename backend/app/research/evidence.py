@@ -268,6 +268,7 @@ def run_worker_retrieval(
             subquestion_id=subquestion_id,
             status="failed",
             search_query=search_query,
+            search_calls=1,
             error="search_failed",
             warnings=["search failed"],
         )

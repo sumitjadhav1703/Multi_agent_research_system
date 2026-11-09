@@ -28,6 +28,7 @@ export function NewResearchPage() {
   const queryClient = useQueryClient();
   const [topic, setTopic] = useState("");
   const idempotencyKey = useRef<string | null>(null);
+  const startPending = useRef(false);
   const usage = useQuery({
     queryKey: ["usage"],
     enabled: Boolean(token),
@@ -46,8 +47,10 @@ export function NewResearchPage() {
       navigate(`/runs/${run.run_id}`, { state: { reused: Boolean(run.reused) } });
     },
   });
+  startPending.current = mutation.isPending;
 
   useEffect(() => {
+    if (startPending.current) return;
     idempotencyKey.current = null;
   }, [topic]);
 

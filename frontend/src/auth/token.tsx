@@ -20,7 +20,10 @@ export function TokenProvider({ children }: { children: ReactNode }) {
     setTokenState(value);
   }, []);
 
-  const clearToken = useCallback(() => setToken(null), [setToken]);
+  const clearToken = useCallback(() => {
+    sessionStorage.removeItem(CURRENT_RUN_KEY);
+    setToken(null);
+  }, [setToken]);
   const value = useMemo(() => ({ token, setToken, clearToken }), [token, setToken, clearToken]);
   return <TokenContext.Provider value={value}>{children}</TokenContext.Provider>;
 }

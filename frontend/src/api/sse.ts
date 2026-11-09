@@ -15,11 +15,14 @@ export interface StreamHandlers {
   onDrop: () => void;
 }
 
+const TERMINAL_STREAM_STATUSES = new Set(["completed", "failed", "cancelled", "expired", "rejected"]);
+
 export async function consumeRunStream(options: StreamHandlers): Promise<void> {
   let cursor = options.after;
   while (!options.signal.aborted) {
     let finished = false;
     let stop = false;
+    let handoff = false;
     try {
       await fetchEventSource(streamUrl(options.runId), {
         method: "GET",
@@ -32,8 +35,14 @@ export async function consumeRunStream(options: StreamHandlers): Promise<void> {
             options.onOpen();
             return;
           }
-          if (response.status === 401) options.onUnauthorized();
-          stop = true;
+          if (response.status === 401) {
+            options.onUnauthorized();
+            stop = true;
+          } else if (response.status === 404) {
+            stop = true;
+          } else {
+            handoff = true;
+          }
           throw new Error(`stream ${response.status}`);
         },
         onmessage(message) {
@@ -49,9 +58,14 @@ export async function consumeRunStream(options: StreamHandlers): Promise<void> {
             return;
           }
           if (message.event === "stream.closed") {
-            finished = true;
-            options.onClosed();
-            return;
+            const status = streamCloseStatus(parsed);
+            if (TERMINAL_STREAM_STATUSES.has(status)) {
+              finished = true;
+              options.onClosed();
+              return;
+            }
+            handoff = true;
+            throw new Error("stream closed transient");
           }
           if (!parsed || typeof parsed !== "object") return;
           const event = parsed as RunEvent;
@@ -60,7 +74,7 @@ export async function consumeRunStream(options: StreamHandlers): Promise<void> {
           options.onEvent(event);
         },
         onerror(error) {
-          if (finished || stop || options.signal.aborted) {
+          if (finished || stop || handoff || options.signal.aborted) {
             throw error instanceof Error ? error : new Error("stream stopped");
           }
           options.onDrop();
@@ -75,6 +89,12 @@ export async function consumeRunStream(options: StreamHandlers): Promise<void> {
     options.onDrop();
     await wait(1500, options.signal);
   }
+}
+
+function streamCloseStatus(parsed: unknown): string {
+  if (!parsed || typeof parsed !== "object") return "";
+  const status = (parsed as { status?: unknown }).status;
+  return typeof status === "string" ? status.trim() : "";
 }
 
 function streamHeaders(token: string, cursor: number): Record<string, string> {

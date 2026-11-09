@@ -5,6 +5,19 @@
 **Git:** `main` (Singapore public stack)  
 **Current gate:** **First-release SoT gaps closed or residual-documented; whole-project offline matrix green; live Singapore smoke + bug bash recorded.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP Worker live. Retention env set on Render. Not “production-ready.”
 
+### Follow-up: bug fix wave (2026-11-09, late)
+
+- **Fixed P1:** BI-P1-1 wall-clock, BI-P1-2 event ids / `review.resumed`, BI-P1-3 SSE retry, BI-P1-4 retention terminals only, BI-P1-5 active slot excludes `review_required`.
+- **Fixed P2:** search_calls on failure, job status `rejected`, prompt delimiters, guest clearToken, stop_reason banner, Turnstile reset, idempotency while starting, MCP wrangler API base → SG.
+- **Residuals left open:** BI-P1-6 providers, BI-P2-7/8 retry+lease race, BI-P2-16 forwarded-ips, BI-P2-18 ready/consumer, BI-P2-19 allowlist oracle, R04/R10/R12, MCP OAuth.
+- **Offline after fixes:** `RUN_NODE_SUITES=1 bash scripts/run_offline_suites.sh` — V1 16; backend 154 OK (1 skipped); evals 14; deterministic 20/20; frontend vitest 36; MCP 29. Discovery tests promoted to hard gates.
+- **Live:** health live/ready 200 (this tree not redeployed yet). Register: [`docs/BUG_INVENTORY.md`](BUG_INVENTORY.md).
+
+### Follow-up: find-only bug audit (2026-11-09, evening)
+
+- **Scope:** Inventory only (later fixed in the wave above).
+- **Register:** [`docs/BUG_INVENTORY.md`](BUG_INVENTORY.md).
+
 ### Follow-up: remaining-SoT + whole-project test plan (2026-11-09)
 
 - **SSRF:** in-process egress-style IP dial in `backend/app/security/egress_fetch.py`; R04 remains **partial** (no separate egress proxy).

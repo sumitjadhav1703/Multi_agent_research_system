@@ -30,5 +30,15 @@ Use the research topic as the report title.
 Return JSON only: {"title":"...","sections":[{"heading":"...","body":"...","evidence_ids":["ev_..."],"claim_ids":["cl1"],"kind":"finding"}]}"""
 
 
+_OPEN = "<<<UNTRUSTED_EVIDENCE>>>"
+_CLOSE = "<<<END_UNTRUSTED_EVIDENCE>>>"
+
+
 def untrusted_block(text: str) -> str:
-    return f"<<<UNTRUSTED_EVIDENCE>>>\n{text}\n<<<END_UNTRUSTED_EVIDENCE>>>"
+    """Wrap untrusted text. Neutralize delimiter lookalikes inside the body."""
+    body = (
+        str(text or "")
+        .replace(_OPEN, "[[UNTRUSTED_EVIDENCE]]")
+        .replace(_CLOSE, "[[END_UNTRUSTED_EVIDENCE]]")
+    )
+    return f"{_OPEN}\n{body}\n{_CLOSE}"

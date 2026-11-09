@@ -11,6 +11,6 @@
     }
   },
   "vars": {
-    "RESEARCHMIND_API_BASE": "http://127.0.0.1:8000"
+    "RESEARCHMIND_API_BASE": "https://researchmind-api-sg.onrender.com"
   }
 }

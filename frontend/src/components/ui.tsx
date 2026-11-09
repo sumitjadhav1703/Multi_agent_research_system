@@ -142,7 +142,7 @@ export function StatusPill({ status }: { status: string }) {
 }
 
 function toneFor(status: string): BannerTone {
-  if (status === "failed" || status === "expired") return "danger";
+  if (status === "failed" || status === "expired" || status === "rejected") return "danger";
   if (status === "review_required" || status === "cancelled") return "warning";
   if (status === "completed") return "ok";
   return "info";

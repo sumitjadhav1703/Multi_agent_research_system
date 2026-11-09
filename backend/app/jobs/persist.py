@@ -67,7 +67,7 @@ def _finalize_owned(
             # load is not overwritten by completed/review_required.
             _refresh_cancel_flag(session, job)
             status = result.status if result.status in _KNOWN else "failed"
-            if job.cancel_requested and status in {"completed", "review_required"}:
+            if job.cancel_requested and status in {"completed", "review_required", "rejected"}:
                 status = "cancelled"
             job.status = status
             job.approval_status = result.approval_status
@@ -106,7 +106,16 @@ def _finalize_owned(
         session.close()
 
 
-_KNOWN = {"queued", "running", "review_required", "completed", "failed", "cancelled", "expired"}
+_KNOWN = {
+    "queued",
+    "running",
+    "review_required",
+    "completed",
+    "failed",
+    "cancelled",
+    "expired",
+    "rejected",
+}
 
 
 def _load_owned_job(session: Session, job_id: str, *, worker_id: str):
@@ -229,7 +238,9 @@ def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: Exe
 
 def _append_new_events(session: Session, job_id: str, events: list[dict], now: str) -> None:
     existing = list(session.scalars(select(JobEvent).where(JobEvent.job_id == job_id)).all())
-    seen_ids: set[int] = set()
+    # Dedupe by (event_id, event_type). Same id with a different type must land
+    # (review.awaiting vs review.resumed after a renumber collision).
+    seen_pairs: set[tuple[int, str]] = set()
     seen_types: set[str] = set()
     current = 0
     for row in existing:
@@ -240,11 +251,11 @@ def _append_new_events(session: Session, job_id: str, events: list[dict], now: s
         except json.JSONDecodeError:
             payload = {}
         if isinstance(payload, dict) and isinstance(payload.get("event_id"), int):
-            seen_ids.add(payload["event_id"])
+            seen_pairs.add((payload["event_id"], row.event_type))
     for event in events:
         event_type = str(event.get("type") or "run.event")[:80]
         event_id = event.get("event_id")
-        if isinstance(event_id, int) and event_id in seen_ids:
+        if isinstance(event_id, int) and (event_id, event_type) in seen_pairs:
             continue
         if event_type.startswith("run.") and event_type in seen_types and not isinstance(event_id, int):
             continue
@@ -264,7 +275,7 @@ def _append_new_events(session: Session, job_id: str, events: list[dict], now: s
         )
         seen_types.add(event_type)
         if isinstance(event_id, int):
-            seen_ids.add(event_id)
+            seen_pairs.add((event_id, event_type))
 
 
 def _optional_int(value: object) -> int | None:

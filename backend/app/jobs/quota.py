@@ -23,8 +23,9 @@ from backend.app.jobs.timeutil import add_seconds, utc_day, utc_now
 from backend.app.jobs.turnstile import TurnstileVerifier
 from backend.app.observability import start_span
 
-ACTIVE_STATUSES = ("queued", "running", "review_required")
-TERMINAL_STATUSES = ("completed", "failed", "cancelled", "expired")
+# review_required is paused human review: it must not hold the global active slot.
+ACTIVE_STATUSES = ("queued", "running")
+TERMINAL_STATUSES = ("completed", "failed", "cancelled", "expired", "rejected")
 CONFIG_VERSION = "m3-queue-v1"
 
 # Postgres locks the singleton row before the active-job count. Under READ

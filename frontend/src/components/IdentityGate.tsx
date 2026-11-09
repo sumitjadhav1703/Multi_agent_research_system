@@ -1,11 +1,19 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { createGuest, readEnv } from "../api/client";
 import { useToken } from "../auth/token";
 import { ErrorText } from "./ui";
 
+interface TurnstileRenderOptions {
+  sitekey: string;
+  callback: (token: string) => void;
+  "expired-callback"?: () => void;
+  "error-callback"?: () => void;
+}
+
 interface TurnstileApi {
-  render: (element: HTMLElement, options: { sitekey: string; callback: (token: string) => void }) => void;
+  render: (element: HTMLElement, options: TurnstileRenderOptions) => string | undefined;
+  reset?: (widgetId?: string) => void;
 }
 
 declare global {
@@ -19,9 +27,24 @@ export function IdentityGate() {
   const siteKey = readEnv("VITE_TURNSTILE_SITE_KEY");
   const [verification, setVerification] = useState("");
   const [widgetNote, setWidgetNote] = useState("");
+  const widgetIdRef = useRef<string | undefined>(undefined);
+  const resettingRef = useRef(false);
+  const refreshVerification = useCallback(() => {
+    setVerification("");
+    const api = window.turnstile;
+    if (typeof api?.reset !== "function" || resettingRef.current) return;
+    resettingRef.current = true;
+    try {
+      if (widgetIdRef.current) api.reset(widgetIdRef.current);
+      else api.reset();
+    } finally {
+      resettingRef.current = false;
+    }
+  }, []);
   const mutation = useMutation({
     mutationFn: (turnstileToken: string) => createGuest(turnstileToken),
     onSuccess: (body) => setToken(body.guest_token),
+    onError: () => refreshVerification(),
   });
 
   useEffect(() => {
@@ -36,7 +59,13 @@ export function IdentityGate() {
       attempts += 1;
       const node = document.getElementById("turnstile-widget");
       if (window.turnstile && node && node.childElementCount === 0) {
-        window.turnstile.render(node, { sitekey: siteKey, callback: setVerification });
+        const widgetId = window.turnstile.render(node, {
+          sitekey: siteKey,
+          callback: setVerification,
+          "expired-callback": refreshVerification,
+          "error-callback": refreshVerification,
+        });
+        widgetIdRef.current = typeof widgetId === "string" ? widgetId : undefined;
         window.clearInterval(timer);
       }
       if (attempts > 20) {
@@ -48,7 +77,7 @@ export function IdentityGate() {
       window.clearInterval(timer);
       script.remove();
     };
-  }, [siteKey]);
+  }, [refreshVerification, siteKey]);
 
   return (
     <section className="panel stack gate-panel">

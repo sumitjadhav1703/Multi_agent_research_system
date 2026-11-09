@@ -183,14 +183,13 @@ def _run_graph(
             return _from_state(state, status="review_required")
         if has_values:
             return _from_outcome(runner.continue_from_checkpoint(job_id))
-    started = time.monotonic()
+    # Sync invoke already finished (review_required / completed / failed).
+    # Do not overwrite that outcome with expired after the fact; mid-run
+    # wall-clock interrupt is not enforced on this path. max_wall_clock_seconds
+    # is only used for the <= 0 early reject above.
+    _ = max_wall_clock_seconds
     outcome = runner.start(topic, owner_id=owner_id, run_id=job_id)
-    result = _from_outcome(outcome)
-    if time.monotonic() - started > max_wall_clock_seconds:
-        result.status = "expired"
-        result.error_code = "wall_clock"
-        result.error_detail = "wall_clock"
-    return result
+    return _from_outcome(outcome)
 
 
 def _honor_cancel(
@@ -203,7 +202,7 @@ def _honor_cancel(
     This does not interrupt an HTTP call already in flight. The check runs after
     start, resume, or continue_from_checkpoint returns.
     """
-    if result.status not in {"completed", "review_required"}:
+    if result.status not in {"completed", "review_required", "rejected"}:
         return result
     try:
         session = session_factory()
@@ -224,9 +223,13 @@ def _honor_cancel(
 
 def _from_outcome(outcome: Any) -> ExecutionResult:
     state = dict(outcome.state or {})
+    approval = str(outcome.approval_status or state.get("approval_status") or "")
+    stop_reason = state.get("stop_reason") or getattr(outcome, "stop_reason", None)
     if outcome.interrupted:
         status = "review_required"
-    elif state.get("terminal_failure") or outcome.approval_status == "failed":
+    elif approval == "rejected" or stop_reason == "human_rejected":
+        status = "rejected"
+    elif state.get("terminal_failure") or approval == "failed":
         status = "failed"
     else:
         status = "completed"

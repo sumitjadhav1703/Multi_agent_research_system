@@ -29,6 +29,14 @@ Follow-up fixed in-tree after review: markdown images gated to allowlisted http(
 - **P1 code:** none remaining after lifespan resilience + eslint `globals` fix + image allowlist.
 - **P1 external:** Gemini 503 blocks live provider matrix and fuller judge runs until the provider recovers (ops/quota, not an app crash).
 
+## Follow-up find-only audit (2026-11-09, later)
+
+A second whole-project find pass (static + discovery tests + bounded live smoke) recorded **new confirmed P1 code defects** that were not in the original bash table. See [`docs/BUG_INVENTORY.md`](BUG_INVENTORY.md). Graph topology remains connected.
+
+## Fix wave (2026-11-09, late)
+
+Product fixes landed for BI-P1-1…5 and the high-confidence P2 cluster (see inventory). Offline matrix green after promotion of discovery tests. Live health still 200; this fix tree was not redeployed to Render/Vercel/Workers in the same step. Residuals (R04, lease race, forwarded-ips, provider ops) remain open.
+
 ## Notes
 
 - Full guest Turnstile → research run → SSE was not completed in this bash (would consume the one-use quota and needs a browser Turnstile token). Authz and health paths were exercised instead.

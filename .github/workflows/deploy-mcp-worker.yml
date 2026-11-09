@@ -1,0 +1,50 @@
+# Auto-deploy the ResearchMind MCP Cloudflare Worker on push to main
+# (same idea as Render/Vercel git auto-deploy).
+#
+# Required GitHub Actions secrets (repo Settings → Secrets → Actions):
+#   CLOUDFLARE_API_TOKEN   — Workers Scripts Edit (or Account Workers Scripts Edit)
+#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account id
+#
+# Optional: also connect Workers Builds in the Cloudflare dashboard
+# (Worker → Settings → Builds → Connect GitHub, root directory mcp-server/).
+name: Deploy MCP Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mcp-server/**"
+      - ".github/workflows/deploy-mcp-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-mcp-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Worker tests
+        run: npm test
+      - name: Deploy with Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: mcp-server
+          command: deploy

@@ -129,9 +129,16 @@ def run_retention_pass(
 def _select_old_jobs(
     session: Session, *, cutoff: str, batch_size: int
 ) -> tuple[list[str], list[str]]:
+    # Never purge open work: queued / running / review_required stay until
+    # they reach a terminal status (or are cancelled).
+    from backend.app.jobs.quota import TERMINAL_STATUSES
+
     rows = session.execute(
         select(ResearchJob.id, ResearchJob.thread_id)
-        .where(ResearchJob.created_at < cutoff)
+        .where(
+            ResearchJob.created_at < cutoff,
+            ResearchJob.status.in_(TERMINAL_STATUSES),
+        )
         .order_by(ResearchJob.created_at.asc())
         .limit(batch_size)
     ).all()

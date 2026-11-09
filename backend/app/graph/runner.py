@@ -113,14 +113,22 @@ class ResearchGraphRunner:
             stop_reason=str(state.get("stop_reason") or "none"),
         )
         if payload_value is not None:
+            max_id = 0
+            for event in events:
+                eid = event.get("event_id")
+                if isinstance(eid, int) and eid > max_id:
+                    max_id = eid
             events.append(
                 {
-                    "event_id": len(events) + 1,
+                    "event_id": max_id + 1,
                     "type": "review.awaiting",
                     "node": "human_review",
                     "payload": payload_value if isinstance(payload_value, dict) else {"value": str(payload_value)[:500]},
                 }
             )
+        # Persist stable ids into checkpoint state so the next resume does not
+        # renumber from 1 and collide with already-stored job_events rows.
+        state["events"] = list(events)
         return RunOutcome(
             run_id=run_id,
             interrupted=payload_value is not None,

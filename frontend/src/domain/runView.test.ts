@@ -69,6 +69,7 @@ describe("run view", () => {
     expect(titles("review_required")).toContain("Review required");
     expect(titles("completed", [], { approval_status: "rejected", stop_reason: "human_rejected" })).toContain("Rejected");
     expect(titles("failed", [], { error_code: "graph_error" })).toContain("Failed");
+    expect(titles("rejected")).toContain("Rejected");
     expect(titles("cancelled")).toContain("Cancelled");
     expect(titles("expired")).toContain("Expired");
     expect(titles("completed", [event(3, "worker.failed")])).toContain("Partial result");
@@ -154,6 +155,17 @@ describe("run view", () => {
     expect(nextActionHint(run("completed"), true, "report")).toContain("full write-up below");
     expect(nextActionHint(run("completed"), true, "evidence")).toContain("passages below");
     expect(nextActionHint(run("completed"), false, "evidence")).toContain("No stored answer");
+    expect(nextActionHint(run("rejected"), false)).toContain("rejected");
+  });
+
+  it("uses stop_reason when a failed run has an empty error code", () => {
+    const banners = runBanners({
+      run: run("failed", { error_code: "  ", stop_reason: "provider_failure" }),
+      events: [],
+      snapshot: null,
+      connection: "closed",
+    });
+    expect(banners.find((banner) => banner.id === "failed")?.detail).toContain("provider_failure");
   });
 
   it("counts sources from snapshot or discovered/extracted events", () => {
