@@ -376,7 +376,16 @@ def enforce_claim_assessments(claims: list[Claim], passages: list[Passage]) -> t
         status = claim.status
         reason = claim.verification_reason
         evidence_ids = [passage.evidence_id for passage in known]
-        if status == "supported":
+        if is_auto_passage_claim(claim):
+            # Quote-as-claim seeds always overlap their own passage; never promote them.
+            if status != "insufficient":
+                notes.append(f"Kept {claim.claim_id} insufficient (passage excerpt seed)")
+            status = "insufficient"
+            reason = (
+                "Deterministic passage excerpt seed. Not a supported finding and not "
+                "eligible for verification upgrade."
+            )
+        elif status == "supported":
             grounded = [passage for passage in known if claim_grounded(claim.text, passage.quote)]
             if not grounded:
                 status = "insufficient"
@@ -636,8 +645,18 @@ def provisional_caveat_section(
     )
 
 
+def is_auto_passage_claim(claim: Claim) -> bool:
+    """True for deterministic passage seeds — never eligible to become supported findings."""
+    return claim.claim_id.startswith("cl_auto_")
+
+
 def claims_from_passages(passages: list[Passage], *, max_claims: int = 4) -> list[Claim]:
-    """Deterministic insufficient claims from passage quotes when the extractor returns none."""
+    """Deterministic insufficient claims from passage quotes when the extractor returns none.
+
+    These seeds exist so the writer/provisional path has excerpt text. They must stay
+    insufficient: the quote is copied as the claim text, so a naive verifier would
+    otherwise mark them supported and skip follow-up search.
+    """
     proposals: list[Claim] = []
     for passage in passages:
         quote = " ".join(passage.quote.split())
@@ -649,7 +668,10 @@ def claims_from_passages(passages: list[Passage], *, max_claims: int = 4) -> lis
                 text=quote[:500],
                 evidence_ids=[passage.evidence_id],
                 status="insufficient",
-                verification_reason="Deterministic excerpt pending verification. Not a supported finding.",
+                verification_reason=(
+                    "Deterministic passage excerpt seed. Not a supported finding and not "
+                    "eligible for verification upgrade."
+                ),
             )
         )
         if len(proposals) >= max_claims:
@@ -666,6 +688,12 @@ def _ledger_gap_body(claims: list[Claim], passages: list[Passage] | None = None)
         return " ".join(
             f"{claim.claim_id}: {claim.text} {claim.verification_reason}".strip() for claim in conflicts
         )[:2000]
+    supported = [claim for claim in claims if claim.status == "supported" and claim.text.strip()]
+    if supported:
+        return (
+            "Supported findings are listed above. This coverage note replaces ungrounded "
+            "writer gap text and does not mean the ledger lacked verified rows."
+        )
     usable = [passage for passage in (passages or []) if passage.quote.strip()]
     if usable:
         return (
@@ -673,6 +701,28 @@ def _ledger_gap_body(claims: list[Claim], passages: list[Passage] | None = None)
             "see the provisional excerpts above."
         )
     return "No claim ledger rows were available to describe this coverage gap."
+
+
+def _caveat_already_grounded(
+    body: str,
+    claims: list[Claim],
+    passages: list[Passage],
+) -> bool:
+    """True when a writer caveat already carries claim text or passage excerpt ids."""
+    text = body.strip()
+    if not text:
+        return False
+    for passage in passages:
+        if passage.quote.strip() and passage.evidence_id in text:
+            return True
+        quote = " ".join(passage.quote.split())[:48]
+        if len(quote) >= 24 and quote in text:
+            return True
+    for claim in unsupported_claims(claims):
+        snippet = claim.text.strip()[:48]
+        if len(snippet) >= 24 and snippet in text:
+            return True
+    return False
 
 
 def _gap_body_grounded(body: str, claims: list[Claim]) -> bool:
@@ -820,11 +870,23 @@ def assemble_report(
             repairs.append(f"Added deterministic finding for {claim.claim_id}")
     has_supported_finding = bool(kept)
     sections: list[ReportSection] = []
+    answer_topic = (topic or report.title or "this question").strip()
     if has_supported_finding:
         sections.extend(kept)
         sections.extend(kept_caveats)
     elif kept_caveats:
-        sections.extend(kept_caveats)
+        # Prefer passage/claim-backed synthesis over a generic writer caveat that
+        # survived sanitize but still carries no excerpts (fusion empty-answer path).
+        synthesized = provisional_caveat_section(answer_topic, claims, passages)
+        if (
+            synthesized is not None
+            and any(passage.quote.strip() for passage in passages)
+            and not any(_caveat_already_grounded(caveat.body, claims, passages) for caveat in kept_caveats)
+        ):
+            sections.append(synthesized)
+            repairs.append("Replaced generic writer caveat with passage-backed provisional")
+        else:
+            sections.extend(kept_caveats)
     elif salvaged_bodies:
         sections.append(
             ReportSection(
@@ -838,7 +900,6 @@ def assemble_report(
         )
         repairs.append("Salvaged dropped finding as provisional caveat")
     elif not has_supported_finding:
-        answer_topic = (topic or report.title or "this question").strip()
         synthesized = provisional_caveat_section(answer_topic, claims, passages)
         if synthesized is not None:
             sections.append(synthesized)
