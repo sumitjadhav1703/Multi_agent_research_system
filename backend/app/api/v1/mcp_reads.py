@@ -7,6 +7,8 @@ manually published harness note. It is not a quality score.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -23,11 +25,8 @@ router = APIRouter(tags=["mcp-reads"])
 _MAX_CITATIONS = 20
 _MAX_PASSAGES = 20
 
-# Checked-in note from docs/evals/RESULTS.md (updated 2026-11-09).
-# Aggregate comparison stays unmeasured: no V1/V2-A/V2-B table and no mean.
-# A bounded fixture probe recorded one numeric Answer Relevancy on g001; that
-# single value is not published here as a quality score (nulls are not zeros).
-PUBLISHED_EVALUATION_SUMMARY: dict[str, object] = {
+# Fallback if docs/evals/published-summary.json is missing from the image.
+_FALLBACK_EVALUATION_SUMMARY: dict[str, object] = {
     "published": True,
     "visibility": "authenticated",
     "measured": False,
@@ -39,16 +38,10 @@ PUBLISHED_EVALUATION_SUMMARY: dict[str, object] = {
     "judge": {
         "measured": False,
         "deepeval_version": "4.3.3",
-        "model": "gemini/gemini-flash-latest",
+        "model": "meta_llama/Llama-3.3-8B-Instruct",
         "temperature": 0,
         "scores": None,
-        "note": (
-            "No mean, median, or per-category judge score exists. "
-            "2026-11-09 bounded fixture probe (N=2) recorded one Answer Relevancy "
-            "of 1.0 on g001; seven other eligible metrics stayed null "
-            "(timeouts / Gemini HTTP 503). That probe is not a V1 versus V2 table. "
-            "A null score is not a zero."
-        ),
+        "note": "Published summary file was not found in this deployment.",
     },
     "deterministic": {
         "kind": "fixture_self_check",
@@ -63,6 +56,28 @@ PUBLISHED_EVALUATION_SUMMARY: dict[str, object] = {
         ),
     },
 }
+
+
+def _load_published_evaluation_summary() -> dict[str, object]:
+    """Prefer the checked-in JSON shipped with the backend image (and docs copy)."""
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "data" / "evaluation_summary.json",  # backend/app/data (in Docker)
+        here.parents[4] / "docs" / "evals" / "published-summary.json",  # repo checkout
+        Path.cwd() / "docs" / "evals" / "published-summary.json",
+    ]
+    for path in candidates:
+        try:
+            if path.is_file():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    return data
+        except (OSError, json.JSONDecodeError):
+            continue
+    return dict(_FALLBACK_EVALUATION_SUMMARY)
+
+
+PUBLISHED_EVALUATION_SUMMARY: dict[str, object] = _load_published_evaluation_summary()
 
 
 def _owned_snapshot(session: Session, run_id: str, token: str) -> dict[str, object]:
@@ -120,21 +135,17 @@ def get_claim_evidence(
 ) -> dict[str, object]:
     snapshot = call_db(lambda: _owned_snapshot(session, run_id, token))
     claims = snapshot["claims"] if isinstance(snapshot["claims"], list) else []
-    claim = next(
-        (item for item in claims if isinstance(item, dict) and item.get("claim_id") == claim_id),
-        None,
-    )
+    claim = next((item for item in claims if isinstance(item, dict) and item.get("claim_id") == claim_id), None)
     if claim is None:
         raise JobServiceError(404, "claim_not_found", "Claim not found.")
-    wanted = {str(item) for item in claim.get("evidence_ids") or []}
     passages = snapshot["passages"] if isinstance(snapshot["passages"], list) else []
+    wanted = set(claim.get("evidence_ids") or [])
     linked = [
         item
         for item in passages
-        if isinstance(item, dict) and str(item.get("evidence_id")) in wanted
+        if isinstance(item, dict) and item.get("evidence_id") in wanted
     ][:_MAX_PASSAGES]
-    found = {str(item.get("evidence_id")) for item in linked}
-    missing = [item for item in claim.get("evidence_ids") or [] if str(item) not in found]
+    missing = sorted(wanted - {item.get("evidence_id") for item in linked if isinstance(item, dict)})
     return {
         "run_id": run_id,
         "wording": EVIDENCE_WORDING,
@@ -151,4 +162,5 @@ def evaluation_summary(
 ) -> dict[str, object]:
     """Authenticated read of the published summary. The body is not per-user."""
     call_db(lambda: identity_from_token(session, token))
-    return dict(PUBLISHED_EVALUATION_SUMMARY)
+    # Reload so a redeployed JSON file is visible without code edits.
+    return _load_published_evaluation_summary()

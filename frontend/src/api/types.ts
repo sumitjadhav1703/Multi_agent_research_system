@@ -114,3 +114,48 @@ export interface EventsPage {
   run_id: string;
   events: RunEvent[];
 }
+
+export interface EvaluationSummary {
+  published: boolean;
+  visibility?: string;
+  measured: boolean;
+  dataset?: string;
+  dataset_cases?: number;
+  systems_compared?: string[];
+  frozen_source_snapshot?: boolean;
+  run_date?: string;
+  judge?: {
+    measured: boolean;
+    deepeval_version?: string;
+    model?: string;
+    temperature?: number;
+    scores?: Record<string, number> | null;
+    cases_judged?: number;
+    numeric_scores?: number;
+    note?: string;
+    metrics?: { name: string; result: string }[];
+  };
+  deterministic?: {
+    kind?: string;
+    system?: string;
+    dataset?: number;
+    runs: number;
+    fixture_mismatches: number;
+    unlabeled_issues?: number;
+    passed?: boolean;
+    chart?: { label: string; count: number }[];
+    rows?: {
+      run_id: string;
+      case_id: string;
+      system?: string;
+      issue_codes: string[];
+      expect_issue_codes?: string[] | null;
+      matched_expectation: boolean | null;
+    }[];
+    note?: string;
+  };
+  citation_checks?: {
+    note?: string;
+    fixture_self_check_passed?: boolean;
+  };
+}

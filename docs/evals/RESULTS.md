@@ -68,7 +68,9 @@ It is not a V1 versus V2 comparison. It is not a 32-question benchmark. The pass
 
 These are pass/fail codes on hand-built fixture artifacts (`system: fixture`), not quality scores for a research system.
 
-On 2026-11-09 the fixture self-check reported `dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0`. `python -m unittest discover -s evals/tests -v` reported 14 tests, OK, in 3.228s, with 0 skipped and 0 failed. Those counts check the harness and the fixtures. They are not a baseline-versus-V2 table.
+On 2026-11-09 (later same day, Meta-eval branch) the fixture self-check again reported `dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0`. Raw output is local/gitignored at `evals/results/deterministic-2026-11-09.json`. The committed publish for the console/API is `docs/evals/published-summary.json` (copied to `frontend/src/data/evaluationSummary.json` and `backend/app/data/evaluation_summary.json`).
+
+A measured Meta Llama 8B DeepEval judge run was **not** completed in the cloud agent because `LLAMA_API_KEY` was absent from the process environment. The Evaluation page therefore shows deterministic fixture rows plus honest “not measured / skipped” LLM-judge cells — not invented scores.
 
 ## Commands
 

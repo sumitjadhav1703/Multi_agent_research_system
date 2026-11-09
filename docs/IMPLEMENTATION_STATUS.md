@@ -37,8 +37,8 @@
 
 - **Bug:** weak/empty evidence produced only “Insufficient evidence / No evidence-backed claim could be assessed,” dropping any writer narrative (`assemble_report` kept only supported findings).
 - **Fix:** writer may emit `kind: caveat`; `assemble_report` keeps sanitized provisional answers and always pairs them with a gap warning; unsupported findings can be salvaged as caveat text. Console banner mentions provisional text when present.
-- **Eval:** offline DeepEval `EVALUATOR_MODEL=meta_llama/Llama-3.3-8B-Instruct` via `LLAMA_API_KEY` (not on the public free allowlist). Dry-run judge OK in the cloud agent; measured Meta scores **not** recorded here because the key was absent from the agent process env.
-- **Tests:** backend 152 OK (2 skipped); evals 14 OK (1 skipped); frontend 23 OK. Mock graph smoke for the PostgreSQL-queue topic produced caveat+gap.
+- **Eval:** offline DeepEval `EVALUATOR_MODEL=meta_llama/Llama-3.3-8B-Instruct` via `LLAMA_API_KEY` (not on the public free allowlist). Dry-run judge OK; measured Meta scores **not** recorded because the key was absent from the agent process env. Deterministic fixture self-check **20/20** published to `docs/evals/published-summary.json` and the Evaluation console page.
+- **Tests:** backend suite + evals + frontend green on this branch. Mock graph smoke for the PostgreSQL-queue topic produced caveat+gap.
 
 ---
 
