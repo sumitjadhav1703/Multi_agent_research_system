@@ -317,6 +317,50 @@ class ModelClientTests(unittest.TestCase):
         self.assertIn("last-resort:", result.content)
         self.assertEqual(result.model, "meta/muse-spark-1.3-contributor")
 
+    def test_eval_judge_never_uses_meta_last_resort(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockTimeoutError),
+        )
+        calls: list[str] = []
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, api_key, kwargs
+            calls.append(model)
+            raise AssertionError("eval_judge must not escalate to Meta")
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        with self.assertRaises(AllProvidersUnavailable):
+            client.complete("eval_judge", [{"role": "user", "content": "score"}])
+        self.assertEqual(calls, [])
+        self.assertEqual([call["model"] for call in router.calls], ["rm-eval-judge"])
+
+    def test_last_resort_refuses_non_meta_model_override(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
+        # Bypass startup validator to prove the invoke-time guard.
+        settings.meta_last_resort_model = "groq/openai/gpt-oss-20b"
+        model_list, fallbacks = build_model_list_and_fallbacks(settings)
+        router = MockRouter(
+            model_list=model_list,
+            fallbacks=fallbacks,
+            behavior=always_fail(MockTimeoutError),
+        )
+        calls: list[str] = []
+
+        def last_resort(*, model, messages, api_key, **kwargs):
+            del messages, kwargs
+            calls.append(f"{model}:{api_key}")
+            raise AssertionError("must not call LiteLLM with Meta key for a non-meta model")
+
+        client = ModelClient(settings=settings, router=router, last_resort_complete=last_resort)
+        with self.assertRaises(AllProvidersUnavailable) as caught:
+            client.complete("planner", [{"role": "user", "content": "plan"}])
+        self.assertIn("meta/", str(caught.exception).lower())
+        self.assertEqual(calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()

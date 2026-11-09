@@ -75,6 +75,11 @@ class RouterFactoryTests(unittest.TestCase):
         self.assertTrue(settings.meta_last_resort_active())
         self.assertEqual(settings.meta_last_resort_model, "meta/muse-spark-1.3-contributor")
 
+    def test_non_meta_last_resort_model_fails_closed_at_startup(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            mock_settings(META_LAST_RESORT_MODEL="groq/openai/gpt-oss-20b")
+        self.assertIn("meta/", str(caught.exception).lower())
+
 
 if __name__ == "__main__":
     unittest.main()

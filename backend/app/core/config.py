@@ -291,6 +291,14 @@ class Settings(BaseSettings):
 
         for model_id in self.configured_model_ids():
             _assert_model_allowed(model_id, allow)
+        last_resort = (self.meta_last_resort_model or "").strip()
+        if not last_resort:
+            raise ValueError("META_LAST_RESORT_MODEL cannot be empty.")
+        if not last_resort.lower().startswith("meta/"):
+            raise ValueError(
+                "META_LAST_RESORT_MODEL must be a LiteLLM meta/ Muse route "
+                f"(got '{last_resort}'). Refusing so a Meta key is never sent elsewhere."
+            )
         if self.data_retention_days < 1:
             raise ValueError("DATA_RETENTION_DAYS must be at least 1.")
         if self.data_retention_interval_seconds < 1:

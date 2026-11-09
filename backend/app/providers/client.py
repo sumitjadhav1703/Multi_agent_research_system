@@ -30,6 +30,11 @@ from backend.app.providers.usage import TokenUsage, extract_usage
 
 LastResortComplete = Callable[..., Any]
 
+# Meta last-resort is for live research graph LLM nodes only — not offline eval_judge.
+GRAPH_LAST_RESORT_ROLES: frozenset[RoleName] = frozenset(
+    {"planner", "researcher", "verifier", "writer"}
+)
+
 
 @dataclass(frozen=True)
 class ModelResponse:
@@ -99,11 +104,15 @@ class ModelClient:
                 raw = self.router.completion(model=alias, messages=messages, **kwargs)
             except Exception as exc:  # noqa: BLE001 — normalized below
                 mapped = self._map_exception(exc)
-                if self._should_try_last_resort(mapped):
+                if self._should_try_last_resort(role, mapped):
                     try:
                         raw = self._invoke_last_resort(messages=messages, **kwargs)
                     except Exception as last_exc:  # noqa: BLE001
-                        last_mapped = self._map_exception(last_exc)
+                        last_mapped = (
+                            last_exc
+                            if isinstance(last_exc, ModelClientError)
+                            else self._map_exception(last_exc)
+                        )
                         span.set(
                             **{
                                 "error.code": type(last_mapped).__name__,
@@ -180,7 +189,10 @@ class ModelClient:
             last_resort=last_resort,
         )
 
-    def _should_try_last_resort(self, error: ModelClientError) -> bool:
+    def _should_try_last_resort(self, role: RoleName, error: ModelClientError) -> bool:
+        # Graph LLM roles only — never escalate eval_judge (or any other role) to Meta.
+        if role not in GRAPH_LAST_RESORT_ROLES:
+            return False
         if not self.settings.meta_last_resort_active():
             return False
         # Do not burn Meta on clear client faults. Auth on the free chain also stays
@@ -190,7 +202,12 @@ class ModelClient:
         return isinstance(error, (AllProvidersUnavailable, ProviderRateLimitError))
 
     def _invoke_last_resort(self, *, messages: list[dict[str, str]], **kwargs: Any) -> Any:
-        model_id = self.settings.meta_last_resort_model
+        model_id = self.settings.meta_last_resort_model.strip()
+        # Never pass META_API_KEY to a non-meta LiteLLM provider if the override is wrong.
+        if not model_id.lower().startswith("meta/"):
+            raise AllProvidersUnavailable(
+                "META_LAST_RESORT_MODEL must use a meta/ Muse route; refusing last-resort call."
+            )
         api_key = self.settings.resolved_meta_api_key()
         call_kwargs = {
             "temperature": kwargs.get("temperature", 0.0),
