@@ -64,6 +64,15 @@ The edge counters are best-effort. They reset when an isolate dies and they are 
 
 Deployed Workers must keep `RESEARCHMIND_API_BASE` as the public FastAPI origin (`https://…`, no path or credentials). The committed default is `https://researchmind-api-sg.onrender.com`. Use `.dev.vars` for loopback during local `wrangler dev`.
 
+## Auto-deploy on push (like Render / Vercel)
+
+Two equivalent paths:
+
+1. **GitHub Actions** (already in repo): [`.github/workflows/deploy-mcp-worker.yml`](../.github/workflows/deploy-mcp-worker.yml) deploys on pushes to `main` that touch `mcp-server/`. Add these repository secrets:
+   - `CLOUDFLARE_API_TOKEN` — create at https://dash.cloudflare.com/profile/api-tokens with **Edit Cloudflare Workers**
+   - `CLOUDFLARE_ACCOUNT_ID` — from the Workers overview right sidebar
+2. **Workers Builds (dashboard Git integration):** Worker `researchmind-mcp` → **Settings** → **Builds** → **Connect** → GitHub repo `sumitjadhav1703/Multi_agent_research_system`, root directory `mcp-server`, deploy command `npx wrangler deploy`, production branch `main`. After that, Cloudflare pulls commits the same way Render does.
+
 There is no public MCP URL. Milestone 7 checked whether Wrangler was logged in and did not invent a workers.dev address. See `docs/deployment-report.md` for the command result.
 
 When the API origin is real and `npx wrangler whoami` succeeds:
