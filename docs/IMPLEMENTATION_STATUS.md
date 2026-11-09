@@ -50,6 +50,12 @@
 - **Deploy:** set `META_API_KEY` on Render for last-resort (same key as offline eval).
 - **Tests:** backend offline suite **159 OK** (2 skipped Postgres durability) after last-resort unit + graph recovery coverage.
 
+### Follow-up: empty Report answer + View less (2026-11-09)
+
+- **Bug:** completed runs with many sources could still show a useless provisional (“No verified claims…”) plus gap-only markdown. Passage IDs were `ev_{subquestion}_{offset}` only, so multi-source hits under one subquestion collided and merge kept ~two passages. Meta-refusal caveats were kept; writer fallback left `sections=[]`. The insufficient banner treated any “unverified” gap wording as a provisional answer. View more/less was a generic underlined Inter link.
+- **Fix:** unique `ev_{subquestion}_{source_hash}_{offset}` passage IDs; refuse meta-refusal provisionals and synthesize a claim-based caveat only for unsupported claims; ground retained writer `gap` text against the claim ledger; banner matches `## Provisional answer` only; View more/less is a display-font pill with chevron; notices stay in-flow so they do not cover Claims.
+- **Tests:** backend + frontend offline suites green on this branch.
+
 ### Remaining (honest residual — not blocking this publish)
 
 | Item | Status |

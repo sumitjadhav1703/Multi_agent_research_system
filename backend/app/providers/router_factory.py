@@ -29,20 +29,27 @@ def _deployment(alias: str, model_id: str, api_key: str | None) -> dict[str, Any
 
 def _api_key_for_model(settings: Settings, model_id: str) -> str | None:
     lowered = model_id.lower()
+
+    def _present(value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
     if lowered.startswith("groq/"):
-        return settings.groq_api_key
+        return _present(settings.groq_api_key)
     if lowered.startswith("gemini/") or lowered.startswith("google/"):
-        return settings.gemini_api_key or settings.google_api_key
+        return _present(settings.gemini_api_key) or _present(settings.google_api_key)
     if lowered.startswith("mistral/"):
-        return settings.mistral_api_key
+        return _present(settings.mistral_api_key)
     if lowered.startswith("openrouter/"):
-        return settings.openrouter_api_key
+        return _present(settings.openrouter_api_key)
     # LiteLLM Meta Model API Muse routes (e.g. meta/muse-spark-1.3-contributor).
     if lowered.startswith("meta/"):
-        return settings.resolved_meta_api_key()
+        return _present(settings.resolved_meta_api_key())
     # Legacy Llama API preview prefix (api.llama.com); not Muse.
     if lowered.startswith("meta_llama/"):
-        return settings.llama_api_key
+        return _present(settings.llama_api_key)
     if lowered.startswith("mock/"):
         return "mock-key"
     return None

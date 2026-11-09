@@ -25,6 +25,7 @@ from backend.app.research.evidence import (
     latest_worker_status,
     merge_worker_outputs,
     new_result_id,
+    provisional_caveat_section,
     run_worker_retrieval,
 )
 from backend.app.research.retrieval import clean_query
@@ -507,11 +508,15 @@ def write_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str
         max_model_calls=limits.max_model_calls,
     )
     warnings = list(state.get("warnings") or [])
+    topic = (state.get("topic") or "Research")[:180]
     if parsed is None:
         warnings.append(f"writer fallback:{error or 'invalid_output'}")
-        report = ReportDraft(title=(state.get("topic") or "Research")[:180], sections=[])
+        # Only seed an unverified provisional when unsupported claims exist (or none).
+        # Never label an all-supported ledger as "unverified working claims".
+        seeded = provisional_caveat_section(topic, claims)
+        report = ReportDraft(title=topic, sections=[seeded] if seeded is not None else [])
     else:
-        report = _report_from_payload(parsed, state.get("topic") or "Research")
+        report = _report_from_payload(parsed, topic)
     return {
         "report_draft": report.model_dump(),
         "usage": usage,

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { MarkdownView } from "./MarkdownView";
 
-/** Line-clamp preview with View more / View less (WhatsApp-style). */
+/** Line-clamp preview with View more / View less (console pill + chevron). */
 export function ExpandableMarkdown({
   markdown,
   citationIds,
@@ -55,12 +55,13 @@ export function ExpandableMarkdown({
       {showToggle ? (
         <button
           type="button"
-          className="text-toggle"
+          className={`text-toggle${expanded ? " is-open" : ""}`}
           aria-expanded={expanded}
           aria-controls={regionId}
           onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? "View less" : "View more"}
+          <span className="text-toggle-label">{expanded ? "View less" : "View more"}</span>
+          <span className="text-toggle-chevron" aria-hidden="true" />
           <span className="visually-hidden"> of the answer</span>
         </button>
       ) : null}

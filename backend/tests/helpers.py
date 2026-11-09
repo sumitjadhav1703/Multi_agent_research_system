@@ -21,7 +21,12 @@ def mock_settings(**overrides: object) -> Settings:
         "EVAL_JUDGE_FALLBACK_MODEL": None,
         "USE_MOCK_PROVIDER": "true",
         "LITELLM_NUM_RETRIES": "0",
-        # Isolate from process env Meta/Llama keys so last-resort stays off unless opted in.
+        # Isolate from process env provider keys so offline tests stay deterministic.
+        "GROQ_API_KEY": "",
+        "GEMINI_API_KEY": "",
+        "GOOGLE_API_KEY": "",
+        "MISTRAL_API_KEY": "",
+        "OPENROUTER_API_KEY": "",
         "META_API_KEY": "",
         "MODEL_API_KEY": "",
         "LLAMA_API_KEY": "",

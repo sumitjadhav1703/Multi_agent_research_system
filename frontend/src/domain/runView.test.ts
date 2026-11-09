@@ -103,6 +103,37 @@ describe("run view", () => {
     });
     const insufficient = provisionalBanners.find((banner) => banner.id === "insufficient");
     expect(insufficient?.detail).toContain("provisional answer");
+
+    const gapOnlyBanners = runBanners({
+      run: run("completed"),
+      events: [],
+      snapshot: {
+        run_id: "run-1",
+        wording: "Evidence assessed against stored passages. This is not an absolute fact-check.",
+        report: {
+          version: 1,
+          markdown:
+            "# T\n\n## Insufficient evidence\n\nNo evidence-backed claim could be assessed. Any provisional text is unverified.\n",
+          approval_state: "awaiting_review",
+          created_at: "2026-11-09T00:00:00Z",
+        },
+        sources: [],
+        passages: [],
+        claims: [{ claim_id: "cl1", text: "A claim", status: "insufficient", verification_reason: null, evidence_ids: [] }],
+        usage: {
+          llm_calls: null,
+          prompt_tokens: null,
+          completion_tokens: null,
+          total_tokens: null,
+          search_calls: null,
+          estimated_cost_usd: null,
+        },
+      },
+      connection: "closed",
+    });
+    const gapOnly = gapOnlyBanners.find((banner) => banner.id === "insufficient");
+    expect(gapOnly?.detail).toContain("Stored passages do not support");
+    expect(gapOnly?.detail).not.toContain("provisional answer is shown");
   });
 
   it("does not invent a provider name", () => {

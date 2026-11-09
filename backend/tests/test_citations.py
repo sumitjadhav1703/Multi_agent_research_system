@@ -11,6 +11,7 @@ from backend.app.research.evidence import (
     finalize_ledger,
     materialize_hits,
     merge_worker_outputs,
+    passage_evidence_id,
     validate_citations,
 )
 from backend.app.schemas.research import Claim, FetchResult, Passage, ReportDraft, ReportSection, SearchHit, SourceRecord
@@ -389,7 +390,7 @@ class CitationTests(unittest.TestCase):
                 ReportSection(
                     section_id="sec_caveat",
                     heading="Provisional answer (unverified)",
-                    body="No evidence-backed claim could be assessed.",
+                    body="Public notes did not settle the latency figure.",
                     evidence_ids=[],
                     claim_ids=[],
                     kind="caveat",
@@ -401,6 +402,154 @@ class CitationTests(unittest.TestCase):
         self.assertNotIn("missing_evidence", codes)
         self.assertNotIn("finding_without_evidence", codes)
         self.assertNotIn("invented_citation", codes)
+
+    def test_multi_source_passages_get_unique_evidence_ids(self) -> None:
+        def _fetch(url: str) -> FetchResult:
+            host = url.split("/")[2]
+            return FetchResult(
+                url=url,
+                text=f"Widget latency fell in the lab report on {host}. Extra sentence about streaming.",
+                extraction_method="html",
+            )
+
+        hits = [
+            SearchHit(title=f"Src {index}", url=f"https://example{index}.com/a", snippet="Widget latency fell.")
+            for index in range(1, 7)
+        ]
+        sources, passages, _warnings = materialize_hits(
+            subquestion_id="sq1",
+            question="What did the lab report say about widget latency?",
+            hits=hits,
+            fetch=_fetch,
+            fetch_budget=6,
+            limits=GraphLimits(max_passages_per_source=2),
+            retrieved_at="2026-11-07T00:00:00+00:00",
+        )
+        self.assertEqual(len(sources), 6)
+        ids = [passage.evidence_id for passage in passages]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertGreaterEqual(len(passages), 6)
+        self.assertTrue(all(passage.evidence_id.startswith("ev_sq1_") for passage in passages))
+        self.assertNotEqual(
+            passage_evidence_id("sq1", "src_sq1_1", 1),
+            passage_evidence_id("sq1", "src_sq1_2", 1),
+        )
+        merged_sources, merged_passages, _searches, _merge_warnings = merge_worker_outputs(
+            [
+                {
+                    "result_id": "r1",
+                    "subquestion_id": "sq1",
+                    "status": "ok",
+                    "search_query": "widget latency",
+                    "search_calls": 1,
+                    "sources": [source.model_dump() for source in sources],
+                    "passages": [passage.model_dump() for passage in passages],
+                    "warnings": [],
+                }
+            ]
+        )
+        self.assertEqual(len(merged_sources), 6)
+        merged_ids = [item["evidence_id"] for item in merged_passages]
+        self.assertEqual(len(merged_ids), len(set(merged_ids)))
+        self.assertGreaterEqual(len(merged_passages), 6)
+
+    def test_meta_refusal_caveat_is_replaced_with_synthesized_provisional(self) -> None:
+        insufficient = Claim(
+            claim_id="cl_gap",
+            text="SSE resumes from an event cursor more easily than raw sockets.",
+            evidence_ids=[],
+            status="insufficient",
+            verification_reason="Not enough overlap.",
+        )
+        report = ReportDraft(
+            title="SSE versus WebSockets",
+            sections=[
+                ReportSection(
+                    section_id="sec_caveat",
+                    heading="Provisional answer (unverified)",
+                    body="No verified claims are available to provide a definitive answer.",
+                    evidence_ids=[],
+                    claim_ids=[],
+                    kind="caveat",
+                )
+            ],
+        )
+        repaired, repairs = assemble_report(report, [insufficient], [])
+        caveats = [section for section in repaired.sections if section.kind == "caveat"]
+        self.assertEqual(len(caveats), 1)
+        self.assertIn("SSE resumes from an event cursor", caveats[0].body)
+        self.assertNotIn("No verified claims are available", caveats[0].body)
+        self.assertTrue(any("meta-refusal" in note.lower() or "synthesized" in note.lower() for note in repairs))
+        self.assertTrue(any(section.kind == "gap" for section in repaired.sections))
+
+    def test_ungrounded_writer_gap_is_replaced_with_ledger_text(self) -> None:
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_writer_gap",
+                    heading="Coverage gap",
+                    body="Public pages discussed protocols but never compared resume behavior.",
+                    evidence_ids=[],
+                    claim_ids=[],
+                    kind="gap",
+                )
+            ],
+        )
+        repaired, repairs = assemble_report(report, [], [])
+        gaps = [section for section in repaired.sections if section.kind == "gap"]
+        self.assertTrue(gaps)
+        self.assertTrue(any("No claim ledger rows were available" in section.body for section in gaps))
+        self.assertFalse(any("resume behavior" in section.body for section in gaps))
+        self.assertTrue(any("ungrounded writer gap" in note.lower() for note in repairs))
+        caveats = [section for section in repaired.sections if section.kind == "caveat"]
+        self.assertTrue(caveats)
+        self.assertTrue(any("synthesized" in note.lower() for note in repairs))
+
+    def test_grounded_writer_gap_is_kept_against_claim_ledger(self) -> None:
+        insufficient = Claim(
+            claim_id="cl_gap",
+            text="Public pages discussed protocols but never compared resume behavior.",
+            evidence_ids=[],
+            status="insufficient",
+            verification_reason="Not enough overlap.",
+        )
+        report = ReportDraft(
+            title="T",
+            sections=[
+                ReportSection(
+                    section_id="sec_writer_gap",
+                    heading="Coverage gap",
+                    body="Public pages discussed protocols but never compared resume behavior.",
+                    evidence_ids=[],
+                    claim_ids=["cl_gap"],
+                    kind="gap",
+                )
+            ],
+        )
+        repaired, repairs = assemble_report(report, [insufficient], [])
+        # Claim-derived gap section is preferred when insufficient claims exist.
+        gaps = [section for section in repaired.sections if section.kind == "gap"]
+        self.assertTrue(gaps)
+        self.assertTrue(any("resume behavior" in section.body for section in gaps))
+        self.assertFalse(any("ungrounded writer gap" in note.lower() for note in repairs))
+
+    def test_all_supported_claims_do_not_get_unverified_provisional(self) -> None:
+        from backend.app.research.evidence import provisional_caveat_section
+
+        supported = Claim(
+            claim_id="cl_ok",
+            text="Widget latency fell in the lab report.",
+            evidence_ids=["ev1"],
+            status="supported",
+            verification_reason="Quoted.",
+        )
+        self.assertIsNone(provisional_caveat_section("Widget latency", [supported]))
+        report = ReportDraft(title="Widget latency", sections=[])
+        repaired, repairs = assemble_report(report, [supported], [_passage()])
+        self.assertFalse(any(section.kind == "caveat" for section in repaired.sections))
+        self.assertTrue(any(section.kind == "finding" for section in repaired.sections))
+        self.assertFalse(any("synthesized provisional" in note.lower() for note in repairs))
 
 
 if __name__ == "__main__":

@@ -309,7 +309,7 @@ export function runBanners(input: {
   if (insufficientEvidence(input.events, input.snapshot)) {
     const hasProvisional = Boolean(
       input.snapshot?.report?.markdown &&
-        /provisional answer|unverified/i.test(input.snapshot.report.markdown),
+        /^##\s*Provisional answer/im.test(input.snapshot.report.markdown),
     );
     banners.push({
       id: "insufficient",

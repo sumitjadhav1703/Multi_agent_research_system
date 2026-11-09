@@ -1051,21 +1051,42 @@ button.chip:hover {
 }
 
 .text-toggle {
-  margin-top: 0.55rem;
-  padding: 0.2rem 0;
-  border: 0;
-  background: transparent;
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.42rem 0.85rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-pill);
+  background: var(--pill-dark);
   color: #fff;
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  box-shadow: var(--nav-shadow);
   cursor: pointer;
 }
 
 .text-toggle:hover {
-  opacity: 0.85;
+  background: #323234;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.text-toggle-chevron {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 1.5px solid var(--soft);
+  border-bottom: 1.5px solid var(--soft);
+  transform: rotate(45deg);
+  transition: transform 160ms ease-out;
+  flex: 0 0 auto;
+}
+
+.text-toggle.is-open .text-toggle-chevron {
+  transform: rotate(225deg);
 }
 
 .activity-feed li {
@@ -1582,24 +1603,30 @@ th {
 }
 
 @media (min-width: 960px) {
-  /* Notices float top-right so their stack height does not open a hole
-     under the title/status before Live / Report / Evidence content. */
+  /* Notices sit in a real second column (in flow). Absolute overlay used to
+     cover Claims / Evidence when the stack was taller than the page header. */
   .run-top {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.55rem;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    gap: 0.75rem 1rem;
+    align-items: start;
   }
 
   .run-top-main {
-    padding-right: min(23.5rem, 42%);
+    padding-right: 0;
   }
 
   .notice-cluster {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: min(22rem, 40%);
-    padding-top: 0.15rem;
-    z-index: 2;
+    position: static;
+    width: auto;
+    max-width: none;
+    padding-top: 0;
+    z-index: auto;
+  }
+
+  .notice-stack {
+    max-height: min(70vh, 28rem);
+    overflow: auto;
+    padding-right: 0.15rem;
   }
 
   .split {
