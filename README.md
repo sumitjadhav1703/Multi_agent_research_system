@@ -81,7 +81,7 @@ Eval write-up: [`docs/evals/RESULTS.md`](docs/evals/RESULTS.md).
 | Portfolio landing | Static HTML/CSS/JS full-bleed video hero at `/` (no Sign-in page) |
 | Research Console | React app at `/app` — ask one public question, watch SSE progress, open report + evidence |
 | Bounded research graph | LangGraph planners / workers / verifier / writer with evidence and claims |
-| Free-only providers | LiteLLM SDK Router allowlist; no paid fallback; fail closed if paid models are enabled |
+| Free-only providers | LiteLLM SDK Router allowlist for role models; fail closed if `ALLOW_PAID_MODELS=true`; optional Meta Muse Spark Contributor last-resort after free hops fail |
 | Durable jobs | PostgreSQL jobs, events, quotas, evidence, graph checkpoints (not in-memory queues) |
 | Guest quotas | One-use guest identity + global active/daily caps enforced in the backend |
 | Progress transport | REST for commands, SSE for replayable progress (no first-release WebSockets) |
@@ -127,7 +127,7 @@ flowchart LR
 Design constraints enforced in code and docs:
 
 - PostgreSQL is the durable source of truth for jobs, events, idempotency, quotas, evidence, and checkpoints
-- LiteLLM Router inside FastAPI first; free-only allowlist; no silent paid top-up
+- LiteLLM Router inside FastAPI first; free-only allowlist for role models; optional Meta Muse Spark Contributor last-resort after free hops exhaust
 - Secrets stay server-side (never in the frontend bundle or logs)
 - First Render deploy profile: one web service, one Uvicorn worker, one bounded queue consumer
 
@@ -373,7 +373,7 @@ Deeper checklist: [`docs/deployment-report.md`](docs/deployment-report.md).
 | Topic | Honest position |
 | --- | --- |
 | Quotas | One guest research run per issued identity; global caps in Postgres |
-| Providers | Free-model allowlist only; paid markers / `ALLOW_PAID_MODELS=true` fail closed |
+| Providers | Free-model allowlist for role primary/fallback; paid markers / `ALLOW_PAID_MODELS=true` fail closed; optional Meta Muse Spark Contributor last-resort when `META_API_KEY` is set |
 | Secrets | Server-side only; not logged or shipped in the frontend bundle |
 | Turnstile | Required for normal guest issuance when secret + site key are configured |
 | SSRF | V1-level DNS/scheme checks; residual DNS-rebinding / connect-time risk — **not** claimed closed without an egress proxy |

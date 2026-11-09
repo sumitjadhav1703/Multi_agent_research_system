@@ -15,7 +15,7 @@ The new project should demonstrate five things:
 
 1. **Research quality:** multiple research questions, multiple independent sources, claim-level evidence, explicit contradictions and source-linked reports.
 2. **Agent engineering:** a real LangGraph state machine with bounded parallel workers, controlled loops, durable checkpoints and human approval.
-3. **Provider resilience:** LiteLLM routes model calls across a small allowlist of free-tier providers, with health-aware fallback and no silent paid fallback.
+3. **Provider resilience:** LiteLLM routes model calls across a small allowlist of free-tier providers, with health-aware free fallback. After free hops are exhausted, an optional Meta Muse Spark Contributor last-resort may run once per call when keyed; it is not a general paid unlock and is not on the free allowlist.
 4. **Measurable quality:** DeepEval benchmark results plus deterministic citation and safety checks.
 5. **Product engineering:** a React interface, resumable live progress, one-use demo quotas, persistent jobs, observability and a remote MCP server.
 
@@ -625,7 +625,8 @@ Put all of these in server-side config so they can be changed without code edits
 | Model calls | 12 maximum per run, with lower actual target after benchmarking |
 | Output size | Bounded per stage; no unbounded report/context generation |
 | Total runtime | Hard wall-clock deadline; cancel downstream calls after timeout |
-| Paid provider fallback | Disabled |
+| Paid provider fallback | Disabled for role allowlist (`ALLOW_PAID_MODELS=false`). Optional Meta Muse Spark Contributor last-resort only after free primary+fallback exhaust |
+
 
 These are starter settings. Run the benchmark and measure actual usage before increasing them.
 
@@ -1279,7 +1280,7 @@ Therefore:
 | Database | Neon Free | 1 GB storage, 100 CU-hours/project/month, compute scales to zero after 5 minutes idle |
 | MCP | Cloudflare Workers Free | Thin request/authorization adapter |
 | DeepEval | Run locally | No public evaluation calls |
-| Model APIs | Free provider accounts | Explicit free-only model allowlist; no paid fallback |
+| Model APIs | Free provider accounts + optional Meta last-resort key | Explicit free-only model allowlist for role models; Meta Muse Spark Contributor may run once after free hops fail |
 
 **Public demo operating limits (starting configuration; tune only after tests):**
 

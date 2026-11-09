@@ -55,6 +55,26 @@ class RouterFactoryTests(unittest.TestCase):
         )
         self.assertNotIn("meta_llama/Llama-3.3-8B-Instruct", keyed.allowlist)
 
+    def test_meta_muse_prefix_maps_to_resolved_meta_api_key(self) -> None:
+        settings = mock_settings(META_API_KEY="meta-primary", META_LAST_RESORT_ENABLED="true")
+        self.assertEqual(
+            _api_key_for_model(settings, "meta/muse-spark-1.3-contributor"),
+            "meta-primary",
+        )
+        aliased = mock_settings(
+            META_API_KEY="",
+            MODEL_API_KEY="model-alias-key",
+            LLAMA_API_KEY="",
+            META_LAST_RESORT_ENABLED="true",
+        )
+        self.assertEqual(
+            _api_key_for_model(aliased, "meta/muse-spark-1.3-contributor"),
+            "model-alias-key",
+        )
+        self.assertNotIn("meta/muse-spark-1.3-contributor", settings.allowlist)
+        self.assertTrue(settings.meta_last_resort_active())
+        self.assertEqual(settings.meta_last_resort_model, "meta/muse-spark-1.3-contributor")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,6 +41,15 @@
 - **Tests:** backend suite + evals + frontend green on this branch. Mock graph smoke for the PostgreSQL-queue topic produced caveat+gap.
 - **Surfaces:** README Evaluation section; landing hero footer stats; Evaluation console page; Evidence empty-state `EvalSnapshotPanel`.
 
+### Follow-up: Meta Muse Spark last-resort (2026-11-09)
+
+- **Behavior:** After each role’s free primary + one free fallback are exhausted (timeout / rate-limit / unavailable), `ModelClient` may call `META_LAST_RESORT_MODEL` (default `meta/muse-spark-1.3-contributor`) once when a Meta key is present and last-resort is not disabled.
+- **Not** on `FREE_MODEL_ALLOWLIST`; not a role primary/fallback; `ALLOW_PAID_MODELS` stays false for the free path.
+- **Keys:** `META_API_KEY` (aliases `MODEL_API_KEY` / `LLAMA_API_KEY`). Env: `META_LAST_RESORT_ENABLED`, `META_LAST_RESORT_MODEL`.
+- **Surfaces:** ADR 0002, SoT provider resilience row, README known limits. No landing “paid Meta” marketing.
+- **Deploy:** set `META_API_KEY` on Render for last-resort (same key as offline eval).
+- **Tests:** backend offline suite **159 OK** (2 skipped Postgres durability) after last-resort unit + graph recovery coverage.
+
 ### Remaining (honest residual — not blocking this publish)
 
 | Item | Status |
