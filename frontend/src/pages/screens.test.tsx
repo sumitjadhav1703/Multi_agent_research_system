@@ -92,6 +92,11 @@ const world: { usage: UsageSnapshot; run: ResearchRun } = {
     global_daily_cap: 3,
     global_daily_starts: 0,
     limits: { max_sources: 6, max_parallel_workers: 2, max_wall_clock_seconds: 180 },
+    llm_calls: null as number | null,
+    prompt_tokens: null as number | null,
+    completion_tokens: null as number | null,
+    total_tokens: null as number | null,
+    search_calls: null as number | null,
     estimated_cost_usd: null,
     note: "One run per issued guest token, not one verified run per person.",
   },
@@ -136,6 +141,12 @@ beforeEach(() => {
   sessionStorage.removeItem("researchmind.dismissedNotices");
   world.usage.one_use_consumed = false;
   world.usage.run_ids = [];
+  world.usage.llm_calls = null;
+  world.usage.prompt_tokens = null;
+  world.usage.completion_tokens = null;
+  world.usage.total_tokens = null;
+  world.usage.search_calls = null;
+  world.usage.estimated_cost_usd = null;
   world.run.status = "cancelled";
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -230,9 +241,26 @@ describe("research console screens", () => {
   it("shows unknown cost instead of a zero estimate", async () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     world.usage.run_ids = ["run-1"];
+    world.usage.llm_calls = 4;
+    world.usage.prompt_tokens = 1200;
+    world.usage.completion_tokens = 350;
+    world.usage.total_tokens = 1550;
+    world.usage.search_calls = 3;
+    world.usage.estimated_cost_usd = null;
     renderAt("/usage");
-    expect(await screen.findByText("Estimated cost (USD)")).toBeInTheDocument();
-    expect(screen.getAllByText("unknown").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "Account usage" })).toBeInTheDocument();
+    const account = screen.getByRole("heading", { name: "Account usage" }).closest("section");
+    expect(account).toBeTruthy();
+    const metric = (label: string) =>
+      Array.from(account!.querySelectorAll("dt"))
+        .find((node) => node.textContent === label)
+        ?.parentElement?.querySelector("dd")?.textContent;
+    expect(metric("Model calls")).toBe("4");
+    expect(metric("Prompt tokens")).toBe("1200");
+    expect(metric("Total tokens")).toBe("1550");
+    expect(metric("Search calls")).toBe("3");
+    expect(metric("Estimated cost (USD)")).toBe("unknown");
+    expect(screen.getByText(/free allowlist/i)).toBeInTheDocument();
   });
 
   it("does not offer a guest benchmark or invent an accuracy figure", async () => {

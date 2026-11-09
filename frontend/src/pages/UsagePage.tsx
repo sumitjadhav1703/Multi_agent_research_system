@@ -3,12 +3,62 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import { getEvents, getReady, getRun, getUsage } from "../api/client";
 import { consumeRunStream } from "../api/sse";
+import type { UsageFigures, UsageSnapshot } from "../api/types";
+import { EMPTY_USAGE } from "../api/types";
 import { useToken } from "../auth/token";
 import { ErrorText, PageHeader, UsageFiguresList } from "../components/ui";
 import { formatElapsed, formatUnknown, formatWhen } from "../domain/format";
-import { maxSequence, sourcesSeenCount, statusLabel } from "../domain/runView";
-import { EMPTY_USAGE } from "../api/types";
+import { maxSequence, sourcesSeenCount, statusLabel, usageFromEvents } from "../domain/runView";
 import { runStore } from "../state/runStore";
+
+/** Map /me/usage ledger fields into the shared metric list shape. */
+export function usageFiguresFromSnapshot(data: UsageSnapshot): UsageFigures {
+  return {
+    llm_calls: data.llm_calls ?? null,
+    prompt_tokens: data.prompt_tokens ?? null,
+    completion_tokens: data.completion_tokens ?? null,
+    total_tokens: data.total_tokens ?? null,
+    search_calls: data.search_calls ?? null,
+    estimated_cost_usd: data.estimated_cost_usd,
+  };
+}
+
+function hasMeasuredUsage(usage: UsageFigures): boolean {
+  return (
+    usage.llm_calls != null ||
+    usage.prompt_tokens != null ||
+    usage.completion_tokens != null ||
+    usage.total_tokens != null ||
+    usage.search_calls != null
+  );
+}
+
+function QuotaMeter({
+  label,
+  value,
+  max,
+  warn,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  warn?: boolean;
+}) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return (
+    <div className={`quota-meter${warn ? " quota-meter--warn" : ""}`}>
+      <div className="quota-meter-top">
+        <span>{label}</span>
+        <strong>
+          {value} / {max}
+        </strong>
+      </div>
+      <div className="quota-meter-track" aria-hidden="true">
+        <div className="quota-meter-fill" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
 
 export function UsagePage() {
   const { token } = useToken();
@@ -19,51 +69,105 @@ export function UsagePage() {
   });
   const health = useQuery({ queryKey: ["health", "ready"], queryFn: getReady });
   const data = usage.data;
+  const figures = data ? usageFiguresFromSnapshot(data) : EMPTY_USAGE;
   const capped = Boolean(
     data &&
-      (data.global_active_runs >= data.global_max_active_runs || data.global_daily_starts >= data.global_daily_cap),
+      (data.global_active_runs >= data.global_max_active_runs ||
+        data.global_daily_starts >= data.global_daily_cap),
   );
+  const limitEntries = data ? Object.entries(data.limits) : [];
 
   return (
-    <section className="stack">
-      <PageHeader
-        title="Your usage"
-        lede="Runs for this guest session only."
-      />
+    <section className="stack usage-page">
+      <PageHeader title="Your usage" lede="Runs and provider totals for this guest session only." />
       {usage.isPending ? <p role="status">Loading usage.</p> : null}
       <ErrorText error={usage.error} />
       {data ? (
         <>
           <p className="banner info">{data.note}</p>
-          {data.one_use_consumed ? (
-            <p className="banner warning" role="status">
-              Quota consumed. Remaining one-use allowance: 0.
-            </p>
-          ) : (
-            <p className="banner ok" role="status">
-              Remaining one-use allowance: 1.
-            </p>
-          )}
+
+          <div className="quota-grid">
+            <div className={`quota-card${data.one_use_consumed ? " quota-card--spent" : ""}`}>
+              <p className="meta">One-use allowance</p>
+              <p className="quota-card-value">{data.one_use_consumed ? "0 left" : "1 left"}</p>
+              <p className="meta">
+                {data.one_use_consumed
+                  ? data.one_use_refunded
+                    ? "Consumed, then refunded earlier in this session."
+                    : "This guest token already started its research run."
+                  : "One research start remains for this guest token."}
+              </p>
+            </div>
+            <QuotaMeter
+              label="Active runs (global)"
+              value={data.global_active_runs}
+              max={data.global_max_active_runs}
+              warn={data.global_active_runs >= data.global_max_active_runs}
+            />
+            <QuotaMeter
+              label="Daily starts (global)"
+              value={data.global_daily_starts}
+              max={data.global_daily_cap}
+              warn={data.global_daily_starts >= data.global_daily_cap}
+            />
+          </div>
+
           {capped ? (
             <p className="banner warning" role="status">
-              Demo cap warning: {data.global_active_runs} of {data.global_max_active_runs} active runs,{" "}
-              {data.global_daily_starts} of {data.global_daily_cap} daily starts.
+              Demo cap warning: {data.global_active_runs} of {data.global_max_active_runs} active
+              runs, {data.global_daily_starts} of {data.global_daily_cap} daily starts.
             </p>
           ) : null}
-          <UsageFiguresList
-            heading="Account usage"
-            usage={{ ...EMPTY_USAGE, estimated_cost_usd: data.estimated_cost_usd }}
-          />
+
           <section className="panel">
-            <h2>Provider status</h2>
-            <p>Service: {health.data?.status ?? "unknown"}</p>
-            <p>Database: {health.data?.database ?? "unknown"}</p>
-            <p>
-              {health.data?.use_mock_provider
-                ? "Mock provider is configured."
-                : "The server router is configured. This page does not measure provider uptime."}
+            <h2>Account usage</h2>
+            <p className="meta">
+              {hasMeasuredUsage(figures)
+                ? "Summed from the usage ledger for finished runs owned by this guest."
+                : "No measured provider usage yet. Totals appear after a run finishes and records ledger rows."}
+            </p>
+            <UsageFiguresList usage={figures} bare />
+            <p className="meta">
+              Estimated cost stays unknown on the free allowlist (not priced as zero).
             </p>
           </section>
+
+          {limitEntries.length ? (
+            <section className="panel">
+              <h2>Session budgets</h2>
+              <p className="meta">Server-enforced caps for each research run on this demo.</p>
+              <dl className="metric-list">
+                {limitEntries.map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{key.replaceAll("_", " ")}</dt>
+                    <dd>{formatUnknown(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ) : null}
+
+          <section className="panel">
+            <h2>Provider status</h2>
+            <dl className="metric-list">
+              <div>
+                <dt>Service</dt>
+                <dd>{health.data?.status ?? "unknown"}</dd>
+              </div>
+              <div>
+                <dt>Database</dt>
+                <dd>{health.data?.database ?? "unknown"}</dd>
+              </div>
+              <div>
+                <dt>Router mode</dt>
+                <dd>{health.data?.use_mock_provider ? "mock" : "live allowlist"}</dd>
+              </div>
+            </dl>
+            <p className="meta">
+              Ready means the API and database answered. This page does not measure provider uptime.
+            </p>
+          </section>
+
           <div className="table-wrap panel">
             <table>
               <caption className="meta">Runs for this guest</caption>
@@ -73,14 +177,15 @@ export function UsagePage() {
                   <th scope="col">Status</th>
                   <th scope="col">Started</th>
                   <th scope="col">Duration</th>
-                  <th scope="col">Sources seen</th>
+                  <th scope="col">Sources</th>
+                  <th scope="col">Model calls</th>
                   <th scope="col">Stop reason</th>
                 </tr>
               </thead>
               <tbody>
                 {data.run_ids.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>No runs for this guest.</td>
+                    <td colSpan={7}>No runs for this guest.</td>
                   </tr>
                 ) : (
                   data.run_ids.map((runId) => <RunRow key={runId} runId={runId} />)
@@ -136,6 +241,8 @@ function RunRow({ runId }: { runId: string }) {
     events.data || entry?.snapshot
       ? sourcesSeenCount(eventList, entry?.snapshot?.sources.length)
       : null;
+  const rowUsage = entry?.snapshot?.usage ?? usageFromEvents(eventList);
+
   return (
     <tr>
       <td>
@@ -145,6 +252,7 @@ function RunRow({ runId }: { runId: string }) {
       <td>{formatWhen(item?.created_at)}</td>
       <td>{item ? formatElapsed(item.started_at, item.finished_at) : "unknown"}</td>
       <td>{sources === null ? "unknown" : sources}</td>
+      <td>{formatUnknown(rowUsage.llm_calls)}</td>
       <td>{item ? (item.stop_reason ?? "none recorded") : formatUnknown(null)}</td>
     </tr>
   );

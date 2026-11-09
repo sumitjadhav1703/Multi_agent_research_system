@@ -17,6 +17,7 @@ from backend.app.db.models import (
     JobEvent,
     QuotaGuard,
     ResearchJob,
+    UsageLedger,
 )
 from backend.app.jobs.errors import JobServiceError
 from backend.app.jobs.timeutil import add_seconds, utc_day, utc_now
@@ -309,6 +310,13 @@ def list_events(session: Session, job_id: str, owner_id: str, *, after: int) -> 
     )
 
 
+def _sum_optional_ints(values: list[int | None]) -> int | None:
+    present = [item for item in values if isinstance(item, int) and not isinstance(item, bool)]
+    if not present:
+        return None
+    return sum(present)
+
+
 def usage_snapshot(
     session: Session,
     identity_id: str,
@@ -329,6 +337,10 @@ def usage_snapshot(
     daily = 0
     if guard is not None and guard.daily_window == utc_day(now):
         daily = guard.daily_count
+    # Owner-scoped ledger totals only. Missing provider usage stays null (not zero).
+    ledger_rows = session.scalars(
+        select(UsageLedger).where(UsageLedger.identity_id == identity_id)
+    ).all()
     return {
         "identity_scope": "guest",
         "one_use_consumed": bool(entitlement and entitlement.status == "consumed"),
@@ -339,6 +351,11 @@ def usage_snapshot(
         "global_daily_cap": daily_cap,
         "global_daily_starts": int(daily),
         "limits": budgets,
+        "llm_calls": _sum_optional_ints([row.llm_calls for row in ledger_rows]),
+        "prompt_tokens": _sum_optional_ints([row.prompt_tokens for row in ledger_rows]),
+        "completion_tokens": _sum_optional_ints([row.completion_tokens for row in ledger_rows]),
+        "total_tokens": _sum_optional_ints([row.total_tokens for row in ledger_rows]),
+        "search_calls": _sum_optional_ints([row.search_calls for row in ledger_rows]),
         "estimated_cost_usd": None,
         "note": "One run per issued guest token, not one verified run per person.",
     }

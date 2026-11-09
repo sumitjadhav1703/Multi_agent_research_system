@@ -1065,6 +1065,7 @@ class RunsApiTests(unittest.TestCase):
         self.assertTrue(usage.json()["one_use_consumed"])
         self.assertEqual(usage.json()["global_max_active_runs"], 1)
         self.assertIsNone(usage.json()["estimated_cost_usd"])
+        self.assertIsNone(usage.json()["llm_calls"])
         self.assertNotIn(token, usage.text)
 
         ready = self.client.get("/api/v1/health/ready")
@@ -1192,6 +1193,47 @@ class RunsApiTests(unittest.TestCase):
         self.assertFalse(usage.json()["one_use_refunded"])
         self.assertEqual(usage.json()["global_daily_starts"], 1)
         self.assertEqual(usage.json()["run_ids"], [run_id])
+
+    def test_usage_aggregates_owner_ledger_totals(self) -> None:
+        import uuid
+
+        guest = self.client.post("/api/v1/guest-identities", json={"turnstile_token": "ok"})
+        token = guest.json()["guest_token"]
+        created = self.client.post(
+            "/api/v1/research-runs",
+            json={"topic": "Ledger totals"},
+            headers={"Authorization": f"Bearer {token}", "Idempotency-Key": "ledger-key"},
+        )
+        self.assertEqual(created.status_code, 202)
+        run_id = created.json()["run_id"]
+        with self.factory() as session:
+            identity = identity_from_token(session, token)
+            session.add(
+                UsageLedger(
+                    id=str(uuid.uuid4()),
+                    job_id=run_id,
+                    identity_id=identity.id,
+                    provider=None,
+                    model=None,
+                    llm_calls=4,
+                    prompt_tokens=1200,
+                    completion_tokens=350,
+                    total_tokens=1550,
+                    estimated_cost_usd=None,
+                    search_calls=3,
+                    created_at=utc_now(),
+                )
+            )
+            session.commit()
+        usage = self.client.get("/api/v1/me/usage", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(usage.status_code, 200)
+        body = usage.json()
+        self.assertEqual(body["llm_calls"], 4)
+        self.assertEqual(body["prompt_tokens"], 1200)
+        self.assertEqual(body["completion_tokens"], 350)
+        self.assertEqual(body["total_tokens"], 1550)
+        self.assertEqual(body["search_calls"], 3)
+        self.assertIsNone(body["estimated_cost_usd"])
 
     def test_missing_idempotency_key_and_bad_turnstile(self) -> None:
         guest = self.client.post("/api/v1/guest-identities", json={"turnstile_token": "ok"})

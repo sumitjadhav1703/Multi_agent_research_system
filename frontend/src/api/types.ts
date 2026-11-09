@@ -32,6 +32,12 @@ export interface UsageSnapshot {
   global_daily_cap: number;
   global_daily_starts: number;
   limits: Record<string, number>;
+  /** Owner-scoped UsageLedger totals. Null means not measured (not zero). */
+  llm_calls?: number | null;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  total_tokens?: number | null;
+  search_calls?: number | null;
   estimated_cost_usd: number | string | null;
   note: string;
 }
