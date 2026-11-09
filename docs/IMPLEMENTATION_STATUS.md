@@ -41,6 +41,12 @@
 - **Tests:** backend suite + evals + frontend green on this branch. Mock graph smoke for the PostgreSQL-queue topic produced caveat+gap.
 - **Surfaces:** README Evaluation section; landing hero footer stats; Evaluation console page; Evidence empty-state `EvalSnapshotPanel`.
 
+### Follow-up: empty Report answer + View less (2026-11-09)
+
+- **Bug:** completed runs with many sources could still show a useless provisional (“No verified claims…”) plus gap-only markdown. Passage IDs were `ev_{subquestion}_{offset}` only, so multi-source hits under one subquestion collided and merge kept ~two passages. Meta-refusal caveats were kept; writer fallback left `sections=[]`. The insufficient banner treated any “unverified” gap wording as a provisional answer. View more/less was a generic underlined Inter link.
+- **Fix:** unique `ev_{subquestion}_{source_hash}_{offset}` passage IDs; refuse meta-refusal provisionals and synthesize a claim-based caveat; seed writer fallback with that caveat; keep usable writer `gap` sections; banner matches `## Provisional answer` only; View more/less is a display-font pill with chevron.
+- **Tests:** backend offline suite **155 OK** (2 skipped); frontend vitest **23/23**.
+
 ### Remaining (honest residual — not blocking this publish)
 
 | Item | Status |

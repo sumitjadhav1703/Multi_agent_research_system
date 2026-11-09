@@ -5,6 +5,7 @@ the claim and survives the deterministic citation checks.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from uuid import uuid4
 
@@ -36,6 +37,16 @@ def significant_terms(text: str) -> set[str]:
     return {word for word in re.findall(r"[a-z0-9]{4,}", text.lower()) if word not in STOPWORDS}
 
 
+def passage_evidence_id(subquestion_id: str, source_id: str, offset: int) -> str:
+    """Stable unique id per subquestion + source + passage offset.
+
+    Older ids were `ev_{subquestion}_{offset}` only, so six sources under one
+    subquestion collided and merge kept ~two passages.
+    """
+    slug = hashlib.sha1(source_id.encode("utf-8")).hexdigest()[:8]
+    return f"ev_{subquestion_id}_{slug}_{offset}"
+
+
 def select_passages(
     subquestion: str,
     excerpt: str,
@@ -65,7 +76,7 @@ def select_passages(
             quote = excerpt[: limits.max_passage_chars]
         passages.append(
             Passage(
-                evidence_id=f"ev_{subquestion_id}_{offset}",
+                evidence_id=passage_evidence_id(subquestion_id, source_id, offset),
                 source_id=source_id,
                 subquestion_id=subquestion_id,
                 quote=quote,
@@ -455,6 +466,19 @@ def link_claims_to_sources(
 
 _INSTRUCTION_MARKERS = ("ignore earlier instructions", "ignore all instructions", "shell tool")
 
+# Writer meta-refusals that look like answers but carry no research content.
+_REFUSAL_MARKERS = (
+    "no verified claims are available",
+    "no verified claim is available",
+    "cannot provide a definitive",
+    "can't provide a definitive",
+    "unable to provide a definitive",
+    "no evidence-backed claim could be assessed",
+    "no evidence backed claim could be assessed",
+    "no claims were assessed",
+    "no verified sources were retrieved",
+)
+
 
 # Short negations are dropped by significant_terms (min length 4). Keep them here
 # so report bodies cannot flip claim polarity ("available" vs "not available").
@@ -522,9 +546,49 @@ def _usable_provisional_body(body: str) -> str | None:
     text = body.strip()
     if not text:
         return None
-    if any(marker in text.lower() for marker in _INSTRUCTION_MARKERS):
+    lowered = text.lower()
+    if any(marker in lowered for marker in _INSTRUCTION_MARKERS):
+        return None
+    if any(marker in lowered for marker in _REFUSAL_MARKERS):
         return None
     return text[:2000]
+
+
+def synthesize_provisional_body(topic: str, claims: list[Claim], *, max_claims: int = 4) -> str:
+    """Deterministic unverified write-up from claim texts when the writer fails or refuses."""
+    topic_text = (topic or "this question").strip() or "this question"
+    lead = (
+        f"A definitive, evidence-backed answer to “{topic_text}” could not be formed from "
+        "the stored passages. The notes below are unverified working claims from this run, "
+        "not supported findings."
+    )
+    useful = [
+        claim
+        for claim in claims
+        if claim.status in {"insufficient", "contradictory"} and claim.text.strip()
+    ]
+    if not useful:
+        useful = [claim for claim in claims if claim.text.strip()]
+    if not useful:
+        return (
+            f"{lead} No claim texts were stored either; treat the report as a coverage gap only."
+        )[:2000]
+    lines = [lead, ""]
+    for claim in useful[:max_claims]:
+        label = claim.status or "unverified"
+        lines.append(f"- ({label}) {claim.text.strip()}")
+    return "\n".join(lines)[:2000]
+
+
+def provisional_caveat_section(topic: str, claims: list[Claim], *, section_id: str = "sec_provisional") -> ReportSection:
+    return ReportSection(
+        section_id=section_id,
+        heading="Provisional answer (unverified)",
+        body=synthesize_provisional_body(topic, claims),
+        evidence_ids=[],
+        claim_ids=[],
+        kind="caveat",
+    )
 
 
 def _sanitize_writer_caveat(section: ReportSection) -> tuple[ReportSection | None, str | None]:
@@ -532,9 +596,25 @@ def _sanitize_writer_caveat(section: ReportSection) -> tuple[ReportSection | Non
     if body is None:
         if section.body.strip() and any(marker in section.body.lower() for marker in _INSTRUCTION_MARKERS):
             return None, f"Dropped untrusted instruction text from {section.section_id}"
+        if section.body.strip() and any(marker in section.body.lower() for marker in _REFUSAL_MARKERS):
+            return None, f"Dropped meta-refusal provisional from {section.section_id}"
         return None, None
     sanitized = section.model_copy(
         update={"body": body, "evidence_ids": [], "claim_ids": [], "kind": "caveat"}
+    )
+    return sanitized, None
+
+
+def _sanitize_writer_gap(section: ReportSection) -> tuple[ReportSection | None, str | None]:
+    body = _usable_provisional_body(section.body)
+    if body is None:
+        if section.body.strip() and any(marker in section.body.lower() for marker in _INSTRUCTION_MARKERS):
+            return None, f"Dropped untrusted instruction text from {section.section_id}"
+        if section.body.strip() and any(marker in section.body.lower() for marker in _REFUSAL_MARKERS):
+            return None, f"Dropped meta-refusal gap from {section.section_id}"
+        return None, None
+    sanitized = section.model_copy(
+        update={"body": body, "evidence_ids": [], "claim_ids": list(section.claim_ids), "kind": "gap"}
     )
     return sanitized, None
 
@@ -545,6 +625,7 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
     repairs: list[str] = []
     kept: list[ReportSection] = []
     kept_caveats: list[ReportSection] = []
+    writer_gaps: list[ReportSection] = []
     salvaged_bodies: list[str] = []
     for section in report.sections:
         if section.kind == "caveat":
@@ -553,6 +634,13 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 repairs.append(note)
             if sanitized is not None:
                 kept_caveats.append(sanitized)
+            continue
+        if section.kind == "gap":
+            sanitized, note = _sanitize_writer_gap(section)
+            if note:
+                repairs.append(note)
+            if sanitized is not None:
+                writer_gaps.append(sanitized)
             continue
         if section.kind != "finding":
             continue
@@ -622,6 +710,9 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
             )
         )
         repairs.append("Salvaged dropped finding as provisional caveat")
+    elif not has_supported_finding:
+        sections.append(provisional_caveat_section(report.title, claims))
+        repairs.append("Synthesized provisional answer from claim texts")
     conflicts = [claim for claim in claims if claim.status == "contradictory"]
     gaps = [claim for claim in claims if claim.status == "insufficient"]
     if conflicts:
@@ -646,6 +737,8 @@ def assemble_report(report: ReportDraft, claims: list[Claim], passages: list[Pas
                 kind="gap",
             )
         )
+    elif writer_gaps:
+        sections.extend(writer_gaps)
     if not has_supported_finding and not any(section.kind == "gap" for section in sections):
         sections.append(
             ReportSection(
