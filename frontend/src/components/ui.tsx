@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { Banner, BannerTone } from "../domain/runView";
 import { nextActionHint, statusLabel, type HintSurface } from "../domain/runView";
-import { formatUnknown } from "../domain/format";
+import { formatCostUsd, formatUnknown } from "../domain/format";
 import type { ConnectionState, ResearchRun, UsageFigures } from "../api/types";
 import { channelLabel } from "../domain/runView";
 
@@ -185,20 +185,20 @@ export function UsageFiguresList({
   /** Skip the outer panel when nested inside a CollapsiblePanel. */
   bare?: boolean;
 }) {
-  const rows: [string, number | string | null][] = [
-    ["Model calls", usage.llm_calls],
-    ["Prompt tokens", usage.prompt_tokens],
-    ["Completion tokens", usage.completion_tokens],
-    ["Total tokens", usage.total_tokens],
-    ["Search calls", usage.search_calls],
-    ["Estimated cost (USD)", usage.estimated_cost_usd],
+  const rows: [string, number | string | null, "plain" | "cost"][] = [
+    ["Model calls", usage.llm_calls, "plain"],
+    ["Prompt tokens", usage.prompt_tokens, "plain"],
+    ["Completion tokens", usage.completion_tokens, "plain"],
+    ["Total tokens", usage.total_tokens, "plain"],
+    ["Search calls", usage.search_calls, "plain"],
+    ["Estimated cost (USD)", usage.estimated_cost_usd, "cost"],
   ];
   const body = (
     <dl className="metric-list">
-      {rows.map(([label, value]) => (
+      {rows.map(([label, value, kind]) => (
         <div key={label}>
           <dt>{label}</dt>
-          <dd>{formatUnknown(value)}</dd>
+          <dd>{kind === "cost" ? formatCostUsd(value) : formatUnknown(value)}</dd>
         </div>
       ))}
     </dl>

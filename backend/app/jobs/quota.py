@@ -23,6 +23,7 @@ from backend.app.jobs.errors import JobServiceError
 from backend.app.jobs.timeutil import add_seconds, utc_day, utc_now
 from backend.app.jobs.turnstile import TurnstileVerifier
 from backend.app.observability import start_span
+from backend.app.cost_estimate import estimate_usage_cost_usd
 
 # review_required is paused human review: it must not hold the global active slot.
 ACTIVE_STATUSES = ("queued", "running")
@@ -341,6 +342,25 @@ def usage_snapshot(
     ledger_rows = session.scalars(
         select(UsageLedger).where(UsageLedger.identity_id == identity_id)
     ).all()
+    prompt_tokens = _sum_optional_ints([row.prompt_tokens for row in ledger_rows])
+    completion_tokens = _sum_optional_ints([row.completion_tokens for row in ledger_rows])
+    search_calls = _sum_optional_ints([row.search_calls for row in ledger_rows])
+    ledger_costs = []
+    for row in ledger_rows:
+        if row.estimated_cost_usd is None:
+            continue
+        try:
+            ledger_costs.append(float(row.estimated_cost_usd))
+        except (TypeError, ValueError):
+            continue
+    if ledger_costs:
+        estimated_cost = f"{sum(ledger_costs):.6f}"
+    else:
+        estimated_cost = estimate_usage_cost_usd(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            search_calls=search_calls,
+        )
     return {
         "identity_scope": "guest",
         "one_use_consumed": bool(entitlement and entitlement.status == "consumed"),
@@ -352,11 +372,11 @@ def usage_snapshot(
         "global_daily_starts": int(daily),
         "limits": budgets,
         "llm_calls": _sum_optional_ints([row.llm_calls for row in ledger_rows]),
-        "prompt_tokens": _sum_optional_ints([row.prompt_tokens for row in ledger_rows]),
-        "completion_tokens": _sum_optional_ints([row.completion_tokens for row in ledger_rows]),
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
         "total_tokens": _sum_optional_ints([row.total_tokens for row in ledger_rows]),
-        "search_calls": _sum_optional_ints([row.search_calls for row in ledger_rows]),
-        "estimated_cost_usd": None,
+        "search_calls": search_calls,
+        "estimated_cost_usd": estimated_cost,
         "note": "One run per issued guest token, not one verified run per person.",
     }
 

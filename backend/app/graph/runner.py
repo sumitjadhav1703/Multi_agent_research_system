@@ -20,6 +20,7 @@ from backend.app.graph.limits import GraphLimits
 from backend.app.graph.nodes import utc_now
 from backend.app.graph.state import empty_usage, initial_state
 from backend.app.observability import start_span
+from backend.app.cost_estimate import refresh_estimated_cost
 from backend.app.schemas.research import ReviewDecision
 
 
@@ -103,7 +104,7 @@ class ResearchGraphRunner:
         state = dict(snapshot.values or {})
         usage = dict(state.get("usage") or empty_usage())
         usage["elapsed_ms"] = self._elapsed_ms[run_id]
-        usage["estimated_cost_usd"] = None
+        usage = refresh_estimated_cost(usage)
         state["usage"] = usage
         events = number_events(list(state.get("events") or []))
         payload_value = interrupts[0] if interrupts else None

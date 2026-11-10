@@ -14,6 +14,7 @@ from backend.app.db.models import ResearchJob
 from backend.app.graph.limits import GraphLimits
 from backend.app.graph.runner import ResearchGraphRunner, RunNotPaused
 from backend.app.jobs.timeutil import utc_now
+from backend.app.cost_estimate import refresh_estimated_cost
 from backend.app.schemas.research import ReviewDecision
 
 
@@ -240,8 +241,7 @@ def _from_outcome(outcome: Any) -> ExecutionResult:
 
 
 def _from_state(state: dict[str, Any], *, status: str) -> ExecutionResult:
-    usage = dict(state.get("usage") or {})
-    usage["estimated_cost_usd"] = None
+    usage = refresh_estimated_cost(dict(state.get("usage") or {}))
     return ExecutionResult(
         status=status,
         provider_work_started=True,

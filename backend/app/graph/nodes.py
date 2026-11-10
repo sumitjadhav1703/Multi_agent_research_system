@@ -18,6 +18,7 @@ from backend.app.graph.prompts import (
     untrusted_block,
 )
 from backend.app.graph.state import ResearchState, empty_usage
+from backend.app.cost_estimate import refresh_estimated_cost
 from backend.app.research.evidence import (
     contradictions_for,
     enforce_claim_assessments,
@@ -283,9 +284,7 @@ def merge_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str
             updated.append({**item, "status": "done", "worker_status": statuses[subquestion_id]})
         else:
             updated.append(item)
-    usage = dict(state.get("usage") or empty_usage())
-    usage["search_calls"] = search_calls
-    usage["estimated_cost_usd"] = None
+    usage = refresh_estimated_cost({**(state.get("usage") or empty_usage()), "search_calls": search_calls})
     return {
         "sources": sources,
         "passages": passages,
@@ -647,9 +646,9 @@ def complete_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[
     del runtime
     status = state.get("approval_status") or "completed_unreviewed"
     stop = state.get("stop_reason") or status
-    usage = dict(state.get("usage") or empty_usage())
-    usage["search_calls"] = state.get("search_calls")
-    usage["estimated_cost_usd"] = None
+    usage = refresh_estimated_cost(
+        {**(state.get("usage") or empty_usage()), "search_calls": state.get("search_calls")}
+    )
     return {
         "approval_status": status,
         "stop_reason": stop,
@@ -661,7 +660,10 @@ def complete_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[
                 {
                     "llm_calls": usage.get("llm_calls"),
                     "search_calls": usage.get("search_calls"),
-                    "estimated_cost_usd": None,
+                    "prompt_tokens": usage.get("prompt_tokens"),
+                    "completion_tokens": usage.get("completion_tokens"),
+                    "total_tokens": usage.get("total_tokens"),
+                    "estimated_cost_usd": usage.get("estimated_cost_usd"),
                 },
             ),
             emit("run.completed", "complete", {"approval_status": status, "stop_reason": stop}),
@@ -672,8 +674,7 @@ def complete_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[
 def fail_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str, Any]:
     del runtime
     stop = state.get("stop_reason") or "failed"
-    usage = dict(state.get("usage") or empty_usage())
-    usage["estimated_cost_usd"] = None
+    usage = refresh_estimated_cost(dict(state.get("usage") or empty_usage()))
     return {
         "approval_status": "failed",
         "stop_reason": stop,

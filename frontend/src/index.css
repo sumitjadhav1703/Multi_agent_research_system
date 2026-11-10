@@ -1103,6 +1103,13 @@ button.chip:hover {
   display: grid;
   gap: 0.55rem;
   align-content: start;
+  min-width: 0;
+}
+
+.activity-feed li > div,
+.feed li,
+.worker-rows li {
+  overflow-wrap: anywhere;
 }
 
 .collapsible-panel {
@@ -1696,8 +1703,13 @@ th {
   }
 
   .live-cockpit {
-    grid-template-columns: minmax(0, 1.7fr) minmax(17rem, 0.9fr);
+    grid-template-columns: minmax(0, 1fr) 17rem;
     align-items: start;
+  }
+
+  .live-cockpit > .answer-panel,
+  .live-cockpit > .live-drawers {
+    min-width: 0;
   }
 
   .evidence-grid {
@@ -1734,6 +1746,17 @@ th {
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  .text-toggle {
+    display: none !important;
+  }
+
+  .expandable-md-body.is-preview {
+    max-height: none !important;
+    overflow: visible !important;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
   }
 
   body,

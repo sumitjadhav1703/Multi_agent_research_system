@@ -45,7 +45,7 @@ class GraphWorkflowTests(unittest.TestCase):
         self.assertEqual(paused.state["evidence_retry_count"], 0)
         self.assertLessEqual(len(paused.state["sources"]), 6)
         self.assertTrue(paused.state["citation_report"]["ok"])
-        self.assertIsNone(paused.state["usage"]["estimated_cost_usd"])
+        self.assertIsNotNone(paused.state["usage"]["estimated_cost_usd"])
         self.assertGreaterEqual(paused.state["usage"]["llm_calls"], 1)
         self.assertIn("run.accepted", _types(paused.events))
         self.assertIn("planner.completed", _types(paused.events))

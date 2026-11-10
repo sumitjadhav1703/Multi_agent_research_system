@@ -1233,7 +1233,12 @@ class RunsApiTests(unittest.TestCase):
         self.assertEqual(body["completion_tokens"], 350)
         self.assertEqual(body["total_tokens"], 1550)
         self.assertEqual(body["search_calls"], 3)
-        self.assertIsNone(body["estimated_cost_usd"])
+        from backend.app.cost_estimate import estimate_usage_cost_usd
+
+        self.assertEqual(
+            body["estimated_cost_usd"],
+            estimate_usage_cost_usd(prompt_tokens=1200, completion_tokens=350, search_calls=3),
+        )
 
     def test_missing_idempotency_key_and_bad_turnstile(self) -> None:
         guest = self.client.post("/api/v1/guest-identities", json={"turnstile_token": "ok"})

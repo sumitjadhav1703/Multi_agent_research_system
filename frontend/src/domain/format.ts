@@ -3,6 +3,14 @@ export function formatUnknown(value: number | string | null | undefined): string
   return String(value);
 }
 
+/** List-price USD estimate from the API (token×rate). Keep "unknown" when absent. */
+export function formatCostUsd(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "unknown";
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num)) return String(value);
+  return `$${num.toFixed(6)}`;
+}
+
 export function formatWhen(iso: string | null | undefined): string {
   if (!iso) return "unknown";
   const date = new Date(iso);

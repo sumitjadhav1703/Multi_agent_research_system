@@ -17,6 +17,7 @@ from backend.app.db.models import (
     ResearchSource,
     UsageLedger,
 )
+from backend.app.cost_estimate import estimate_usage_cost_usd
 from backend.app.schemas.research import EVIDENCE_WORDING
 
 
@@ -99,6 +100,14 @@ def build_snapshot(session: Session, run_id: str) -> dict[str, object]:
             "completion_tokens": sum_optional([row.completion_tokens for row in usage_rows]),
             "total_tokens": sum_optional([row.total_tokens for row in usage_rows]),
             "search_calls": sum_optional([row.search_calls for row in usage_rows]),
-            "estimated_cost_usd": costs[0] if len(costs) == 1 else None,
+            "estimated_cost_usd": (
+                costs[0]
+                if len(costs) == 1
+                else estimate_usage_cost_usd(
+                    prompt_tokens=sum_optional([row.prompt_tokens for row in usage_rows]),
+                    completion_tokens=sum_optional([row.completion_tokens for row in usage_rows]),
+                    search_calls=sum_optional([row.search_calls for row in usage_rows]),
+                )
+            ),
         },
     }

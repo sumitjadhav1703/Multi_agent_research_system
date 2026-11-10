@@ -47,9 +47,9 @@ export function ReportPage() {
             title={run.topic}
             lede={snapshot?.wording ?? "Evidence assessed against stored passages. This is not an absolute fact-check."}
             actions={
-              markdown ? (
+              answerBody ? (
                 <div className="button-row no-print">
-                  <button type="button" onClick={() => downloadMarkdown(run.run_id, markdown)}>
+                  <button type="button" onClick={() => downloadMarkdown(run.run_id, answerBody)}>
                     Export Markdown
                   </button>
                   <button type="button" className="secondary" onClick={() => window.print()}>
@@ -59,21 +59,29 @@ export function ReportPage() {
               ) : null
             }
           />
-          <RunStatusBar
-            run={run}
-            connection={connection}
-            hasAnswer={Boolean(answerBody)}
-            surface="report"
-            compact
-          />
-          <p className="meta">
-            Duration {formatElapsed(run.started_at, run.finished_at)} · Sources{" "}
-            {snapshot ? snapshot.sources.length : "unknown"} · Evaluation not measured
-          </p>
+          <div className="no-print">
+            <RunStatusBar
+              run={run}
+              connection={connection}
+              hasAnswer={Boolean(answerBody)}
+              surface="report"
+              compact
+            />
+            <p className="meta">
+              Duration {formatElapsed(run.started_at, run.finished_at)} · Sources{" "}
+              {snapshot ? snapshot.sources.length : "unknown"} · Evaluation not measured
+            </p>
+          </div>
         </div>
-        <NoticeCluster notices={notices} stickyHint={hint} scope={run.run_id} />
+        <div className="no-print">
+          <NoticeCluster notices={notices} stickyHint={hint} scope={run.run_id} />
+        </div>
       </div>
-      {run.status === "review_required" ? <ReviewForm runId={run.run_id} /> : null}
+      {run.status === "review_required" ? (
+        <div className="no-print">
+          <ReviewForm runId={run.run_id} />
+        </div>
+      ) : null}
 
       <article className="answer-panel" aria-labelledby="report-answer-heading">
         <SectionHeading kind="answer">Answer</SectionHeading>
@@ -115,6 +123,7 @@ export function ReportPage() {
         title="Critics"
         defaultOpen={expandSecondary}
         count={conflicts.length + gaps.length || null}
+        className="no-print"
       >
         {conflicts.length === 0 && gaps.length === 0 ? (
           <p>No claim-level conflicts or insufficient gaps are stored for this run.</p>
@@ -136,6 +145,7 @@ export function ReportPage() {
         title="Sources"
         defaultOpen={expandSecondary}
         count={snapshot?.sources.length ?? null}
+        className="no-print"
       >
         {snapshot?.sources.length ? (
           <ul className="feed">
@@ -157,14 +167,19 @@ export function ReportPage() {
         </div>
       </CollapsiblePanel>
 
-      <CollapsiblePanel title="Run usage" defaultOpen={expandSecondary} className="report-secondary">
+      <CollapsiblePanel
+        title="Run usage"
+        defaultOpen={expandSecondary}
+        className="report-secondary no-print"
+      >
         <UsageFiguresList usage={usage ?? EMPTY_USAGE} bare />
       </CollapsiblePanel>
     </section>
   );
 }
 
-function downloadMarkdown(runId: string, markdown: string) {
+/** Download report text as .md (document body only, not a page screenshot). */
+export function downloadMarkdown(runId: string, markdown: string) {
   const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

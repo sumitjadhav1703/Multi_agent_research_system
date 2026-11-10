@@ -21,6 +21,7 @@ from backend.app.jobs.executor import ExecutionResult
 from backend.app.jobs.quota import TERMINAL_STATUSES, refund_entitlement
 from backend.app.jobs.timeutil import add_seconds, utc_now
 from backend.app.observability import start_span
+from backend.app.cost_estimate import estimate_usage_cost_usd
 
 
 def finalize_job(
@@ -218,6 +219,18 @@ def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: Exe
             )
         )
     if replace_usage:
+        raw_cost = usage.get("estimated_cost_usd")
+        cost: str | None = None
+        if isinstance(raw_cost, str) and raw_cost.strip():
+            cost = raw_cost.strip()[:32]
+        elif isinstance(raw_cost, (int, float)) and not isinstance(raw_cost, bool) and raw_cost > 0:
+            cost = f"{float(raw_cost):.6f}"
+        if cost is None:
+            cost = estimate_usage_cost_usd(
+                prompt_tokens=_optional_int(usage.get("prompt_tokens")),
+                completion_tokens=_optional_int(usage.get("completion_tokens")),
+                search_calls=_optional_int(usage.get("search_calls")),
+            )
         session.add(
             UsageLedger(
                 id=str(uuid.uuid4()),
@@ -229,7 +242,7 @@ def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: Exe
                 prompt_tokens=_optional_int(usage.get("prompt_tokens")),
                 completion_tokens=_optional_int(usage.get("completion_tokens")),
                 total_tokens=_optional_int(usage.get("total_tokens")),
-                estimated_cost_usd=None,
+                estimated_cost_usd=str(cost)[:32] if cost is not None else None,
                 search_calls=_optional_int(usage.get("search_calls")),
                 created_at=now,
             )

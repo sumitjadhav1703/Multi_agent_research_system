@@ -236,9 +236,13 @@ describe("research console screens", () => {
     expect(screen.getByRole("link", { name: "ev_sq1_1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Critics" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export Markdown" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Print / save as PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export Markdown" }).closest(".no-print")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Critics" }).closest(".no-print")).toBeTruthy();
   });
 
-  it("shows unknown cost instead of a zero estimate", async () => {
+  it("shows list-price cost estimate when ledger totals exist", async () => {
     sessionStorage.setItem(GUEST_TOKEN_KEY, "g".repeat(24));
     world.usage.run_ids = ["run-1"];
     world.usage.llm_calls = 4;
@@ -246,7 +250,7 @@ describe("research console screens", () => {
     world.usage.completion_tokens = 350;
     world.usage.total_tokens = 1550;
     world.usage.search_calls = 3;
-    world.usage.estimated_cost_usd = null;
+    world.usage.estimated_cost_usd = "0.015260";
     renderAt("/usage");
     expect(await screen.findByRole("heading", { name: "Account usage" })).toBeInTheDocument();
     const account = screen.getByRole("heading", { name: "Account usage" }).closest("section");
@@ -259,8 +263,8 @@ describe("research console screens", () => {
     expect(metric("Prompt tokens")).toBe("1200");
     expect(metric("Total tokens")).toBe("1550");
     expect(metric("Search calls")).toBe("3");
-    expect(metric("Estimated cost (USD)")).toBe("unknown");
-    expect(screen.getByText(/free allowlist/i)).toBeInTheDocument();
+    expect(metric("Estimated cost (USD)")).toBe("$0.015260");
+    expect(screen.getByText(/list-price token rates/i)).toBeInTheDocument();
   });
 
   it("does not offer a guest benchmark or invent an accuracy figure", async () => {
