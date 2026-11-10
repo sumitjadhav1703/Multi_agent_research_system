@@ -1,5 +1,7 @@
 # Bug bash log — ResearchMind 2.0 Singapore stack
 
+> **Historical record (2026-11-09, with later dated notes).** Results describe the stack and code on that date. Current state: [`BUG_INVENTORY.md`](BUG_INVENTORY.md) and [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md). Since this log: `/health/ready` returns only `status`, `database`, `use_mock_provider`; V1 moved to `v1/`; suites are V1 16, backend 224, evals 15, frontend 47, MCP 31 (2026-11-10).
+
 **Date:** 2026-11-09  
 **Surfaces:** Render API `https://researchmind-api-sg.onrender.com`, Vercel `https://researchmind-console.vercel.app`, MCP `https://researchmind-mcp.jadhavsumit534.workers.dev`, Neon `researchmind-2` / `aws-ap-southeast-1`.
 

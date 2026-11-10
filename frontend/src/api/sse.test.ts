@@ -184,3 +184,18 @@ async function driveStream(open: (init: StreamInit) => Promise<void> | void) {
     vi.useRealTimers();
   }
 }
+
+describe("run stream drops", () => {
+  it("reports one drop per failed attempt", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    vi.mocked(fetchEventSource).mockImplementation(async () => {
+      calls += 1;
+      if (calls > 1) controller.abort();
+      throw new Error("network");
+    });
+    const onDrop = vi.fn();
+    await consumeRunStream({ ...handlers(controller.signal), onDrop });
+    expect(onDrop).toHaveBeenCalledTimes(1);
+  });
+});

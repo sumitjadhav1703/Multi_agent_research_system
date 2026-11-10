@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import bundledSummary from "../data/evaluationSummary.json";
+import bundledSummary from "../../../docs/evals/published-summary.json";
 import type { EvaluationSummary } from "../api/types";
 
 const SUMMARY = bundledSummary as EvaluationSummary;

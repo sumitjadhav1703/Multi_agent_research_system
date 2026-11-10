@@ -14,7 +14,7 @@ if (!existsSync(landing)) {
 
 mkdirSync(dist, { recursive: true });
 
-for (const name of ["index.html", "styles.css", "main.js", "assets", "fonts"]) {
+for (const name of ["index.html", "styles.css", "main.js"]) {
   const from = join(landing, name);
   const to = join(dist, name);
   if (!existsSync(from)) {

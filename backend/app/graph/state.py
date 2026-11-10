@@ -8,8 +8,6 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Any, TypedDict
 
-from backend.app.graph.limits import GraphLimits
-
 CONFIG_VERSION = "m2-graph-v1"
 
 
@@ -19,7 +17,6 @@ class ResearchState(TypedDict, total=False):
     topic: str
     created_at: str
     config_version: str
-    research_plan: dict[str, Any]
     subquestions: list[dict[str, Any]]
     dispatch_batch: list[str]
     fetch_budgets: dict[str, int]
@@ -65,7 +62,6 @@ def initial_state(*, topic: str, run_id: str, owner_id: str, created_at: str) ->
         "topic": topic,
         "created_at": created_at,
         "config_version": CONFIG_VERSION,
-        "research_plan": {},
         "subquestions": [],
         "dispatch_batch": [],
         "fetch_budgets": {},
@@ -89,17 +85,4 @@ def initial_state(*, topic: str, run_id: str, owner_id: str, created_at: str) ->
         "citation_report": {},
         "needs_followup": False,
         "terminal_failure": False,
-    }
-
-
-def limits_snapshot(limits: GraphLimits) -> dict[str, int | bool]:
-    clamped = limits.clamped()
-    return {
-        "max_subquestions": clamped.max_subquestions,
-        "max_parallel_workers": clamped.max_parallel_workers,
-        "max_sources": clamped.max_sources,
-        "max_search_calls": clamped.max_search_calls,
-        "max_evidence_retries": clamped.max_evidence_retries,
-        "max_revisions": clamped.max_revisions,
-        "pdf_enabled": clamped.pdf_enabled,
     }

@@ -2,7 +2,7 @@
 
 **Risk register:** [`../RISK_REGISTER.md`](../RISK_REGISTER.md)  
 **M3 review:** PASS WITH CONDITIONS (SSRF left open)  
-**Code owners:** `backend/app/jobs/quota.py`, `turnstile.py`, `tools.py`, CORS/settings validators, MCP auth
+**Code owners:** `backend/app/jobs/quota.py`, `turnstile.py`, `research/fetch.py`, `security/egress_fetch.py`, CORS/settings validators, MCP auth
 
 This is a **public student demo**, not a claimed hardened multi-tenant SaaS.
 
@@ -16,9 +16,9 @@ This is a **public student demo**, not a claimed hardened multi-tenant SaaS.
 | Provider keys | Never in Vite bundle / MCP Worker | IMPLEMENTED |
 | Prompt injection | Untrusted delimiters; fixed tool ports; fixtures | PARTIAL |
 | Indirect injection via pages | Pages cannot select tools | IMPLEMENTED intent |
-| SSRF | DNS/scheme + connect-time getaddrinfo pin | PARTIAL — **not closed** |
+| SSRF | Resolve once per hop, dial that IP with original Host/SNI, re-check redirects | PARTIAL — **not closed** |
 | DNS rebinding | Residual risk without egress proxy | OPEN |
-| URL validation | `validate_public_url` | IMPLEMENTED · VERIFIED offline |
+| URL validation | `egress_fetch.resolve_global_ips` / `fetch_public_url` | IMPLEMENTED · VERIFIED offline |
 | Egress restrictions | No proxy | NOT IMPLEMENTED |
 | HTML sanitization (fetch) | Strip script/style/nav/… | IMPLEMENTED |
 | XSS (console) | `react-markdown` without raw HTML; neutralize `<` | IMPLEMENTED |
@@ -57,7 +57,7 @@ sequenceDiagram
 | Mechanism | Detail | Status |
 |---|---|---|
 | Anonymous guest identity | Random token; DB stores SHA-256 only | IMPLEMENTED |
-| Turnstile | Required when secret configured; verify URL pinned to Cloudflare | IMPLEMENTED · VERIFIED |
+| Turnstile | Fails closed when no secret is set; verify URL pinned to Cloudflare; no `remoteip` sent; response hostname checked against `CORS_ORIGINS` | IMPLEMENTED · VERIFIED |
 | HttpOnly cookie | Not the primary design — token in `sessionStorage` + Authorization header | Design choice |
 | Atomic quota | DB updates before expensive work; Codex P2 lock ordering | IMPLEMENTED · VERIFIED |
 | Idempotency keys | Unique constraint | IMPLEMENTED · VERIFIED |
@@ -80,9 +80,9 @@ Refunds: only if failure occurs before `provider_work_started` is committed. Can
 
 ## SSRF honesty
 
-Connect-time pin keeps urllib3 looking up the previously validated public address for that scrape (including redirect hops). Tests cover private/mixed DNS and redirect-to-private.
+`egress_fetch.py` resolves each hop once, rejects private/loopback/link-local/metadata addresses, and dials that validated IP with the original hostname for Host/SNI, including redirect hops. Tests cover private/mixed DNS and redirect-to-private.
 
-**Still open:** connectors that skip `socket.getaddrinfo`; traffic to a public IP that is still undesirable; no egress allowlist proxy. Do not document SSRF as closed.
+**Still open (R04):** any other socket in the process bypasses the check; traffic to a public IP that is still undesirable; no egress allowlist proxy. Do not document SSRF as closed.
 
 ---
 

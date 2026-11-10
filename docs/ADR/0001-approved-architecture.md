@@ -14,7 +14,7 @@ The live repository at commit `f1881b9` is **ResearchMind V1**: a Streamlit + La
 
 The approved V2 blueprint requires a production-style student demo with durable jobs, multi-provider routing, evidence-linked research, React UI, evaluation, remote MCP, and public deployability — without claiming production SLAs or inventing metrics.
 
-Gate 0 confirmed: **no application V2 implementation exists yet**. Kit documents and Cursor agents were copied into the repo for orchestration; V1 source remains intact.
+Gate 0 confirmed: **no application V2 implementation exists yet**. Kit documents and agent definitions were copied into the repo for orchestration; V1 source remains intact.
 
 ---
 
@@ -52,12 +52,16 @@ Adopt the architecture in `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md` without sim
 ### Follow-on ADRs (planned, not written yet)
 
 - `0002-provider-routing.md` — after capability tests pin free model IDs  
-- `0003-queue-and-persistence.md` — lease/checkpoint details at M3  
-- `0004-streaming-transport.md` — SSE event schema at M4  
-- `0005-hosting-and-deployment.md` — measured Render/Neon/Vercel choices at M7  
+- `0003-queue-and-persistence.md` — lease/checkpoint details at M3 (published as ADR 0004; ADR 0003 became the evidence graph)  
+- `0004-streaming-transport.md` — SSE event schema at M4 (never written)  
+- `0005-hosting-and-deployment.md` — measured Render/Neon/Vercel choices at M7 (never written; ADR 0006 is the MCP Worker)  
 
 ---
 
 ## Gate 0 compliance note
 
 This ADR records **architecture acceptance**, not milestone completion. Implementation remains blocked until Gate 0 model-role verification passes and the user reviews the audit package (`IMPLEMENTATION_STATUS.md`, `BASELINE_REPORT.md`, `RISK_REGISTER.md`).
+
+---
+
+**Update (2026-11-10):** V2 is implemented and deployed: FastAPI on Render (Docker, one worker, Singapore), Neon Postgres, the React console on Vercel (`/app`, landing at `/`), and the MCP Worker on Cloudflare. V1 now lives under `v1/` and is not deployed. The SSRF egress proxy (R04) is still open.

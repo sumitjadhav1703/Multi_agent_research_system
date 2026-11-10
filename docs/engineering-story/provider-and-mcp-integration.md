@@ -1,6 +1,6 @@
 # Provider gateway vs remote MCP integration
 
-**MCP Worker:** `mcp-server/` — IMPLEMENTED · VERIFIED (29 unit tests) · deployed  
+**MCP Worker:** `mcp-server/` — IMPLEMENTED · VERIFIED (31 unit tests) · deployed  
 **ADR:** [`../ADR/0006-cloudflare-mcp.md`](../ADR/0006-cloudflare-mcp.md)  
 **Live:** https://researchmind-mcp.jadhavsumit534.workers.dev  
 **API base:** Singapore Render API  
@@ -57,7 +57,7 @@ Forwarding + light auth fits; running research does not.
 | `get_research_report` | read | No | MCP read API |
 | `list_research_sources` | read | No | MCP read API |
 | `get_claim_evidence` | read | No | MCP read API |
-| `get_evaluation_summary` | read | No | Returns published summary with `measured: false` |
+| `get_evaluation_summary` | read | No | Returns the published offline snapshot (`docs/evals/published-summary.json`; fixture-only judge run) |
 
 Read tools are owner-scoped via the same guest bearer the console uses. Create is subject to FastAPI quotas (one-use, global caps). Worker applies additional per-isolate edge limits (`limits.ts`).
 
@@ -84,10 +84,11 @@ Read tools are owner-scoped via the same guest bearer the console uses. Create i
 
 | Check | Status |
 |---|---|
-| Vitest unit tests (auth, forward, server) | VERIFIED 29/29 (documented) |
+| Vitest unit tests (auth, forward, server) | VERIFIED 31 tests (CI `mcp` job) |
 | Wrangler dry-run | Documented in status |
 | MCP Inspector end-to-end | **NOT RECORDED** as run |
-| Live workers.dev deploy | Documented in `deployment-report.md` |
+| Live workers.dev deploy | Documented in `deployment-report.md`; GitHub Action deploys on push to `main` under `mcp-server/**` |
+| Cron keep-warm | `*/10 * * * *` trigger pings the API `/api/v1/health/live` |
 
 ---
 

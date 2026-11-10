@@ -15,7 +15,7 @@
 | E05 | PDF parsing improves academic topics | Snippet-only PDFs | Enable parser | Subset of PDF-heavy questions | NOT RUN | CPU/RAM | Deferred | DEFERRED |
 | E06 | URL+hash dedupe lowers duplicates | No merge dedupe | Merge node | Duplicate ratio | NOT MEASURED | — | Keep | IMPLEMENTED |
 | E07 | Passage grounding reduces invented cites | V1 writer free-form | claim_grounded + validate_citations | Deterministic tests | Unit tests PASS; live rate NOT MEASURED | May mark insufficient | Keep | IMPLEMENTED |
-| E08 | Claim verification improves faithfulness | Critic-only V1 | Verify node | DeepEval faithfulness | NOT MEASURED | Extra tokens | Keep code; measure offline | PENDING |
+| E08 | Claim verification improves faithfulness | Critic-only V1 | Verify node | DeepEval faithfulness | NOT MEASURED on V1/V2 (fixture-only judge run exists) | Extra tokens | Keep code; measure offline | PENDING |
 | E09 | Free multi-provider failover raises completion | Single Groq V1 | LiteLLM allowlist fallbacks | Failure/completion rates | Partial live smoke only | Complexity | Keep free-only | PARTIAL |
 | E10 | Zero router retries reduce double-bill | SDK retries >0 | num_retries=0 | Timeout injection tests | Design rationale; cost NOT MEASURED | Less resilience | Keep | IMPLEMENTED |
 | E11 | SSE beats polling for UX | Streamlit status | SSE + replay | Qualitative + reconnect tests | Unit VERIFIED; hosted NOT MEASURED | Connection handling | Keep | IMPLEMENTED |
@@ -23,7 +23,7 @@
 | E13 | Caching cuts repeat cost | None | Response cache | Repeat topics | NOT RUN | Stale web | Investigate only if measured waste | PLANNED |
 | E14 | Prompt shortening cuts tokens | Current prompts | Ablation | Token ledger | NOT MEASURED | Quality risk | Pending | PLANNED |
 | E15 | Token budgets stop runaway jobs | Unlimited V1 starts | Wall clock + max calls | Zero-budget tests (Codex P2) | Unit VERIFIED | Hard stops | Keep | IMPLEMENTED |
-| E16 | DeepEval config stability | N/A | Pin 4.3.3 + temp 0 | Dry-run + future scored run | Dry-run constructs metrics; scores null | Judge cost | Keep pin | PARTIAL |
+| E16 | DeepEval config stability | N/A | Pin 4.3.3 + temp 0 | Dry-run + future scored run | Fixture-only judge run 2026-11-09: 80 numeric scores, 0 errors; no V1/V2 scores | Judge cost | Keep pin | PARTIAL |
 
 ---
 

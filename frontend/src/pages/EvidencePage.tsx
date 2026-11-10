@@ -16,10 +16,10 @@ export function EvidencePage() {
   const claims = useMemo(() => snapshot?.claims ?? [], [snapshot]);
   const requestedPassage = params.get("passage");
   const requestedClaim = params.get("claim");
+  const requestedSource = params.get("source");
   const [domain, setDomain] = useState("all");
   const [method, setMethod] = useState("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [claimId, setClaimId] = useState<string | null>(requestedClaim);
+  const [pick, setPick] = useState<{ key: string; sourceId: string | null; claimId: string | null } | null>(null);
 
   const domains = useMemo(() => [...new Set(sources.map((source) => source.domain).filter(Boolean))], [sources]);
   const methods = useMemo(
@@ -32,10 +32,19 @@ export function EvidencePage() {
     return true;
   });
   const passageSource = passages.find((passage) => passage.evidence_id === requestedPassage)?.source_id;
-  const activeSourceId = selectedId ?? passageSource ?? filtered[0]?.source_id ?? null;
+  const sourceFromUrl = sources.find((source) => source.source_id === requestedSource)?.source_id;
+  const urlKey = `${requestedPassage ?? ""}|${requestedClaim ?? ""}|${requestedSource ?? ""}`;
+  // Local picks apply only to the URL they were made on, so back/forward re-syncs from the query.
+  const picked = pick?.key === urlKey ? pick : null;
+  const selectedId = picked?.sourceId ?? null;
+  const claimId = picked?.claimId ?? null;
+  const activeSourceId = selectedId ?? passageSource ?? sourceFromUrl ?? filtered[0]?.source_id ?? null;
   const active = sources.find((source) => source.source_id === activeSourceId) ?? null;
   const activeClaim = claims.find((claim) => claim.claim_id === (claimId ?? requestedClaim)) ?? null;
-  const highlighted = new Set(activeClaim?.evidence_ids ?? (requestedPassage ? [requestedPassage] : []));
+  const firstOfSource = passages.find((passage) => passage.source_id === sourceFromUrl)?.evidence_id;
+  const highlighted = new Set(
+    activeClaim?.evidence_ids ?? (requestedPassage ? [requestedPassage] : firstOfSource && !selectedId ? [firstOfSource] : []),
+  );
   const visiblePassages = passages.filter((passage) => passage.source_id === activeSourceId);
   const linkedClaims = claims.filter((claim) =>
     claim.evidence_ids.some((id) => visiblePassages.some((passage) => passage.evidence_id === id)),
@@ -124,7 +133,7 @@ export function EvidencePage() {
                   type="button"
                   className="source-pill"
                   aria-pressed={source.source_id === activeSourceId}
-                  onClick={() => setSelectedId(source.source_id)}
+                  onClick={() => setPick({ key: urlKey, sourceId: source.source_id, claimId })}
                 >
                   <span className="source-pill-title">
                     {source.title || source.domain || "Untitled source"}
@@ -180,9 +189,8 @@ export function EvidencePage() {
                     className={`claim-pill status-${claim.status}`}
                     aria-pressed={claim.claim_id === (claimId ?? requestedClaim)}
                     onClick={() => {
-                      setClaimId(claim.claim_id);
                       const passage = passages.find((item) => claim.evidence_ids.includes(item.evidence_id));
-                      if (passage) setSelectedId(passage.source_id);
+                      setPick({ key: urlKey, sourceId: passage?.source_id ?? selectedId, claimId: claim.claim_id });
                     }}
                   >
                     <span className="claim-pill-text">{claim.text}</span>

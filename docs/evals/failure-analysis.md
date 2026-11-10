@@ -1,8 +1,8 @@
 # Failure analysis
 
-No V1 or V2 research run has been scored. The 2026-11-09 judge scored fixture artifacts only.
+No V1 or V2 research run has been scored. The 2026-11-09 judge runs (Gemini probe, then the full Meta Muse run) scored fixture artifacts only.
 
-On that run, `clean_factual` (g001) and `contradiction_kept` (g014), DeepEval 4.3.3 and `gemini/gemini-flash-latest` produced one numeric score and seven nulls on eligible metrics. Four nulls are `TimeoutError` after 88.5 seconds per attempt. Three nulls on g014 are LiteLLM `ServiceUnavailableError` / Gemini HTTP 503, "This model is currently experiencing high demand." Those are provider and timeout failures, not disagreement with a saved research system. Details are in `docs/evals/RESULTS.md`.
+The earlier Gemini probe on `clean_factual` (g001) and `contradiction_kept` (g014), DeepEval 4.3.3 and `gemini/gemini-flash-latest`, produced one numeric score and seven nulls on eligible metrics. Four nulls are `TimeoutError` after 88.5 seconds per attempt. Three nulls on g014 are LiteLLM `ServiceUnavailableError` / Gemini HTTP 503, "This model is currently experiencing high demand." Those are provider and timeout failures, not disagreement with a saved research system. Details are in `docs/evals/RESULTS.md`.
 
 The notes below are the fixture cases the deterministic checks are built to catch. Codes come from `evals/fixtures/runs.json`. A future live failure should be added here with the run id, dataset version, and date. Do not copy these fixture rows into a benchmark table.
 

@@ -232,7 +232,7 @@ def _import_deepeval_version(allow_version_mismatch: bool) -> str:
     except ImportError as exc:
         raise JudgeDependencyError(
             "DeepEval is not installed. For a controlled run only: "
-            "uv pip install --python /tmp/rm_v2_venv/bin/python -r evals/requirements.txt. "
+            "uv pip install --python <your venv python> -r evals/requirements.txt. "
             "Do not add it to CI or the public API environment for this milestone."
         ) from exc
     version = str(getattr(deepeval, "__version__", "unknown"))

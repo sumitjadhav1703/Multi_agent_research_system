@@ -83,7 +83,6 @@ export async function consumeRunStream(options: StreamHandlers): Promise<void> {
       });
     } catch {
       if (options.signal.aborted || finished || stop) return;
-      options.onDrop();
     }
     if (finished || options.signal.aborted || stop) return;
     options.onDrop();

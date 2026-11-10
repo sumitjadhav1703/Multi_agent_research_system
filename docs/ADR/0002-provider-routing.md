@@ -22,3 +22,5 @@ Use the **LiteLLM Python SDK `Router` inside FastAPI** (not a separate LiteLLM P
 - CI never consumes provider quotas.
 - Live tool-calling / structured-output capability per provider remains **unverified** until credentials are available; illustrative free model IDs in defaults must pass capability tests before a public demo relies on them.
 - Meta Muse Spark Contributor last-resort is the lowest-cost Spark chat tier; Contributor mode may allow Meta to train on prompts/completions. It is engineering last-hop resilience, not a marketed paid product tier.
+
+**Update (2026-11-10):** The Meta last resort runs only when `META_LAST_RESORT_ENABLED=true`, a Meta key is set, and `META_LAST_RESORT_MODEL` is on `FREE_MODEL_ALLOWLIST`; `render.yaml` does not enable it. An empty provider reply now falls through to the role fallback model, and tokens are counted after failed calls. `gemini/gemini-2.0-flash` is no longer in the default allowlist, and an environment that names it fails at boot. The offline eval judge uses `meta/muse-spark-1.3-contributor` (`evals/__init__.py`), not `rm-eval-judge`.

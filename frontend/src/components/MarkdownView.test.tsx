@@ -39,4 +39,19 @@ describe("MarkdownView", () => {
     expect(images[0]?.getAttribute("src")).toBe("https://example.test/transit");
     expect(container.textContent).toContain("x");
   });
+
+  it("routes src_ ids to ?source= and keeps '<' literal in code spans", () => {
+    render(
+      <MemoryRouter>
+        <MarkdownView
+          markdown={"See src_1 and `a < b`."}
+          citationIds={["src_1"]}
+          allowedUrls={[]}
+          runId="run-1"
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: "src_1" })).toHaveAttribute("href", "/runs/run-1/evidence?source=src_1");
+    expect(screen.getByText("a < b").tagName).toBe("CODE");
+  });
 });

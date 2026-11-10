@@ -1,5 +1,7 @@
 # ResearchMind 2.0 deployment report
 
+> **Mixed doc.** The live URL table and the dated follow-up measurements are the current deployed record. "What was verified", "What was not verified", "Demo script", and "Checklist before any public URL" are the 2026-11-07 pre-deploy record; the stack has since been deployed (Render `researchmind-api-sg`, Vercel, Cloudflare Worker, Neon). Superseded items carry a note. Current overview: [`README.md`](../README.md).
+
 **Date:** 2026-11-07  
 **Author:** Cursor Auto/Composer parent (deploy session). Earlier artifact author was Grok 4.7 (user-authorized), not Sonnet 5.  
 **Profile intended:** Profile A — one Render Free web service, Neon Postgres, one static frontend, one Cloudflare Worker.  
@@ -36,7 +38,7 @@
 | Check | Result |
 |---|---|
 | Post-deploy wake `/health/live` | HTTP 200, TTFB **0.340s**, total 0.341s (service already warm after retention-env deploy) |
-| `/health/ready` | HTTP 200, TTFB **0.204s**, `database: ok`, `use_mock_provider: false`, `allow_paid_models: false` |
+| `/health/ready` | HTTP 200, TTFB **0.204s**, `database: ok`, `use_mock_provider: false`, `allow_paid_models: false` (as measured 2026-11-09; since 2026-11-10 `/health/ready` returns only `status`, `database`, `use_mock_provider`) |
 | Warm second hit | live TTFB 0.275s; ready TTFB 0.181s |
 | During-deploy probe | connection reset (~120s) while `dep-dbocmqrm8hqs7386s740` was building — expected Free-tier blip |
 | Neon | project `lively-star-88380432`, branch `br-wandering-violet-a1ze5n7w`, endpoint host `ep-round-art-a1nye9fi` (direct) and `-pooler` host exists; `pooler_enabled: false` on compute. Connection string value not recorded. |
@@ -52,9 +54,9 @@ This report separates checks that ran from checks that did not.
 
 | Check | Result |
 |---|---|
-| Backend unit tests | `USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECRET_KEY= PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests` — **95 tests, 2.293s, OK, 0 skipped**. Python 3.13.14. Includes the 7 CORS tests and both local Postgres durability tests. |
+| Backend unit tests | `USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECRET_KEY= PYTHONPATH=. python -m unittest discover -s backend/tests` — **95 tests, 2.293s, OK, 0 skipped**. Python 3.13.14. Includes the 7 CORS tests and both local Postgres durability tests. (Superseded 2026-11-10: backend 224 tests; V1 16, evals 15, frontend 47, MCP 31.) |
 | CORS behavior | Exact origins are accepted. `*`, paths, and userinfo fail settings validation. An allowed origin is echoed on preflight and GET. Another origin is not. An empty `CORS_ORIGINS` adds no allow-origin header. Credentials are not enabled. |
-| Fetch imports without moving LangGraph | `langchain==1.4.7` depends on `langgraph>=1.2.12`. The API pins `langgraph==1.1.10`. A dry-run with that pin as a constraint failed, as expected. Installing `backend/requirements-fetch.txt` with `pip --no-deps --target /tmp/rm_fetch_pkgs` and importing `tools.py` succeeded against the existing API environment. The venv pin was not replaced. |
+| Fetch imports without moving LangGraph | `langchain==1.4.7` depends on `langgraph>=1.2.12`. The API pins `langgraph==1.1.10`. A dry-run with that pin as a constraint failed, as expected. Installing `backend/requirements-fetch.txt` with `pip --no-deps --target /tmp/rm_fetch_pkgs` and importing `tools.py` succeeded against the existing API environment. The venv pin was not replaced. (Superseded 2026-11-10: `backend/requirements-fetch.txt` is deleted; its packages are in `backend/requirements.txt` and scraping is `backend/app/research/fetch.py`.) |
 | `render.yaml` schema | Downloaded `https://render.com/schema/render.yaml.json` on this date and validated the file with jsonschema. **0 errors.** `autoDeployTrigger` is quoted `"off"` because unquoted `off` is a YAML boolean. |
 | Wrangler auth | `mcp-server` local Wrangler **4.158.0**, `CI=1 npx wrangler whoami`. **Not logged in.** The CLI said the auth token expired and could not be refreshed in a non-interactive shell. `npx wrangler deploy` was **not** run. |
 | Docker | `/usr/local/bin/docker` is a symlink to `Docker.app`, and that application is not installed. `podman`, `colima`, and `orbctl` are not on `PATH`. **No image was built. No container was started. No image size, RSS, or local cold-start time exists.** |
@@ -74,18 +76,18 @@ This report separates checks that ran from checks that did not.
 - Render Free sleep, wake, memory, CPU, or cold start. The approved plan quotes Render's published free-tier spin-down (about 15 minutes idle, wake on the order of a minute). This session did not measure that.
 - Provider fallback, token counts, or p95 latency on a hosted run.
 - Whether a Neon pooled connection string works with the LangGraph Postgres checkpointer. `DATABASE_URL` is the only database setting. Pooled versus direct was not tested here.
-- The Cloudflare Worker on a `workers.dev` hostname. `RESEARCHMIND_API_BASE` in `wrangler.jsonc` is still `http://127.0.0.1:8000`.
+- The Cloudflare Worker on a `workers.dev` hostname. `RESEARCHMIND_API_BASE` in `wrangler.jsonc` was still `http://127.0.0.1:8000` on 2026-11-07 (superseded: it is `https://researchmind-api-sg.onrender.com` and the Worker is deployed).
 - Screenshots. None were captured because there is no deployed V2 UI.
 
 ## Artifacts
 
 | File | Role |
 |---|---|
-| `Dockerfile` | Python 3.13 slim image. Installs `backend/requirements.txt`, then `backend/requirements-fetch.txt` with `--no-deps`. Runs as uid 10001. Listens through `infra/docker-entrypoint.sh`. |
+| `Dockerfile` | Python 3.13 slim image. Installs `backend/requirements.txt` (bs4, soupsieve, tavily-python included; no langchain, no root `tools.py`; `requirements-fetch.txt` deleted 2026-11-10). No Docker `HEALTHCHECK`. Runs as uid 10001. Listens through `infra/docker-entrypoint.sh`. |
 | `.dockerignore` | Keeps `.env`, frontend, MCP, evals, and tests out of the build context. |
 | `infra/docker-entrypoint.sh` | Refuses to start unless `WEB_CONCURRENCY` is `1`. Binds `0.0.0.0:$PORT` (default `8000`). One Uvicorn worker: `backend.app.main:app`. |
-| `render.yaml` | One Docker web service `researchmind-api` (`plan: free`, `region: singapore`, `numInstances: 1`, health `/api/v1/health/live`) and one static site `researchmind-console`. No Render Postgres. `autoDeployTrigger` is off. Live service name on Render is currently `researchmind-api-sg`. |
-| `vercel.json` | Alternative static host. Install and build run in `frontend/`. Output is `frontend/dist`. SPA rewrite to `index.html`. Public env name is `VITE_API_BASE` only, plus the existing public `VITE_TURNSTILE_SITE_KEY`. |
+| `render.yaml` | One Docker web service `researchmind-api-sg` (`plan: free`, `region: singapore`, `numInstances: 1`, health `/api/v1/health/live`). The duplicate `researchmind-console` static site was removed 2026-11-10; the console is on Vercel. No Render Postgres. `autoDeployTrigger` is `commit` (2026-11-10). |
+| `vercel.json` | Console host (Vercel project; install and build run via `--prefix frontend`). Output is `frontend/dist`. Landing at `/`, SPA rewrites for `/app` and `/app/*`. Public env name is `VITE_API_BASE` only, plus the existing public `VITE_TURNSTILE_SITE_KEY`. |
 | `.python-version` | `3.13` |
 | CORS | `CORS_ORIGINS` on `Settings`. Empty means same-origin only. |
 
@@ -116,13 +118,13 @@ Do this in order. Values stay in the host dashboard or a local untracked `.env`.
    - `docker run --rm -e PORT=8000 -e USE_MOCK_PROVIDER=true -e QUEUE_CONSUMER_ENABLED=false -p 8000:8000 researchmind-api`
    - `curl -fsS http://127.0.0.1:8000/api/v1/health/live`
 2. Create a **Neon** database. Do not create Render Postgres. Put the connection string in Render as `DATABASE_URL`. Confirm whether the checkpointer needs the direct (non-pooled) Neon URL before relying on restarts.
-3. Install the Render CLI, authenticate, and apply `render.yaml`, or create the same two services by hand. Leave autoscaling and extra instances off. Keep `WEB_CONCURRENCY=1`.
+3. Install the Render CLI, authenticate, and apply `render.yaml`, or create the same service by hand (the blueprint now defines only the API; the static console was removed). Leave autoscaling and extra instances off. Keep `WEB_CONCURRENCY=1`.
 4. Deploy the API once so it has an HTTPS origin. `USE_MOCK_PROVIDER` is `false` in the blueprint, so a real run needs `GROQ_API_KEY` and `TAVILY_API_KEY`. Other provider keys are optional until that provider is used.
-5. Set the static site's `VITE_API_BASE` to that API origin (no path, no secret) and deploy **either** `researchmind-console` **or** a Vercel project using `vercel.json`. Not both, unless `CORS_ORIGINS` lists every origin you actually serve.
+5. Set the static site's `VITE_API_BASE` to that API origin (no path, no secret) and deploy a Vercel project using `vercel.json`. Not both, unless `CORS_ORIGINS` lists every origin you actually serve.
 6. Set the API `CORS_ORIGINS` to the exact console origin, for example `https://<console-host>`. Redeploy the API. Add `http://127.0.0.1:5173` only if a local Vite dev server calls the API directly instead of using the proxy.
 7. Set `TURNSTILE_SECRET_KEY` on the API and `VITE_TURNSTILE_SITE_KEY` on the console if guest issuance should require Turnstile. Without the secret, guest behavior stays whatever the current API does when the secret is empty. Do not put the secret in Vite.
-8. In a terminal, from `mcp-server/`: `npx wrangler login`. Change `RESEARCHMIND_API_BASE` to the public API origin, run `npm run cf-typegen`, then `npx wrangler deploy`. Do not deploy while the var is loopback.
-9. Turn `autoDeployTrigger` to `commit` only after a manual deploy has succeeded with the secrets set.
+8. In a terminal, from `mcp-server/`: `npx wrangler login`. Change `RESEARCHMIND_API_BASE` to the public API origin, run `npm run cf-typegen`, then `npx wrangler deploy`. Do not deploy while the var is loopback. (Done: the var is the Singapore API origin; later deploys run from `.github/workflows/deploy-mcp-worker.yml`.)
+9. (`render.yaml` now sets `commit`.) Turn `autoDeployTrigger` to `commit` only after a manual deploy has succeeded with the secrets set.
 10. Record the real URLs, region, plan, cold-start time, and memory in this file. Delete any guessed number rather than filling one in.
 
 ### Environment names
@@ -150,8 +152,9 @@ No new secret was written to git. `.env` was not read.
 ## Known limits
 
 - One Render instance and one Uvicorn worker. This is a single-process demo. Free web services sleep and the disk is ephemeral. Jobs belong in Neon, not in the container filesystem.
+- Keep-awake: a Cloudflare Worker cron (`*/10`, in `mcp-server`) pings `/api/v1/health/live`. `.github/workflows/keep-api-awake.yml` is manual only because GitHub throttled its schedule. Neon idle queue polling is `QUEUE_IDLE_POLL_SECONDS=300` so it can scale to zero. Not an SLA.
 - Render Free was not upgraded. No memory or latency trigger was measured, so there is no basis to move to a paid plan.
-- HTML fetch uses in-process egress-style IP dial (`backend/app/security/egress_fetch.py`) via `tools.scrape_url`. **No separate egress proxy** — R04 remains partially mitigated, not closed.
+- HTML fetch uses in-process egress-style IP dial (`backend/app/security/egress_fetch.py`) via `scrape_url` in `backend/app/research/fetch.py` (overall read deadline; no longer root `tools.py`). **No separate egress proxy** — R04 remains partially mitigated, not closed.
 - Live Gemini on 2026-11-09 returned HTTP **503** (`ServiceUnavailableError`). Capability matrix is recorded as failed that day; re-run when the provider recovers. Do not treat a prior Flash-latest eval probe as a full role matrix pass.
 - The Worker does not run the research graph. Edge rate limits are per isolate. Quota remains in FastAPI and Postgres. MCP OAuth is deferred (bearer guest only).
-- Aggregate judge scores are still unmeasured (no V1/V2 mean). A bounded N=2 fixture probe recorded one Answer Relevancy; see `docs/evals/RESULTS.md` and `docs/BUG_BASH_LOG.md`.
+- No V1 vs V2 comparison exists. Offline fixture judge means (Meta Muse Spark, 2026-11-09) are published in `docs/evals/published-summary.json`; see `docs/evals/RESULTS.md`.

@@ -1,5 +1,7 @@
 # ResearchMind V1 — Baseline Report
 
+> **Historical record (2026-11-07, commit `f1881b9`).** Describes V1 as it was when frozen, when V1 files sat at the repo root. Today V1 lives in `v1/` (run `streamlit run v1/app.py`; tests: `cd v1 && python -m unittest discover -s tests`, 16 tests as of 2026-11-10), is not deployed, and `.cursor/` / `.impeccable/` / `CURSOR_IMPLEMENTATION_PLAN.md` are no longer in the repo. Current docs: [`README.md`](../README.md), [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md). The tree and commands below show the root layout at freeze time.
+
 **Date:** 2026-11-07  
 **Commit:** `f1881b9` — *Merge pull request #5 from sumitjadhav1703/docs/professional-readme*  
 **Freeze tag:** `v1-baseline` (annotated, Milestone 0)  
@@ -77,7 +79,7 @@ python -m unittest discover -s tests -v
 **Tools**
 
 - `web_search` — Tavily, max 5 results  
-- `scrape_url` — bounded HTML fetch with DNS public-IP checks, manual redirects (≤4), 1 MB cap, script/style strip  
+- `scrape_url` — bounded HTML fetch with DNS public-IP checks, manual redirects (≤4), 1 MB cap, script/style strip (as frozen; V1 `v1/tools.py` now uses the shared `backend/app/security/egress_fetch.py`)  
 
 **State:** in-memory / Streamlit `session_state` only. Successful stage outputs retained for resume after `PipelinePaused`. No PostgreSQL, no durable job queue.
 

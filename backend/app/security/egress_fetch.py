@@ -81,10 +81,7 @@ def resolve_global_ips(url: str, *, resolver: Resolver | None = None) -> list[st
             raise EgressBlocked("Private network addresses are blocked.")
         return [str(literal)]
     lookup = resolver or socket.getaddrinfo
-    try:
-        records = lookup(parsed.host, parsed.port, type=socket.SOCK_STREAM)
-    except UnicodeError:
-        raise
+    records = lookup(parsed.host, parsed.port, type=socket.SOCK_STREAM)
     if not records:
         raise EgressBlocked("Private network addresses are blocked.")
     ips: list[str] = []
@@ -148,6 +145,7 @@ def fetch_public_url(
                     current,
                     max_bytes=max_bytes,
                     require_html=require_html,
+                    deadline=deadline,
                 )
             finally:
                 response.close()
@@ -223,6 +221,7 @@ def _interpret(
     *,
     max_bytes: int,
     require_html: bool,
+    deadline: float | None = None,
 ) -> tuple[PublicFetch | None, str | None]:
     status = response.status
     if status in _REDIRECT_STATUSES:
@@ -246,7 +245,7 @@ def _interpret(
     declared = _content_length(response)
     if declared is not None and declared > max_bytes:
         raise EgressTooLarge("response exceeds the extraction limit")
-    body = _read_capped(response, max_bytes)
+    body = _read_capped(response, max_bytes, deadline)
     body = _decode_content(body, response.getheader("Content-Encoding") or "", max_bytes)
     return PublicFetch(url=current, status=status, content_type=content_type, body=body), None
 
@@ -271,10 +270,13 @@ def _content_length(response: http.client.HTTPResponse) -> int | None:
     return value
 
 
-def _read_capped(response: http.client.HTTPResponse, max_bytes: int) -> bytes:
+def _read_capped(response: http.client.HTTPResponse, max_bytes: int, deadline: float | None = None) -> bytes:
     remaining = max_bytes + 1
     chunks: list[bytes] = []
     while remaining > 0:
+        # Overall cap so a slow-drip server cannot hold the fetch past the deadline.
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("public fetch deadline exceeded")
         chunk = response.read(min(16384, remaining))
         if not chunk:
             break

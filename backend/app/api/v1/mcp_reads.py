@@ -59,11 +59,10 @@ _FALLBACK_EVALUATION_SUMMARY: dict[str, object] = {
 
 
 def _load_published_evaluation_summary() -> dict[str, object]:
-    """Prefer the checked-in JSON shipped with the backend image (and docs copy)."""
+    """Read docs/evals/published-summary.json (repo checkout, or COPYed to /app/docs in Docker)."""
     here = Path(__file__).resolve()
     candidates = [
-        here.parents[2] / "data" / "evaluation_summary.json",  # backend/app/data (in Docker)
-        here.parents[4] / "docs" / "evals" / "published-summary.json",  # repo checkout
+        here.parents[4] / "docs" / "evals" / "published-summary.json",
         Path.cwd() / "docs" / "evals" / "published-summary.json",
     ]
     for path in candidates:
@@ -75,9 +74,6 @@ def _load_published_evaluation_summary() -> dict[str, object]:
         except (OSError, json.JSONDecodeError):
             continue
     return dict(_FALLBACK_EVALUATION_SUMMARY)
-
-
-PUBLISHED_EVALUATION_SUMMARY: dict[str, object] = _load_published_evaluation_summary()
 
 
 def _owned_snapshot(session: Session, run_id: str, token: str) -> dict[str, object]:

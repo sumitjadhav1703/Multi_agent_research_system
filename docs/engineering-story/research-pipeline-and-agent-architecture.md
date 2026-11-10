@@ -43,11 +43,11 @@ stateDiagram-v2
 | `validate` | Topic length/safety gates | No | IMPLEMENTED |
 | `plan` | ≤3 subquestions | Yes (`rm-planner`) | IMPLEMENTED |
 | `schedule` | Emit `Send` to ≤2 workers | No | IMPLEMENTED |
-| `worker` | Search + fetch via ports; return isolated results | Yes (`rm-researcher`) for query shaping as designed | IMPLEMENTED |
+| `worker` | Search + fetch via ports; return isolated results | No | IMPLEMENTED |
 | `merge` | Dedupe canonical URL / content hash | No | IMPLEMENTED |
-| `extract_claims` | Atomic claims from evidence | Yes | IMPLEMENTED |
-| `verify` | Ground claims to passages | Yes + deterministic overlap | IMPLEMENTED |
-| `evidence_gate` | One follow-up search or continue with gaps | No (policy) | IMPLEMENTED |
+| `extract_claims` | Atomic claims from evidence | Yes (`rm-researcher`) | IMPLEMENTED |
+| `verify` | Ground claims to passages | Yes (`rm-verifier`) + deterministic overlap | IMPLEMENTED |
+| `evidence_gate` | One follow-up search (needs a free source slot; skips known URLs) or continue with gaps | No (policy) | IMPLEMENTED |
 | `write` | Markdown report with citations | Yes (`rm-writer`) | IMPLEMENTED |
 | `citation` | Deterministic citation validate | No | IMPLEMENTED |
 | `human_review` | `interrupt` approve / revise×1 / reject | No | IMPLEMENTED |
@@ -87,7 +87,7 @@ LangGraph `Send` fans out worker nodes. Each scheduling step emits **at most two
 ### When parallelism hurts
 
 - Shared free-tier RPM across workers → synchronized 429s  
-- Process-wide DNS pin lock in V1 `tools.py` serializes scrapes in one process  
+- Each fetch is a blocking socket call with a 15 s overall read deadline (`research/fetch.py`), so slow pages hold a worker thread  
 - Render Free 0.1 CPU / 512 MB — concurrent HTML parse spikes RAM  
 - Duplicate Tavily spend without better unique sources  
 
@@ -105,7 +105,8 @@ LangGraph `Send` fans out worker nodes. Each scheduling step emits **at most two
 | Search failure | Not approvable; fail path |
 | Evidence gap | One retry wave, then visible gap section |
 | Citation invent | Deterministic reject before review |
-| Human second revise | Refused |
+| Human revise past the limit | Returns to review with a warning; approve/reject stay available |
+| Wall clock exceeded | Checked between graph steps; status `expired`, stop reason `wall_clock` |
 | Process crash mid-LLM | Job may re-lease; provider call can run again (**at-least-once**) |
 
 Router `num_retries=0` — avoid blind re-bill of timed-out generations. Fallbacks are explicit allowlisted hops only.

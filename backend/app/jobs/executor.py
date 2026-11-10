@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
+from contextvars import ContextVar
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +18,10 @@ from backend.app.graph.runner import ResearchGraphRunner, RunNotPaused
 from backend.app.jobs.timeutil import utc_now
 from backend.app.cost_estimate import refresh_estimated_cost
 from backend.app.schemas.research import ReviewDecision
+
+
+# Set by the consumer (same thread as execute) when the heartbeat loses the lease.
+LEASE_LOST: ContextVar[threading.Event | None] = ContextVar("lease_lost", default=None)
 
 
 @dataclass
@@ -32,7 +38,6 @@ class ExecutionResult:
     claims: list[dict[str, Any]] = field(default_factory=list)
     report_markdown: str | None = None
     usage: dict[str, Any] = field(default_factory=dict)
-    retryable: bool = False
 
 
 class GraphJobExecutor:
@@ -111,14 +116,12 @@ class GraphJobExecutor:
                 error_code="graph_error",
                 error_detail=type(exc).__name__,
             )
-        return _honor_cancel(session_factory, job_id, result)
+        return result
 
     def _runner(self, max_model_calls: int) -> ResearchGraphRunner:
         client = self.model_client
         if client is None:
-            from backend.app.providers.client import ModelClient
-
-            client = ModelClient(self.settings)
+            client = _shared_model_client(self.settings)
         retrieval = self.retrieval
         if retrieval is None:
             from backend.app.research.retrieval import V1Retrieval
@@ -127,9 +130,23 @@ class GraphJobExecutor:
         return ResearchGraphRunner(
             model_client=client,
             retrieval=retrieval,
-            limits=GraphLimits(max_model_calls=max_model_calls).clamped(),
+            limits=GraphLimits(max_model_calls=max_model_calls),  # the runner clamps
             checkpointer=self.checkpointer,
         )
+
+
+_client_cache: tuple[Settings, Any] | None = None
+
+
+def _shared_model_client(settings: Settings) -> Any:
+    """One ModelClient (and Router) per process for a given Settings object."""
+    global _client_cache
+    cached = _client_cache
+    if cached is None or cached[0] is not settings:
+        from backend.app.providers.client import ModelClient
+
+        cached = _client_cache = (settings, ModelClient(settings))
+    return cached[1]
 
 
 def _budget(raw: str) -> dict[str, int]:
@@ -171,6 +188,11 @@ def _run_graph(
             error_code="wall_clock",
             error_detail="wall_clock",
         )
+    if isinstance(runner, ResearchGraphRunner):
+        # The runner checks this between graph steps; an in-flight provider call is not interrupted.
+        runner.deadline = time.monotonic() + max_wall_clock_seconds
+        lost = LEASE_LOST.get()
+        runner.should_stop = lost.is_set if lost is not None else None
     if resume_action:
         return _from_outcome(
             runner.resume(
@@ -184,49 +206,17 @@ def _run_graph(
             return _from_state(state, status="review_required")
         if has_values:
             return _from_outcome(runner.continue_from_checkpoint(job_id))
-    # Sync invoke already finished (review_required / completed / failed).
-    # Do not overwrite that outcome with expired after the fact; mid-run
-    # wall-clock interrupt is not enforced on this path. max_wall_clock_seconds
-    # is only used for the <= 0 early reject above.
-    _ = max_wall_clock_seconds
     outcome = runner.start(topic, owner_id=owner_id, run_id=job_id)
     return _from_outcome(outcome)
-
-
-def _honor_cancel(
-    session_factory: Callable[[], Session],
-    job_id: str,
-    result: ExecutionResult,
-) -> ExecutionResult:
-    """If cancel landed while the graph ran, do not report completed or review_required.
-
-    This does not interrupt an HTTP call already in flight. The check runs after
-    start, resume, or continue_from_checkpoint returns.
-    """
-    if result.status not in {"completed", "review_required", "rejected"}:
-        return result
-    try:
-        session = session_factory()
-    except Exception:
-        return result
-    try:
-        job = session.get(ResearchJob, job_id)
-        if job is not None and job.cancel_requested:
-            result.status = "cancelled"
-            result.error_code = "cancelled"
-        return result
-    except Exception:
-        session.rollback()
-        return result
-    finally:
-        session.close()
 
 
 def _from_outcome(outcome: Any) -> ExecutionResult:
     state = dict(outcome.state or {})
     approval = str(outcome.approval_status or state.get("approval_status") or "")
     stop_reason = state.get("stop_reason") or getattr(outcome, "stop_reason", None)
-    if outcome.interrupted:
+    if getattr(outcome, "expired", False):
+        status = "expired"
+    elif outcome.interrupted:
         status = "review_required"
     elif approval == "rejected" or stop_reason == "human_rejected":
         status = "rejected"
@@ -235,6 +225,8 @@ def _from_outcome(outcome: Any) -> ExecutionResult:
     else:
         status = "completed"
     result = _from_state(state, status=status)
+    if status == "expired":
+        result.stop_reason = result.error_code = result.error_detail = "wall_clock"
     if outcome.events:
         result.events = list(outcome.events)
     return result

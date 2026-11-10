@@ -11,7 +11,6 @@ import {
   READ_TIMEOUT_MS,
   edgeLimiter,
   tokenKey,
-  type LimitKind,
 } from "./limits";
 
 export const TOOL_CATALOG = [
@@ -66,17 +65,12 @@ export type ToolContent = {
   isError?: boolean;
 };
 
-const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CLAIM_ID = /^[A-Za-z0-9_-]{1,80}$/;
-
 export async function executeTool(name: string, args: unknown, deps: ToolDeps): Promise<ToolContent> {
   const catalog = TOOL_CATALOG.find((tool) => tool.name === name);
   if (!catalog) return toolError("unknown_tool", "That tool is not exposed.");
   if (!bearerShapeOk(deps.token)) return toolError("unauthorized", "Bearer token is missing or invalid.");
 
   const record = asRecord(args);
-  const invalid = validate(catalog.name, record);
-  if (invalid) return toolError("invalid_input", invalid);
 
   const limiter = deps.limiter ?? edgeLimiter;
   const key = await tokenKey(deps.token);
@@ -169,26 +163,6 @@ async function dispatch(name: ToolName, args: Record<string, unknown>, deps: Too
   }
 }
 
-function validate(name: ToolName, args: Record<string, unknown>): string | null {
-  if (name === "get_evaluation_summary") return null;
-  if (name === "create_research_run") {
-    const topic = typeof args.topic === "string" ? args.topic.trim() : "";
-    if (!topic || topic.length > 500) return "Topic must be 1 to 500 characters.";
-    const key = typeof args.idempotency_key === "string" ? args.idempotency_key.trim() : "";
-    if (!key || key.length > 200 || [...key].some((char) => char.charCodeAt(0) < 33 || char.charCodeAt(0) > 126)) {
-      return "idempotency_key must be 1 to 200 visible ASCII characters.";
-    }
-    return null;
-  }
-  const runId = typeof args.run_id === "string" ? args.run_id : "";
-  if (!RUN_ID.test(runId)) return "run_id must be a UUID.";
-  if (name === "get_claim_evidence") {
-    const claimId = typeof args.claim_id === "string" ? args.claim_id : "";
-    if (!CLAIM_ID.test(claimId)) return "claim_id must be 1 to 80 letters, numbers, underscores, or hyphens.";
-  }
-  return null;
-}
-
 function asRecord(args: unknown): Record<string, unknown> {
   if (!args || typeof args !== "object" || Array.isArray(args)) return {};
   return args as Record<string, unknown>;
@@ -241,8 +215,4 @@ function clipValue(value: unknown, tight: boolean): { value: unknown; truncated:
     return output;
   };
   return { value: walk(value, ""), truncated };
-}
-
-export function toolKind(name: string): LimitKind | null {
-  return TOOL_CATALOG.find((tool) => tool.name === name)?.kind ?? null;
 }

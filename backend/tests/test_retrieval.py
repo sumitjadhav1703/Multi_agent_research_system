@@ -17,29 +17,17 @@ class RetrievalTests(unittest.TestCase):
     def test_content_hash_ignores_whitespace(self) -> None:
         self.assertEqual(content_hash("Widget   latency"), content_hash("Widget latency"))
 
-    def test_blocked_url_does_not_call_scrape(self) -> None:
-        def validate(url: str) -> None:
-            raise ValueError(f"blocked {url}")
-
-        def scrape(url: str) -> str:
-            raise AssertionError(f"scraped {url}")
-
-        result = fetch_public_html("http://127.0.0.1/secret", validate_public_url=validate, scrape=scrape)
+    def test_blocked_url_fails_without_dialing(self) -> None:
+        # Real scrape_url: egress validation rejects the literal before any socket is opened.
+        result = fetch_public_html("http://127.0.0.1/secret")
         self.assertEqual(result.extraction_method, "failed")
-        self.assertIn("blocked", result.caveat or "")
+        self.assertIn("Could not extract", result.caveat or "")
 
-    def test_html_scrape_is_classified_after_validation(self) -> None:
-        calls: list[str] = []
-
-        def validate(url: str) -> None:
-            calls.append(f"validate:{url}")
-
+    def test_html_scrape_is_classified(self) -> None:
         def scrape(url: str) -> str:
-            calls.append(f"scrape:{url}")
             return "Source: https://example.com/lab\nWidget latency fell in the lab report."
 
-        result = fetch_public_html("https://example.com/lab", validate_public_url=validate, scrape=scrape)
-        self.assertEqual(calls, ["validate:https://example.com/lab", "scrape:https://example.com/lab"])
+        result = fetch_public_html("https://example.com/lab", scrape=scrape)
         self.assertEqual(result.extraction_method, "html")
         self.assertIn("Widget latency", result.text)
         self.assertNotIn("Source:", result.text)

@@ -39,7 +39,7 @@ Offline DeepEval scored the **20 hand-built fixture runs** (`system: fixture`) w
 | Plan adherence | skipped | no DeepEval trace on fixtures |
 | Step efficiency | skipped | no DeepEval trace on fixtures |
 
-Raw JSON is local/gitignored: `evals/results/meta-muse-full.json`. Compact means: `docs/evals/META_MUSE_JUDGE_SUMMARY.json`.
+Raw JSON is local/gitignored (`evals/results/` is not in the repo): `evals/results/meta-muse-full.json`. Compact means: `docs/evals/META_MUSE_JUDGE_SUMMARY.json`.
 
 ### Note on retired `meta_llama/` route
 
@@ -53,7 +53,7 @@ Earlier the same day, a bounded Gemini Flash probe on 2 fixtures recorded one An
 
 Pass/fail codes on hand-built fixture artifacts (`system: fixture`), not quality scores for a research system.
 
-On 2026-11-09 the fixture self-check reported `dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0`. Raw: `evals/results/deterministic-2026-11-09.json`. Published with the judge summary above.
+On 2026-11-09 the fixture self-check reported `dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0`. Raw: `evals/results/deterministic-2026-11-09.json`. Published with the judge summary above (`docs/evals/published-summary.json` is the single source the console, API, and MCP Worker read).
 
 ## Commands
 

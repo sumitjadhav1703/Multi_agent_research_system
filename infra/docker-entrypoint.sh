@@ -18,6 +18,8 @@ case "$port" in
 esac
 
 echo "ResearchMind API listening on 0.0.0.0:${port} with one Uvicorn worker."
+# Render's proxy IPs are not fixed, so trust all; nothing security-relevant reads the client IP
+# (Turnstile remoteip is not sent).
 exec uvicorn backend.app.main:app \
   --host 0.0.0.0 \
   --port "$port" \

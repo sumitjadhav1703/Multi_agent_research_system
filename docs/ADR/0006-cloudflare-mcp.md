@@ -27,3 +27,5 @@ ADR 0001 reserved `0005` for hosting choices at Milestone 7. This record is 0006
 - Inspector and other clients that accept a static bearer can call the six tools against a running API. OAuth-only clients cannot, until the authorization server exists.
 - An isolate restart clears the edge counters. Two isolates can both forward a create; Postgres still applies the one-use and global gates.
 - An external start can still be repeated when the client changes idempotency keys or when the API committed and the client never saw the body and then uses a new key. That limitation already belongs to the API. The Worker does not add a second writer.
+
+**Update (2026-11-10):** The Worker is deployed (`researchmind-mcp`, GitHub Action on push to `main` under `mcp-server/**`). It also has a cron trigger (`*/10 * * * *`) that pings `/api/v1/health/live` to keep the Render API warm. `get_evaluation_summary` returns the published offline snapshot (`docs/evals/published-summary.json`: a fixture-only judge run, not a V1 versus V2 comparison), not a "not measured" note. OAuth discovery is still not shipped. The Worker suite has 31 tests.

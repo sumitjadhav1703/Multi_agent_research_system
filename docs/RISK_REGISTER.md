@@ -1,9 +1,9 @@
 # ResearchMind 2.0 — Risk Register
 
-**Updated:** 2026-11-10 (wipe-ready handoff; residuals unchanged)  
+**Updated:** 2026-11-10 (audit hardening on fix/audit-hardening; R04 still open)  
 **Owners:** Parent orchestrator unless noted
 
-First-release demo is live on Singapore hosts. Highest residual demo risk remains **R07/BI-P1-6** (free-provider availability) and **R10** (Render Free sleep). **R04** SSRF stays partial. See [`BUG_INVENTORY.md`](BUG_INVENTORY.md).
+First-release demo is live on Singapore hosts. Highest residual demo risk remains **R07/BI-P1-6** (free-provider availability) and **R10** (Render Free sleep). **R04** SSRF stays partial. Fetch now lives in `backend/app/research/fetch.py` with an overall read deadline; still no egress proxy. See [`BUG_INVENTORY.md`](BUG_INVENTORY.md).
 
 Severity: Critical / High / Medium / Low  
 Likelihood: High / Medium / Low
@@ -16,14 +16,14 @@ Likelihood: High / Medium / Low
 |---|---|---|---|---|---|---|
 | R01 | Parent not running Opus 5.5 High; silent fallback to Auto/Composer | Critical | High (observed) | User selects Opus 5.5 High in model picker; re-verify before M1; do not claim Opus ran | User + Parent | **Open — Gate 0 fail** |
 | R02 | Claude Sonnet 5 coding subagents unavailable (weekly usage / credits) | Critical | High (observed) | Buy credits or wait for weekly reset; do **not** silently switch to Sonnet 5.5 or Grok without explicit user decision | User | **Open — Gate 0 fail** |
-| R03 | Public Streamlit demo burns shared Groq/Tavily org quota (no auth/quota) | Critical (if public keys) | High | Keep V1 demo posture documented; V2 atomic one-use + global caps before public V2 URL | Security + Backend | Open (V1 known) |
+| R03 | Public Streamlit demo burns shared Groq/Tavily org quota (no auth/quota) | Critical (if public keys) | High | V1 is frozen in `v1/` and not deployed from this repo; V2 has atomic one-use + global caps | Security + Backend | Open (V1 only; V2 mitigated) |
 | R04 | SSRF DNS rebinding / connect-time TOCTOU in public fetch | High | Medium | **Partially mitigated, not closed.** One in-process fetch resolves each hop once, rejects private/loopback/link-local/metadata (including embedded and legacy literals), dials that global IP, sets Host/SNI to the original hostname, re-checks redirects, and caps size, time, and HTML type. No separate egress proxy, so other sockets in the process are not filtered. See the residual note below. | Backend + Security | **Open — partial in-process IP dial** |
 | R05 | Prompt injection via topic + retrieved HTML into agents | High | Medium | Structural isolation, tool allowlists, deterministic citation checks, injection fixtures in M2/M5 | Backend + Test | Open |
 | R06 | Unsanitized Markdown rendering of LLM/source text in Streamlit | High | Medium | V2 React: sanitize Markdown; safe citation components; never raw HTML from models | Frontend | Open |
-| R07 | Free-tier provider quota exhaustion / model ID churn (Groq, Gemini, Mistral, OpenRouter `:free`) | High | High | Capability matrix tests; fail-closed allowlist; no paid fallback; pin aliases in config | Backend | Open |
+| R07 | Free-tier provider quota exhaustion / model ID churn (Groq, Gemini, Mistral, OpenRouter `:free`) | High | High | Capability matrix tests; fail-closed allowlist; no paid fallback; pin aliases in config. 2026-11-10: retired `gemini/gemini-2.0-flash` and `mock/free-model` removed from the default/production allowlist; Meta last resort needs `META_LAST_RESORT_ENABLED=true`; empty provider content falls back to the role fallback model | Backend | Open |
 | R08 | Gemini unpaid data-use / human review terms | High | Medium (if used) | Public-data-only notice; never send private topics; document in UI | Parent + Frontend | Open |
-| R09 | Exactly-once LLM execution misconception after crash mid-call | Medium | High | Document at-least-once provider calls; idempotent job lease + checkpoint after persist | Backend | Open (design) |
-| R10 | Render Free spin-down / cold start breaks long SSE research runs | High | High | Single instance + Postgres durability; document wake behavior; upgrade only on measured need | Deploy | Open |
+| R09 | Exactly-once LLM execution misconception after crash mid-call | Medium | High | Document at-least-once provider calls; idempotent job lease + checkpoint after persist. 2026-11-10: lost lease stops the graph early (BI-P2-8); Postgres lease SQL still untested in CI | Backend | Open (design) |
+| R10 | Render Free spin-down / cold start breaks long SSE research runs | High | High | Single instance + Postgres durability; document wake behavior; upgrade only on measured need. 2026-11-10: Cloudflare Worker cron `*/10` pings `/health/live` (GitHub cron was throttled; workflow is manual only); SSE capped at 15 min | Deploy | Open |
 | R11 | Local Python 3.15 vs CI/README 3.13 drift | Medium | Medium | Pin Docker/Render to 3.13; ADR if changing | Backend | Open |
 | R12 | LangGraph Postgres checkpointer schema via `AsyncPostgresSaver.setup()` vs app migrations | Medium | Medium | Call `.setup()` once; coordinate with versioned app SQL migrations; test empty + upgrade DB | Backend | Open |
 | R13 | LiteLLM Router misconfigured to allow paid models | Critical | Medium | Startup validation of free-only allowlist; tests for paid path fail-closed | Backend + Test | Open |
@@ -31,14 +31,14 @@ Likelihood: High / Medium / Low
 | R15 | DeepEval LLM-judge cost on public path | Medium | Medium | M5 eval harness refuses without `RM_EVAL_JUDGE=1` and `--confirm-offline`. Not imported by the API. Not in CI. Still confirm no later milestone wires it into a request. | Test | Open |
 | R16 | Cloudflare MCP Worker accidentally duplicates graph logic | Medium | Low | Thin authenticated forwarder only; security review before M6 merge | Backend + Security | Open |
 | R17 | `gh` auth token invalid locally | Low | High (observed) | `gh auth refresh`; HTTPS clone works without it | User | Open |
-| R18 | Kit/docs merged but uncommitted; accidental loss or dirty main | Medium | Medium | Commit kit+audit on feature branch after user approval; keep `main` deployable | Parent | Open |
-| R19 | No V2 code yet — large delivery surface | Medium | Certain | Follow milestone gates; preserve V1 Streamlit until V2 tests pass | Parent | Accepted |
+| R18 | Kit/docs merged but uncommitted; accidental loss or dirty main | Medium | Medium | Code and docs are on GitHub; keep `main` deployable (2026-11-10: audit work is on branch `fix/audit-hardening`) | Parent | Open (process) |
+| R19 | No V2 code yet — large delivery surface | Medium | Certain | Superseded: V2 is built and deployed (Singapore stack); V1 is preserved in `v1/` | Parent | Closed (stale) |
 
 ---
 
 ## R04 residual — SSRF is not closed
 
-Phase 1.2 replaces the process-wide `socket.getaddrinfo` pin with one fetch helper, `backend/app/security/egress_fetch.py`. `tools.scrape_url` uses it. V2 retrieval calls that same `scrape_url` after an earlier `validate_public_url` gate. The gate does not choose the dial address. The fetch resolves again and dials that result.
+Phase 1.2 replaces the process-wide `socket.getaddrinfo` pin with one fetch helper, `backend/app/security/egress_fetch.py`. Since 2026-11-10 the V2 backend calls it through `scrape_url` in `backend/app/research/fetch.py` (overall read deadline), not root `tools.py` (that file is gone). V1 `v1/tools.py` imports the same helper. V2 retrieval calls that `scrape_url` after an earlier `validate_public_url` gate. The gate does not choose the dial address. The fetch resolves again and dials that result.
 
 What the helper does:
 

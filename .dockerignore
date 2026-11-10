@@ -2,6 +2,7 @@
 .git
 .github
 .cursor
+.impeccable
 .venv
 venv
 **/__pycache__
@@ -22,6 +23,7 @@ frontend
 mcp-server
 evals
 docs
+!docs/evals/published-summary.json
 tests
 backend/tests
 output

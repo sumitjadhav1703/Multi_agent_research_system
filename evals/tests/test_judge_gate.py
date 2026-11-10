@@ -20,7 +20,7 @@ from evals.judge import (
 from evals.load import default_runs_path
 
 ROOT = Path(__file__).resolve().parents[2]
-PYTHON = "/tmp/rm_v2_venv/bin/python"
+PYTHON = sys.executable
 DEEPEVAL_PROBE = Path("/tmp/deepeval_inspect")
 
 
@@ -126,7 +126,6 @@ class CommandGateTests(unittest.TestCase):
         requirements = (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
         self.assertNotIn("deepeval", workflow.lower())
         self.assertNotIn("deepeval", requirements.lower())
-        self.assertNotIn("evals/tests", workflow)
 
     @unittest.skipUnless(DEEPEVAL_PROBE.is_dir(), "local DeepEval probe directory is absent")
     def test_dry_run_constructs_litellm_model_without_reading_env_file(self) -> None:

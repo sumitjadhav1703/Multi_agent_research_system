@@ -9,9 +9,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from backend.app.api.v1.deps import bearer_token, call_db, current_settings, get_session
+from backend.app.api.v1.deps import bearer_token, call_db, current_settings, get_session, wake_consumer
+from backend.app.api.v1.snapshot import run_usage
 from backend.app.core.config import Settings
 from backend.app.db.models import JobEvent, ResearchJob
+from backend.app.graph.limits import GraphLimits
 from backend.app.observability import start_span
 from backend.app.jobs.quota import (
     cancel_run,
@@ -45,7 +47,7 @@ def server_budgets(settings: Settings) -> dict[str, int]:
         "max_search_calls": 4,
         "max_evidence_retries": 1,
         "max_revisions": 1,
-        "max_model_calls": settings.max_model_calls_per_run,
+        "max_model_calls": GraphLimits(max_model_calls=settings.max_model_calls_per_run).clamped().max_model_calls,
         "max_wall_clock_seconds": settings.max_run_wall_clock_seconds,
     }
 
@@ -97,7 +99,7 @@ def create_run(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> JSONResponse:
     settings = current_settings(request)
-    identity = identity_from_token(session, token)
+    identity = call_db(lambda: identity_from_token(session, token))
 
     def _start():
         return start_run(
@@ -118,6 +120,8 @@ def create_run(
     ) as span:
         job, reused = call_db(_start)
         span.set(reused=bool(reused), run_id=job.id)
+    if not reused:
+        wake_consumer(request)
     return JSONResponse(status_code=202, content=public_job(job, reused=reused))
 
 
@@ -127,9 +131,10 @@ def get_run(
     session: Annotated[Session, Depends(get_session)],
     token: Annotated[str, Depends(bearer_token)],
 ) -> dict[str, object]:
-    identity = identity_from_token(session, token)
+    identity = call_db(lambda: identity_from_token(session, token))
     job = call_db(lambda: get_owned_job(session, run_id, identity.id))
-    return public_job(job)
+    usage = call_db(lambda: run_usage(session, job.id))
+    return {**public_job(job), "usage": usage}
 
 
 @router.get("/research-runs/{run_id}/events")
@@ -139,7 +144,7 @@ def get_events(
     token: Annotated[str, Depends(bearer_token)],
     after: int = 0,
 ) -> dict[str, object]:
-    identity = identity_from_token(session, token)
+    identity = call_db(lambda: identity_from_token(session, token))
     rows = call_db(lambda: list_events(session, run_id, identity.id, after=after))
     return {"run_id": run_id, "events": [public_event(row) for row in rows]}
 
@@ -147,17 +152,22 @@ def get_events(
 @router.post("/research-runs/{run_id}/cancel")
 def cancel(
     run_id: str,
+    request: Request,
     session: Annotated[Session, Depends(get_session)],
     token: Annotated[str, Depends(bearer_token)],
 ) -> dict[str, object]:
-    identity = identity_from_token(session, token)
+    identity = call_db(lambda: identity_from_token(session, token))
     job = call_db(lambda: cancel_run(session, run_id, identity.id))
+    wake_consumer(request)
     return public_job(job)
 
 
-def _review(action: str, run_id: str, body: ReviewRequest, session: Session, token: str) -> dict[str, object]:
-    identity = identity_from_token(session, token)
+def _review(
+    action: str, run_id: str, body: ReviewRequest, request: Request, session: Session, token: str
+) -> dict[str, object]:
+    identity = call_db(lambda: identity_from_token(session, token))
     job = call_db(lambda: request_review(session, run_id, identity.id, action, body.comments))
+    wake_consumer(request)
     return public_job(job)
 
 
@@ -165,27 +175,30 @@ def _review(action: str, run_id: str, body: ReviewRequest, session: Session, tok
 def approve(
     run_id: str,
     body: ReviewRequest,
+    request: Request,
     session: Annotated[Session, Depends(get_session)],
     token: Annotated[str, Depends(bearer_token)],
 ) -> dict[str, object]:
-    return _review("approve", run_id, body, session, token)
+    return _review("approve", run_id, body, request, session, token)
 
 
 @router.post("/research-runs/{run_id}/revise")
 def revise(
     run_id: str,
     body: ReviewRequest,
+    request: Request,
     session: Annotated[Session, Depends(get_session)],
     token: Annotated[str, Depends(bearer_token)],
 ) -> dict[str, object]:
-    return _review("revise", run_id, body, session, token)
+    return _review("revise", run_id, body, request, session, token)
 
 
 @router.post("/research-runs/{run_id}/reject")
 def reject(
     run_id: str,
     body: ReviewRequest,
+    request: Request,
     session: Annotated[Session, Depends(get_session)],
     token: Annotated[str, Depends(bearer_token)],
 ) -> dict[str, object]:
-    return _review("reject", run_id, body, session, token)
+    return _review("reject", run_id, body, request, session, token)

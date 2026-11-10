@@ -1,7 +1,7 @@
 # Frontend and user experience
 
-**V1 UI:** Streamlit `app.py` (baseline only — **not** the ResearchMind 2.0 frontend)  
-**V2 UI:** React + TypeScript + Vite under `frontend/` — **IMPLEMENTED · VERIFIED** (lint, typecheck, 16 unit tests, production build)  
+**V1 UI:** Streamlit `v1/app.py` (baseline only — **not** the ResearchMind 2.0 frontend)  
+**V2 UI:** React + TypeScript + Vite under `frontend/` — **IMPLEMENTED · VERIFIED** (lint, typecheck, 47 unit tests, production build)  
 **Live:** https://researchmind-console.vercel.app (`sin1`)
 
 ---
@@ -16,7 +16,7 @@
 | Secrets in Streamlit Cloud | Zero provider keys in browser |
 | Hard to style as a multi-route workspace | Explicit routes and components |
 
-Streamlit remains in-repo for regression comparison, not as the public V2 surface.
+Streamlit remains in `v1/` for regression comparison, not as the public V2 surface.
 
 ---
 
@@ -25,9 +25,10 @@ Streamlit remains in-repo for regression comparison, not as the public V2 surfac
 | Layer | Choice | Status |
 |---|---|---|
 | React 19 + TS + Vite | SPA | IMPLEMENTED |
-| Tailwind-style utility CSS in `index.css` + local primitives | Lightweight design system | IMPLEMENTED |
+| Utility-style CSS in `index.css` + local primitives (Tailwind removed 2026-11-10) | Lightweight design system | IMPLEMENTED |
 | shadcn/ui | Recommended in brief; console uses local `components/ui.tsx` rather than a full shadcn tree | PARTIAL / pragmatic |
-| Charts | Recharts available; evaluation page shows **not measured** | IMPLEMENTED (no fake scores) |
+| Charts | Recharts, only in the lazy-loaded `EvaluationPage`; it renders `docs/evals/published-summary.json` (fixture-only judge run) and shows nulls as not measured | IMPLEMENTED (no fake scores) |
+| Landing | Static portfolio page at `/` (`frontend/landing/`); console under `/app` | IMPLEMENTED |
 | SSE | `@microsoft/fetch-event-source` (Bearer headers) | IMPLEMENTED · VERIFIED |
 
 ---
@@ -77,7 +78,8 @@ Routes owned in `frontend/src/App.tsx`.
 - Export: browser print/save; dedicated PDF export **NOT IMPLEMENTED** as a first-class feature  
 
 #### 6. Evaluation dashboard — `EvaluationPage.tsx`
-- Explicitly renders metrics as **not measured**  
+- Renders the published offline snapshot (fixture-only judge run, 2026-11-09); null or missing metrics show as **not measured**  
+- Lazy-loaded route; summary bundled from `docs/evals/published-summary.json`  
 - No guest “run DeepEval” button  
 
 #### 7. Usage — `UsagePage.tsx`
@@ -149,7 +151,7 @@ Defined in `frontend/src/index.css` (dark research workspace aesthetic already s
 
 ## Known frontend limits
 
-- Production JS chunk large (~777 kB / ~235 kB gzip recorded in M4) due to Recharts + Markdown  
+- Main JS bundle ~485 KB; the lazy evaluation chunk (Recharts) is ~365 KB  
 - No Playwright E2E against a live research run recorded  
 - Publication date / worker provider fields often “unknown” unless events contain them  
 

@@ -1,5 +1,20 @@
 # ResearchMind 2.0 — Implementation Blueprint
 
+> **Original plan (prepared 2026-11-07). Not a description of the current system.** This file is the spec the build started from; its body is written as a plan, and the product has since been built and deployed. Current state: [`README.md`](../README.md), [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md), [`deployment-report.md`](deployment-report.md), [`ADR/`](ADR/).
+>
+> **Where the built system differs from this plan (checked 2026-11-10):**
+>
+> - **Paths:** backend entry is `backend/app/main.py` (uvicorn target `backend.app.main:app`, started by `infra/docker-entrypoint.sh`); `render.yaml` and `vercel.json` sit at the repo root (not `infra/`); the Worker config is `mcp-server/wrangler.jsonc` (not `wrangler.toml`); evals live in `evals/` (`cli.py`, `dataset/`, `fixtures/`, `judge.py`); V1 moved to `v1/`; migrations are `backend/migrations/*.sql`. Section 14 and 17.10 file lists are targets, not the layout.
+> - **Auth:** guest bearer token issued by `POST /api/v1/guest-identities` after Cloudflare Turnstile (token in an `Authorization` header, hash stored in Postgres). No GitHub OAuth, no cookie. MCP uses the same guest bearer; MCP OAuth is deferred (ADR 0006).
+> - **API:** SSE is `GET /api/v1/research-runs/{id}/events/stream`; `.../events` returns JSON. There is no `.../claims` list route; claim evidence is `.../claims/{claim_id}/evidence`. Also present: `POST /guest-identities`, `POST .../reject`, `GET /evaluation/summary`, `GET /me/usage`.
+> - **Tables:** `guest_identities`, `demo_entitlements`, `quota_guard`, `research_jobs`, `idempotency_keys`, `job_events`, `research_sources`, `evidence_passages`, `research_claims`, `research_reports`, `usage_ledger` (not `evidence_items` / `model_usage` / `usage_limits`).
+> - **Hosting:** console on Vercel (landing at `/`, console at `/app`), API on Render Free (Singapore), Neon Postgres, MCP Worker on Cloudflare; no Render static site.
+> - **Frontend:** no Tailwind or shadcn/ui; fetch-based SSE (`@microsoft/fetch-event-source`), React Router, TanStack Query, Recharts. Playwright is not in the test suites.
+> - **Providers:** the Meta Muse Spark last resort runs only when `META_LAST_RESORT_ENABLED=true`, a Meta key is set, and the model is on `FREE_MODEL_ALLOWLIST` (so the statement in section 0 that it is "not on the free allowlist" no longer holds for that case). Default Gemini id is `gemini/gemini-flash-latest`.
+> - **Limits as shipped:** `MAX_RUN_WALL_CLOCK_SECONDS=180` (plan said 5-8 minutes), `GLOBAL_MAX_ACTIVE_RUNS=1`, `GLOBAL_DAILY_RUN_CAP=3`, `MAX_MODEL_CALLS_PER_RUN=12`.
+> - **Evaluation:** only a fixture-based offline judge run (Meta Muse Spark) and deterministic checks are published; the V1 vs V2-A vs V2-B benchmark in section 9.5 was not measured.
+> - **Open items:** SSRF (section 11.2) is only partly mitigated (in-process IP dial, no egress proxy; R04); PDF parsing is not implemented.
+
 **Project:** [sumitjadhav1703/Multi_agent_research_system](https://github.com/sumitjadhav1703/Multi_agent_research_system)  
 **Prepared:** 7 November 2026  
 **Target:** Production-style engineering demonstrated through a deployable, low-cost student portfolio application  
@@ -1608,4 +1623,4 @@ The result will be credible when someone can inspect a real run, follow a report
 - [Neon pooled/direct connection strings](https://neon.com/blog/pgbouncer-the-one-with-prepared-statements)
 - [Vercel Hobby plan](https://vercel.com/docs/plans/hobby)
 
-**Document status:** Proposed implementation plan. It is not a claim that these changes have already been implemented or deployed.
+**Document status (as of 2026-11-07):** Proposed implementation plan. The banner at the top records where the built system differs from it; see `docs/IMPLEMENTATION_STATUS.md` for what is implemented and deployed.

@@ -2,8 +2,8 @@
 
 **Primary framework:** DeepEval (selected in SoT) — **do not replace with RAGAS**  
 **Harness:** `evals/` · pin `deepeval==4.3.3` in `evals/requirements.txt` only  
-**Results file:** [`../evals/RESULTS.md`](../evals/RESULTS.md) — scores **NOT MEASURED**  
-**Status:** PARTIALLY IMPLEMENTED · VERIFIED (deterministic fixtures + dry-run construction)
+**Results file:** [`../evals/RESULTS.md`](../evals/RESULTS.md) — judge scores exist for the 20 fixtures only; V1/V2 scores **NOT MEASURED**  
+**Status:** PARTIALLY IMPLEMENTED · VERIFIED (deterministic fixtures + fixture-only judge run)
 
 ---
 
@@ -11,7 +11,7 @@
 
 | Mode | When | Runs on public request path? |
 |---|---|---|
-| Offline regression | CI-adjacent / local | **No** |
+| Offline regression | CI (`evals` job: unit tests + deterministic self-check) / local | **No** |
 | Development evaluation | Engineer laptop with keys | **No** |
 | Optional production sampling | Not enabled | **No** |
 
@@ -34,9 +34,12 @@ evals/
   cli.py / __main__.py
   tests/
 docs/evals/
-  DATASET_CARD.md
+  DATASET_CARD.md              # commands + metric labels
   RESULTS.md
   failure-analysis.md
+  published-summary.json       # single source for console, API, MCP
+  META_MUSE_JUDGE_SUMMARY.json
+evals/DATASET_CARD.md          # dataset contents + review limits
 ```
 
 `golden-v0.1` includes multi-hop, contradictory, stale, current, insufficient-evidence, and prompt-injection cases. Passages are paraphrases. `snapshot_status: not_frozen`. `independent_second_review: false`. Expansion toward 50 + frozen snapshots remains open.
@@ -62,10 +65,10 @@ Investigated for controlled runs (DeepEval 4.3.3 classes constructed in dry-run)
 
 - Faithfulness  
 - Answer Relevancy  
-- Contextual Precision / Recall / Relevancy  
-- Correctness  
+- Contextual Precision / Recall  
+- Tool Correctness / Argument Correctness  
 
-**Actual scores:** none recorded. Null ≠ 0. Default threshold 0.5 is library default, not a calibrated bar.
+**Actual scores:** recorded 2026-11-09 on the 20 hand-built fixtures only (`meta/muse-spark-1.3-contributor`: faithfulness 0.925, answer relevancy 0.700, contextual precision 0.833, contextual recall 0.667; 80 numeric scores, 0 errors). None for V1 or V2 research output. Null ≠ 0. Default threshold 0.5 is library default, not a calibrated bar.
 
 Contextual Precision/Recall skipped for `TIME_DEPENDENT` reference answers in harness design.
 
@@ -73,7 +76,7 @@ Contextual Precision/Recall skipped for `TIME_DEPENDENT` reference answers in ha
 
 ## Agent metrics
 
-Task Completion, Plan Adherence, Step Efficiency, Tool Correctness / Execution Success require traces. Public graph is **not** wrapped in DeepEval tracing → these stay **skipped** unless a saved traced run exists.
+Task Completion, Plan Adherence, Step Efficiency require traces. Public graph is **not** wrapped in DeepEval tracing → these stay **skipped** unless a saved traced run exists.
 
 ---
 
@@ -96,7 +99,7 @@ Tracked structurally via usage ledger / events; host aggregates **NOT MEASURED**
 3. Freeze source snapshots before comparing systems (currently **not frozen**).  
 4. Version dataset id (`golden-v0.1`) and record date.  
 5. Run deterministic checks first.  
-6. Run judge only with pinned model (`gemini/gemini-flash-latest` intended) after live capability verify.  
+6. Run judge only with the pinned model (`meta/muse-spark-1.3-contributor`, `EVALUATOR_MODEL`); contributor tier may let Meta train on prompts, so use synthetic or public data.  
 7. Control judge variance: temperature 0, pinned DeepEval, fixed prompt versions, multiple seeds if scoring.  
 8. Cap eval cost: tiny batch, mock where possible, never on Render request path.
 
@@ -119,7 +122,7 @@ Until then, resume bullets must not claim “X% quality improvement.”
 
 ```text
 dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0
-evals/tests: 14 OK
+evals/tests: 15 OK
 ```
 
 These validate the harness and hand-built fixtures — **not** V1 vs V2 research quality.

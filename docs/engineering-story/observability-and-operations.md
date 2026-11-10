@@ -46,7 +46,7 @@ Spans should carry run id, node name, provider/model alias when known, latency, 
 | Symptom | Check |
 |---|---|
 | Console “Unable to connect” | API awake? CORS origin exact? Turnstile keys? |
-| ready ≠ ok | `DATABASE_URL` / Neon awake (scale-to-zero) |
+| ready returns 503 (`not_ready`, database `starting` or `unavailable`) | `DATABASE_URL` / Neon awake (scale-to-zero); DB init retries with backoff |
 | 429 / provider errors | Free-tier RPM; fallback allowlist; do not enable paid |
 | Quota errors | Expected after one guest run |
 | Stale SSE | REST reconcile; Last-Event-ID; job terminal state |
@@ -58,7 +58,7 @@ Spans should carry run id, node name, provider/model alias when known, latency, 
 
 1. Render + Neon dashboards (free tier history limited).  
 2. Structured logs drained optionally later.  
-3. Synthetic cron hitting `/health/live` (watch free instance-hours).  
+3. Synthetic cron hitting `/health/live`: the Cloudflare Worker cron (`*/10 * * * *`, `mcp-server/wrangler.jsonc`) does this. `.github/workflows/keep-api-awake.yml` is manual-only because GitHub throttled its schedule. Watch free instance-hours.  
 4. OTLP only when an endpoint is configured deliberately.
 
 Do not conflate observability spans with DeepEval quality scores.

@@ -2,7 +2,7 @@
 
 How to run the offline suites. These commands use mocked providers and local SQLite unless a test file says otherwise. They do not measure live provider quality, hosted latency, or LLM-judge scores. This is not a production-readiness claim.
 
-Python for the V2 and eval commands is the local 3.13 virtualenv when it exists: `/tmp/rm_v2_venv/bin/python`. Otherwise use `python3` with `backend/requirements.txt` and `evals/requirements.txt` installed. The V1 suite needs the root `requirements.txt` packages (`streamlit`, `groq`, `bs4`). `scripts/run_offline_suites.sh` uses `V1_PYTHON` when set, then `/tmp/rm_v1_venv`, then `/tmp/rm_phase12_venv`, then the V2 interpreter if that interpreter can import those modules. Do not print `.env` or secret values. Leave provider keys unset for these runs.
+Python for the V2 and eval commands is a local 3.13 virtualenv's `python` (any path) with `backend/requirements.txt` and `evals/requirements.txt` installed (`backend/requirements-fetch.txt` no longer exists; its packages are in `backend/requirements.txt`). The V1 suite needs the `v1/requirements.txt` packages (`streamlit`, `groq`, `bs4`). `scripts/run_offline_suites.sh` uses `V1_PYTHON` when set, then `/tmp/rm_v1_venv`, then `/tmp/rm_phase12_venv`, then the V2 interpreter if that interpreter can import those modules. Do not print `.env` or secret values. Leave provider keys unset for these runs.
 
 ## One offline command
 
@@ -24,7 +24,7 @@ RUN_NODE_SUITES=1 bash scripts/run_offline_suites.sh
 
 | Suite | Command | What a pass shows |
 | --- | --- | --- |
-| V1 baseline | `PYTHONPATH=. python -m unittest discover -s tests -q` | Frozen Streamlit/pipeline tests under `tests/` still pass. |
+| V1 baseline | `cd v1 && python -m unittest discover -s tests -q` | Frozen Streamlit/pipeline tests under `v1/tests/` still pass. |
 | V2 backend | `USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECRET_KEY= PYTHONPATH=. python -m unittest discover -s backend/tests -q` | FastAPI, graph, quotas, SSE, MCP reads, provider mocks, and list-price cost estimate (`test_cost_estimate`). External providers are not called. |
 | Frontend lint | `cd frontend && npm run lint` | ESLint on the Research Console. |
 | Frontend types | `cd frontend && npm run typecheck` | `tsc --noEmit` over `frontend/src` (includes `*.test.ts` / `*.test.tsx`). |
@@ -34,7 +34,9 @@ RUN_NODE_SUITES=1 bash scripts/run_offline_suites.sh
 | Eval unit tests | `PYTHONPATH=. python -m unittest discover -s evals/tests -q` | Golden-set shape and the judge gate. No model calls. |
 | Deterministic eval | `PYTHONPATH=. python -m evals.cli deterministic` | Fixture runs against the golden set. The printed rows are `metric_kind=deterministic`, not judge scores. |
 
-GitHub Actions (`.github/workflows/tests.yml`) runs the V1 suite, the V2 backend suite with `USE_MOCK_PROVIDER=true`, and the frontend lint, typecheck, Vitest, and build. It does not run the MCP worker, the deterministic eval CLI, or the judge.
+GitHub Actions (`.github/workflows/tests.yml`) has six jobs: `v1` (`v1/requirements.txt`, `v1/tests/`), `backend` (`USE_MOCK_PROVIDER=true`, plus `pip check`), `evals` (unit tests), `mcp` (Vitest), `docker` (image build), and `frontend` (lint, typecheck, Vitest, build). It does not run the judge or Postgres-only lease checks.
+
+Counts at 2026-11-10 on fix/audit-hardening: V1 16, backend 224, evals 15, frontend 47, MCP 31. The backend API image no longer imports V1 `tools.py`. V1 (`app.py`, `tools.py`, `tests/`, ...) moved unchanged into `v1/` and is still tested in the `v1` job.
 
 ## Judge (manual only)
 

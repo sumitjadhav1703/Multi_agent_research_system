@@ -97,8 +97,12 @@ def materialize_hits(
     fetch_budget: int,
     limits: GraphLimits,
     retrieved_at: str,
+    skip_urls: frozenset[str] = frozenset(),
 ) -> tuple[list[SourceRecord], list[Passage], list[str]]:
-    """Turn search hits into bounded sources. PDF URLs are not fetched or parsed."""
+    """Turn search hits into bounded sources. PDF URLs are not fetched or parsed.
+
+    `skip_urls` holds canonical URLs already in the ledger; they are not fetched again.
+    """
     sources: list[SourceRecord] = []
     passages: list[Passage] = []
     warnings: list[str] = []
@@ -106,13 +110,16 @@ def materialize_hits(
         if len(sources) >= fetch_budget:
             break
         url = hit.url.strip()
-        if not url:
+        if not url or canonical_url(url) in skip_urls:
             continue
         source_id = f"src_{subquestion_id}_{index}"
         if is_pdf_url(url):
             with start_span("source.fetch", domain=domain_of(url)) as span:
                 span.set(extraction_method="unsupported_pdf", fetched=False)
             excerpt = (hit.snippet or "")[: limits.max_excerpt_chars]
+            if not excerpt:
+                warnings.append(f"source:{url}:empty")
+                continue
             source = _source(
                 source_id=source_id,
                 subquestion_id=subquestion_id,
@@ -148,13 +155,11 @@ def materialize_hits(
             method = "snippet"
             fetched_flag = False
             caveat = fetched.caveat or "Fetch failed. Search snippet used and the limitation is disclosed."
-            text_for_passages = excerpt
         else:
             excerpt = fetched.text[: limits.max_excerpt_chars]
             method = fetched.extraction_method
             fetched_flag = method == "html"
             caveat = fetched.caveat
-            text_for_passages = excerpt
         caveats = [caveat] if caveat else []
         source = _source(
             source_id=source_id,
@@ -174,7 +179,7 @@ def materialize_hits(
         passages.extend(
             select_passages(
                 question,
-                text_for_passages,
+                excerpt,
                 source_id=source_id,
                 subquestion_id=subquestion_id,
                 url=url,
@@ -248,6 +253,7 @@ def run_worker_retrieval(
     retrieval,
     limits: GraphLimits,
     retrieved_at: str,
+    skip_urls: frozenset[str] = frozenset(),
 ) -> WorkerResult:
     if fetch_budget <= 0:
         return WorkerResult(
@@ -260,7 +266,7 @@ def run_worker_retrieval(
         )
     try:
         with start_span("search.call", subquestion_id=subquestion_id) as span:
-            hits = retrieval.search(search_query, max_results=min(limits.max_search_results, max(fetch_budget, 1)))
+            hits = retrieval.search(search_query, max_results=limits.max_search_results)
             span.set(hit_count=len(hits))
     except Exception:
         return WorkerResult(
@@ -280,12 +286,11 @@ def run_worker_retrieval(
         fetch_budget=fetch_budget,
         limits=limits,
         retrieved_at=retrieved_at,
+        skip_urls=skip_urls,
     )
     if not hits:
         warnings.append("search returned no sources")
     status = "ok" if sources else "partial"
-    if hits and not sources:
-        status = "partial"
     return WorkerResult(
         result_id=result_id,
         subquestion_id=subquestion_id,
@@ -305,6 +310,8 @@ def merge_worker_outputs(results: list[dict]) -> tuple[list[dict], list[dict], i
     warnings: list[str] = []
     seen_urls: dict[str, str] = {}
     seen_hashes: dict[str, str] = {}
+    owners: dict[str, SourceRecord] = {}
+    seen_evidence: set[str] = set()
     search_per_question: dict[str, int] = {}
     for raw in results:
         result = WorkerResult.model_validate(raw)
@@ -324,14 +331,16 @@ def merge_worker_outputs(results: list[dict]) -> tuple[list[dict], list[dict], i
             if source.excerpt:
                 seen_hashes[source.content_hash] = source.source_id
             sources.append(source)
+            owners[source.canonical_url] = source
         for passage in result.passages:
-            owner = next((source for source in sources if source.canonical_url == canonical_url(passage.url)), None)
-            if owner is None or any(existing.evidence_id == passage.evidence_id for existing in passages):
+            owner = owners.get(canonical_url(passage.url))
+            if owner is None or passage.evidence_id in seen_evidence:
                 continue
             if passage.quote not in owner.excerpt and owner.excerpt not in passage.quote:
                 continue
             if passage.source_id != owner.source_id:
                 passage = passage.model_copy(update={"source_id": owner.source_id})
+            seen_evidence.add(passage.evidence_id)
             passages.append(passage)
     ordered = sorted(sources, key=lambda item: item.rank_score, reverse=True)
     return (
@@ -361,7 +370,7 @@ def claim_grounded(claim_text: str, quote: str) -> bool:
     if not terms:
         return False
     overlap = terms & significant_terms(quote)
-    needed = 1 if len(terms) == 1 else min(2, len(terms))
+    needed = min(2, len(terms))
     return len(overlap) >= needed
 
 
@@ -390,7 +399,6 @@ def enforce_claim_assessments(claims: list[Claim], passages: list[Passage]) -> t
             grounded = [passage for passage in known if claim_grounded(claim.text, passage.quote)]
             if not grounded:
                 status = "insufficient"
-                evidence_ids = [passage.evidence_id for passage in known]
                 reason = (
                     "Deterministic check: supported requires a stored passage whose quote "
                     "overlaps the claim. Model opinion is not evidence."
@@ -526,6 +534,23 @@ def _report_match_terms(text: str) -> set[str]:
     return terms
 
 
+def _negation_ok(body_terms: set[str], claim_terms: set[str], *, lenient: bool = False) -> bool:
+    body_neg = body_terms & _NEGATION_TOKENS
+    claim_neg = claim_terms & _NEGATION_TOKENS
+    if body_neg == claim_neg:
+        return True
+    # Gap language about missing coverage may add a plain "not/no/none/without".
+    return lenient and not ((body_neg - claim_neg) - {"not", "no", "none", "without"})
+
+
+def _terms_covered(body_terms: set[str], claim_terms: set[str], *, lenient: bool = False) -> bool:
+    """Body adds no content terms beyond the claims and does not flip negation."""
+    if not body_terms or not _negation_ok(body_terms, claim_terms, lenient=lenient):
+        return False
+    content_body = body_terms - _NEGATION_TOKENS
+    return bool(content_body) and content_body <= claim_terms - _NEGATION_TOKENS
+
+
 def _body_matches_supported(body: str, supported_claims: list[Claim]) -> bool:
     """True when the finding text does not add terms or flip negation vs supported claims."""
     normalized = " ".join(body.split()).lower()
@@ -537,19 +562,9 @@ def _body_matches_supported(body: str, supported_claims: list[Claim]) -> bool:
         return False
     if normalized == claim_normalized:
         return True
-    body_terms = _report_match_terms(body)
-    claim_terms = _report_match_terms(claim_text)
-    if not body_terms:
-        return False
     # Short negations must match exactly; otherwise "not available" ⊆ "available" fails
     # one way and "available" ⊆ "not available" would incorrectly pass the other way.
-    if (body_terms & _NEGATION_TOKENS) != (claim_terms & _NEGATION_TOKENS):
-        return False
-    content_body = body_terms - _NEGATION_TOKENS
-    content_claim = claim_terms - _NEGATION_TOKENS
-    if not content_body:
-        return False
-    return content_body <= content_claim
+    return _terms_covered(_report_match_terms(body), _report_match_terms(claim_text))
 
 
 def _usable_provisional_body(body: str) -> str | None:
@@ -625,17 +640,8 @@ def provisional_caveat_section(
     """Build a provisional caveat when unsupported claims or passages can ground it."""
     if claims and not unsupported_claims(claims):
         return None
-    if not claims and not any(passage.quote.strip() for passage in (passages or [])):
-        # Still emit a topic-correct coverage note so the Answer panel is never blank.
-        body = synthesize_provisional_body(topic, claims, passages)
-        return ReportSection(
-            section_id=section_id,
-            heading="Provisional answer (unverified)",
-            body=body,
-            evidence_ids=[],
-            claim_ids=[],
-            kind="caveat",
-        )
+    # With no claims and no passages the body is still a topic-correct coverage
+    # note, so the Answer panel is never blank.
     return ReportSection(
         section_id=section_id,
         heading="Provisional answer (unverified)",
@@ -733,30 +739,24 @@ def _gap_body_grounded(body: str, claims: list[Claim]) -> bool:
     claim_text = " ".join(claim.text for claim in claims if claim.text.strip())
     if not claim_text.strip():
         return False
-    body_terms = _report_match_terms(body)
-    claim_terms = _report_match_terms(claim_text)
-    if not body_terms:
-        return False
-    if (body_terms & _NEGATION_TOKENS) != (claim_terms & _NEGATION_TOKENS):
-        # Allow extra "not/no" in gap language about missing coverage when claims lack them.
-        extra_negation = (body_terms & _NEGATION_TOKENS) - (claim_terms & _NEGATION_TOKENS)
-        if extra_negation - {"not", "no", "none", "without"}:
-            return False
-    content_body = body_terms - _NEGATION_TOKENS
-    content_claim = claim_terms - _NEGATION_TOKENS
-    if not content_body:
-        return False
-    return content_body <= content_claim
+    return _terms_covered(_report_match_terms(body), _report_match_terms(claim_text), lenient=True)
+
+
+def _rejection_note(section: ReportSection, label: str) -> str | None:
+    lowered = section.body.lower()
+    if not section.body.strip():
+        return None
+    if any(marker in lowered for marker in _INSTRUCTION_MARKERS):
+        return f"Dropped untrusted instruction text from {section.section_id}"
+    if any(marker in lowered for marker in _REFUSAL_MARKERS):
+        return f"Dropped meta-refusal {label} from {section.section_id}"
+    return None
 
 
 def _sanitize_writer_caveat(section: ReportSection) -> tuple[ReportSection | None, str | None]:
     body = _usable_provisional_body(section.body)
     if body is None:
-        if section.body.strip() and any(marker in section.body.lower() for marker in _INSTRUCTION_MARKERS):
-            return None, f"Dropped untrusted instruction text from {section.section_id}"
-        if section.body.strip() and any(marker in section.body.lower() for marker in _REFUSAL_MARKERS):
-            return None, f"Dropped meta-refusal provisional from {section.section_id}"
-        return None, None
+        return None, _rejection_note(section, "provisional")
     sanitized = section.model_copy(
         update={"body": body, "evidence_ids": [], "claim_ids": [], "kind": "caveat"}
     )
@@ -768,11 +768,7 @@ def _sanitize_writer_gap(
 ) -> tuple[ReportSection | None, str | None]:
     body = _usable_provisional_body(section.body)
     if body is None:
-        if section.body.strip() and any(marker in section.body.lower() for marker in _INSTRUCTION_MARKERS):
-            return None, f"Dropped untrusted instruction text from {section.section_id}"
-        if section.body.strip() and any(marker in section.body.lower() for marker in _REFUSAL_MARKERS):
-            return None, f"Dropped meta-refusal gap from {section.section_id}"
-        return None, None
+        return None, _rejection_note(section, "gap")
     claim_ids = [claim_id for claim_id in section.claim_ids if any(claim.claim_id == claim_id for claim in claims)]
     if _gap_body_grounded(body, claims):
         sanitized = section.model_copy(
@@ -900,7 +896,7 @@ def assemble_report(
             )
         )
         repairs.append("Salvaged dropped finding as provisional caveat")
-    elif not has_supported_finding:
+    else:
         synthesized = provisional_caveat_section(answer_topic, claims, passages)
         if synthesized is not None:
             sections.append(synthesized)

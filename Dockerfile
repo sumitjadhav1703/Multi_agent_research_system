@@ -12,19 +12,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY backend/requirements.txt /tmp/requirements.txt
-COPY backend/requirements-fetch.txt /tmp/requirements-fetch.txt
-# langchain 1.4.7 depends on langgraph>=1.2.12. The API pins langgraph==1.1.10.
-# Install the fetch extras without dependencies so that pin is not replaced.
-# beautifulsoup4, tavily-python, and langchain import libraries already present
-# in backend/requirements.txt (typing-extensions, requests, httpx, tiktoken,
-# langchain-core). soupsieve is pinned beside beautifulsoup4.
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
-    && pip install --no-cache-dir --no-deps -r /tmp/requirements-fetch.txt \
-    && rm -rf /tmp/requirements.txt /tmp/requirements-fetch.txt \
+    && rm -rf /tmp/requirements.txt \
     && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app
 
 COPY --chown=app:app backend /app/backend
-COPY --chown=app:app tools.py /app/tools.py
+# Read by backend/app/api/v1/mcp_reads.py at /app/docs/evals/published-summary.json.
+COPY --chown=app:app docs/evals/published-summary.json /app/docs/evals/published-summary.json
 COPY --chown=app:app infra/docker-entrypoint.sh /app/infra/docker-entrypoint.sh
 RUN chmod 755 /app/infra/docker-entrypoint.sh
 
@@ -32,7 +26,5 @@ USER app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PORT', '8000') + '/api/v1/health/live', timeout=3)"
-
+# No HEALTHCHECK: Render uses healthCheckPath in render.yaml and ignores it.
 CMD ["/app/infra/docker-entrypoint.sh"]

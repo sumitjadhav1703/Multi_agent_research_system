@@ -32,7 +32,7 @@ export function Shell() {
       </a>
 
       <header className="chrome no-print">
-        <Link className="brand" to={token ? "/" : "/"} onClick={close}>
+        <Link className="brand" to="/" onClick={close}>
           <span className="brand-logo" aria-hidden="true">
             <img src={logoSrc} alt="" width="52" height="52" />
           </span>
@@ -78,7 +78,7 @@ export function Shell() {
                 <span className="burger-bar" aria-hidden="true" />
                 <span className="burger-bar" aria-hidden="true" />
                 <span className="burger-bar" aria-hidden="true" />
-                <span className="sr-only">Menu</span>
+                <span className="visually-hidden">Menu</span>
               </button>
               <button type="button" className="ghost-btn desktop-only" onClick={() => clearToken()}>
                 Reset

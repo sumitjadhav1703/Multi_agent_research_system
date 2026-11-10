@@ -4,7 +4,7 @@ import { cancelRun, reviewRun } from "../api/client";
 import { useToken } from "../auth/token";
 import { ErrorText } from "./ui";
 
-export function ReviewForm({ runId }: { runId: string }) {
+export function ReviewForm({ runId, canRevise = true }: { runId: string; canRevise?: boolean }) {
   const { token } = useToken();
   const queryClient = useQueryClient();
   const [comments, setComments] = useState("");
@@ -18,7 +18,9 @@ export function ReviewForm({ runId }: { runId: string }) {
   return (
     <form className="panel stack" aria-label="Human review">
       <h2>Human review</h2>
-      <p>One revision can be requested. Approval and rejection are final for this run.</p>
+      <p>
+        {canRevise ? "One revision can be requested. " : "The one revision was already used. "}Approval and rejection are final for this run.
+      </p>
       <label className="field">
         <span>Comments</span>
         <textarea
@@ -33,9 +35,11 @@ export function ReviewForm({ runId }: { runId: string }) {
         <button type="button" disabled={mutation.isPending} onClick={() => mutation.mutate("approve")}>
           Approve
         </button>
-        <button type="button" className="secondary" disabled={mutation.isPending} onClick={() => mutation.mutate("revise")}>
-          Request one revision
-        </button>
+        {canRevise ? (
+          <button type="button" className="secondary" disabled={mutation.isPending} onClick={() => mutation.mutate("revise")}>
+            Request one revision
+          </button>
+        ) : null}
         <button type="button" className="secondary" disabled={mutation.isPending} onClick={() => mutation.mutate("reject")}>
           Reject
         </button>

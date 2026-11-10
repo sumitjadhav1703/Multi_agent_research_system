@@ -5,15 +5,16 @@ import { z } from "zod";
 
 import { executeTool, TOOL_CATALOG, type ToolDeps, type ToolName } from "./tools";
 
-const runId = z.string().describe("Research run UUID returned by create_research_run.");
+const runId = z.string().uuid().describe("Research run UUID returned by create_research_run.");
 
-const inputSchemas: Record<ToolName, z.ZodType> = {
+export const inputSchemas: Record<ToolName, z.ZodType> = {
   create_research_run: z.object({
-    topic: z.string().min(1).max(500).describe("Research topic. 1 to 500 characters."),
+    topic: z.string().trim().min(1).max(500).describe("Research topic. 1 to 500 characters."),
     idempotency_key: z
       .string()
       .min(1)
       .max(200)
+      .regex(/^[\x21-\x7e]+$/, "Visible ASCII only.")
       .describe("Caller-generated key. Reuse it when retrying the same start."),
   }),
   get_research_run: z.object({ run_id: runId }),
@@ -21,7 +22,9 @@ const inputSchemas: Record<ToolName, z.ZodType> = {
   list_research_sources: z.object({ run_id: runId }),
   get_claim_evidence: z.object({
     run_id: runId,
-    claim_id: z.string().min(1).max(80).describe("Claim id from the stored run."),
+    claim_id: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,80}$/).describe("Claim id from the stored run."),
   }),
   get_evaluation_summary: z.object({}),
 };

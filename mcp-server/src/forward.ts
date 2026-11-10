@@ -3,7 +3,8 @@
 import { bearerShapeOk } from "./auth";
 import { MAX_UPSTREAM_BYTES } from "./limits";
 
-const SECRET_KEY = /token|secret|authorization|api[_-]?key|password|error_detail/i;
+// "token" only as a whole key segment, so prompt_tokens/total_tokens counts pass.
+const SECRET_KEY = /(^|[_-])(token|secret|authorization|password|cookie)($|[_-])|api[_-]?key|error_detail/i;
 
 export type ForwardRequest = {
   apiBase: string;

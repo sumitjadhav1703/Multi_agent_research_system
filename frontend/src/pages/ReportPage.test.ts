@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { downloadMarkdown } from "./ReportPage";
 
 describe("downloadMarkdown", () => {
-  it("downloads the report text as a markdown blob, not a screenshot", () => {
+  it("downloads the report text as a markdown blob, not a screenshot", async () => {
     const click = vi.fn();
     const createElement = vi.spyOn(document, "createElement").mockImplementation((tag) => {
       if (tag === "a") {
-        return { click, download: "", href: "" } as unknown as HTMLAnchorElement;
+        const anchor = document.createElementNS("http://www.w3.org/1999/xhtml", "a") as HTMLAnchorElement;
+        anchor.click = click;
+        return anchor;
       }
       return document.createElementNS("http://www.w3.org/1999/xhtml", tag);
     });
@@ -25,6 +27,8 @@ describe("downloadMarkdown", () => {
     expect(captured).toBeInstanceOf(Blob);
     expect(captured?.type).toBe("text/markdown;charset=utf-8");
     expect(click).toHaveBeenCalledOnce();
+    expect(document.body.querySelector("a")).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 5));
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test");
 
     createElement.mockRestore();

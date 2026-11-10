@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Banner, BannerTone } from "../domain/runView";
 import { nextActionHint, statusLabel, type HintSurface } from "../domain/runView";
 import { formatCostUsd, formatUnknown } from "../domain/format";
@@ -10,7 +10,6 @@ export function PageHeader({
   lede,
   actions,
 }: {
-  eyebrow?: string;
   title: string;
   lede?: string;
   actions?: ReactNode;
@@ -23,21 +22,6 @@ export function PageHeader({
       </div>
       {actions ? <div className="header-actions">{actions}</div> : null}
     </header>
-  );
-}
-
-/** Full-width banners for Ask / gate pages only. */
-export function BannerList({ banners }: { banners: readonly Banner[] }) {
-  if (banners.length === 0) return null;
-  return (
-    <div className="banner-stack" aria-live="polite">
-      {banners.map((banner) => (
-        <article key={banner.id} className={`banner ${banner.tone}`} role={banner.tone === "danger" ? "alert" : "status"}>
-          <h2>{banner.title}</h2>
-          <p>{banner.detail}</p>
-        </article>
-      ))}
-    </div>
   );
 }
 
@@ -69,7 +53,8 @@ function writeDismissedNotices(map: Record<string, true>) {
 
 /**
  * Compact top-right notice cluster for run pages.
- * Dismissals persist for the browser tab session across Live / Report / Evidence.
+ * Dismissals persist for the browser tab session across Live / Report / Evidence,
+ * but a notice that goes away and comes back (e.g. a new reconnect) shows again.
  */
 export function NoticeCluster({
   notices,
@@ -85,6 +70,20 @@ export function NoticeCluster({
   const hintKey = `${scope}:hint`;
   const showHint = Boolean(stickyHint) && !dismissed[hintKey];
   const visible = notices.filter((notice) => !dismissed[`${scope}:${notice.id}`]);
+  const activeKeys = notices.map((notice) => `${scope}:${notice.id}`).join("|");
+
+  // Forget dismissals of notices that are no longer present so a recurrence is shown.
+  useEffect(() => {
+    const live = new Set(activeKeys.split("|"));
+    setDismissed((prev) => {
+      const stale = Object.keys(prev).filter((key) => key.startsWith(`${scope}:`) && key !== hintKey && !live.has(key));
+      if (stale.length === 0) return prev;
+      const next = { ...prev };
+      for (const key of stale) delete next[key];
+      writeDismissedNotices(next);
+      return next;
+    });
+  }, [activeKeys, scope, hintKey]);
 
   function dismiss(key: string) {
     setDismissed((prev) => {

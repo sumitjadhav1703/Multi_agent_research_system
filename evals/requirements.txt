@@ -3,7 +3,7 @@
 # inside a completion. That pin does not depend on litellm, so the judge install
 # has to pin it too. 1.108.2 matches backend/requirements.txt.
 # Install only for a controlled offline run, in a separate environment from the
-# unit-test venv. The unit tests expect /tmp/rm_v2_venv to import deepeval as missing.
+# unit-test venv. The unit tests expect the test interpreter to import deepeval as missing.
 #   uv pip install --python /tmp/rm_eval_judge/bin/python -r evals/requirements.txt
 deepeval==4.3.3
 litellm==1.108.2

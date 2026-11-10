@@ -1,5 +1,7 @@
 # Reliability and interface repair
 
+> **Historical V1 plan.** It describes the Streamlit repair done before V2. V1 now lives in `v1/` and is a frozen, undeployed baseline (see [`v1/README.md`](../v1/README.md)).
+
 Keep the existing Streamlit application, four research stages, Groq model, and
 dark/orange identity. A separate frontend would add deployment work without
 addressing the provider failure. Merely catching the critic exception would

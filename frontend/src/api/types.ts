@@ -12,6 +12,8 @@ export interface ResearchRun {
   provider_work_started: boolean;
   error_code: string | null;
   budgets: Record<string, number>;
+  /** Ledger usage; present on GET /research-runs/{id}, absent on create. */
+  usage?: UsageFigures;
   reused?: boolean;
 }
 

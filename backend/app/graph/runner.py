@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 from langgraph.types import Command
@@ -37,6 +38,7 @@ class RunOutcome(BaseModel):
     events: list[dict[str, Any]] = Field(default_factory=list)
     state: dict[str, Any]
     elapsed_ms: int
+    expired: bool = False
 
 
 class ResearchGraphRunner:
@@ -57,6 +59,10 @@ class ResearchGraphRunner:
         self.checkpointer = checkpointer if checkpointer is not None else build_checkpointer("memory")
         self.graph = compile_research_graph(self.checkpointer)
         self._elapsed_ms: dict[str, int] = {}
+        # time.monotonic() cutoff for one invocation; checked between graph steps.
+        self.deadline: float | None = None
+        # Polled between graph steps; true means stop (e.g. the job lease was lost).
+        self.should_stop: Callable[[], bool] | None = None
 
     def start(self, topic: str, *, owner_id: str = "local-owner", run_id: str | None = None) -> RunOutcome:
         run_id = run_id or uuid.uuid4().hex
@@ -91,19 +97,24 @@ class ResearchGraphRunner:
     def _invoke(self, payload: Any, config: dict[str, Any], span: Any) -> RunOutcome:
         run_id = config["configurable"]["thread_id"]
         started = time.perf_counter()
-        result = self.graph.invoke(
-            payload,
-            config,
-            context=self.context,
-        )
-        self._elapsed_ms[run_id] = self._elapsed_ms.get(run_id, 0) + int((time.perf_counter() - started) * 1000)
+        expired = False
+        interrupt_raw: Any = None
+        for chunk in self.graph.stream(payload, config, context=self.context, stream_mode="updates"):
+            if isinstance(chunk, dict) and "__interrupt__" in chunk:
+                interrupt_raw = chunk["__interrupt__"]
+            if (self.deadline is not None and time.monotonic() > self.deadline) or (
+                self.should_stop is not None and self.should_stop()
+            ):
+                expired = True
+                break
         snapshot = self.graph.get_state(config)
-        interrupts = _interrupt_values(snapshot)
-        if not interrupts and isinstance(result, dict):
-            interrupts = _coerce_interrupt(result.get("__interrupt__"))
+        interrupts = _interrupt_values(snapshot) or _coerce_interrupt(interrupt_raw)
         state = dict(snapshot.values or {})
         usage = dict(state.get("usage") or empty_usage())
-        usage["elapsed_ms"] = self._elapsed_ms[run_id]
+        # Prior time: earlier invocations on this runner, else whatever the state already carried.
+        prior = self._elapsed_ms.get(run_id, int(usage.get("elapsed_ms") or 0))
+        elapsed_ms = self._elapsed_ms[run_id] = prior + int((time.perf_counter() - started) * 1000)
+        usage["elapsed_ms"] = elapsed_ms
         usage = refresh_estimated_cost(usage)
         state["usage"] = usage
         events = number_events(list(state.get("events") or []))
@@ -114,31 +125,25 @@ class ResearchGraphRunner:
             stop_reason=str(state.get("stop_reason") or "none"),
         )
         if payload_value is not None:
-            max_id = 0
-            for event in events:
-                eid = event.get("event_id")
-                if isinstance(eid, int) and eid > max_id:
-                    max_id = eid
             events.append(
                 {
-                    "event_id": max_id + 1,
+                    "event_id": events[-1]["event_id"] + 1 if events else 1,
                     "type": "review.awaiting",
                     "node": "human_review",
                     "payload": payload_value if isinstance(payload_value, dict) else {"value": str(payload_value)[:500]},
                 }
             )
-        # Persist stable ids into checkpoint state so the next resume does not
-        # renumber from 1 and collide with already-stored job_events rows.
         state["events"] = list(events)
         return RunOutcome(
             run_id=run_id,
-            interrupted=payload_value is not None,
+            interrupted=payload_value is not None and not expired,
             interrupt_payload=payload_value if isinstance(payload_value, dict) else None,
             approval_status=str(state.get("approval_status") or "failed"),
-            stop_reason=state.get("stop_reason"),
+            stop_reason="wall_clock" if expired else state.get("stop_reason"),
             events=events,
             state=state,
-            elapsed_ms=self._elapsed_ms[run_id],
+            elapsed_ms=elapsed_ms,
+            expired=expired,
         )
 
     def _config(self, run_id: str) -> dict[str, Any]:

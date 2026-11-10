@@ -91,7 +91,6 @@ class JobEvent(Base):
     __tablename__ = "job_events"
     __table_args__ = (
         UniqueConstraint("job_id", "sequence_id", name="uq_job_events_sequence"),
-        Index("ix_job_events_run_seq", "job_id", "sequence_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -107,7 +106,6 @@ class ResearchSource(Base):
     __table_args__ = (
         UniqueConstraint("job_id", "source_key", name="uq_sources_job_key"),
         UniqueConstraint("job_id", "canonical_url", name="uq_sources_job_url"),
-        Index("ix_sources_job_url", "job_id", "canonical_url"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -162,7 +160,10 @@ class ResearchReport(Base):
 
 class UsageLedger(Base):
     __tablename__ = "usage_ledger"
-    __table_args__ = (Index("ix_usage_ledger_job", "job_id"),)
+    __table_args__ = (
+        Index("ix_usage_ledger_job", "job_id"),
+        Index("ix_usage_ledger_identity", "identity_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     job_id: Mapped[str] = mapped_column(String(36), ForeignKey("research_jobs.id"), nullable=False)

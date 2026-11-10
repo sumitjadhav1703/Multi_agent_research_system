@@ -19,11 +19,10 @@ RoleName = Literal["planner", "researcher", "verifier", "writer", "eval_judge"]
 # live smoke got HTTP 404 for that id. gemini/gemini-flash-latest is LiteLLM's
 # documented alias for the current Gemini Flash route. Milestone 3 did not
 # re-run a live call, so this alias is not capability-verified.
-# The retired id stays allowlisted so an environment that still names it can boot.
+# The retired id is no longer allowlisted; an environment that still names it fails at boot.
 DEFAULT_FREE_ALLOWLIST: tuple[str, ...] = (
     "groq/openai/gpt-oss-20b",
     "gemini/gemini-flash-latest",
-    "gemini/gemini-2.0-flash",
     "mistral/mistral-small-latest",
     "openrouter/meta-llama/llama-3.2-3b-instruct:free",
     "mock/free-model",
@@ -75,8 +74,8 @@ class Settings(BaseSettings):
     meta_api_key: str | None = Field(default=None, alias="META_API_KEY")
     model_api_key: str | None = Field(default=None, alias="MODEL_API_KEY")
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
-    # Post-chain last resort after free primary+fallback exhaust. Not on FREE_MODEL_ALLOWLIST.
-    # None = auto-enable when a Meta key is present.
+    # Post-chain last resort after free primary+fallback exhaust. Off unless explicitly true,
+    # a Meta key is set, and META_LAST_RESORT_MODEL is on FREE_MODEL_ALLOWLIST.
     meta_last_resort_enabled: bool | None = Field(default=None, alias="META_LAST_RESORT_ENABLED")
     meta_last_resort_model: str = Field(
         default="meta/muse-spark-1.3-contributor",
@@ -122,7 +121,6 @@ class Settings(BaseSettings):
     # Router reliability — keep small; LiteLLM owns retries (underlying SDK retries = 0).
     litellm_num_retries: int = Field(default=0, alias="LITELLM_NUM_RETRIES")
     litellm_request_timeout: float = Field(default=45.0, alias="LITELLM_REQUEST_TIMEOUT")
-    litellm_max_fallback_attempts: int = Field(default=1, alias="LITELLM_MAX_FALLBACK_ATTEMPTS")
 
     use_mock_provider: bool = Field(default=False, alias="USE_MOCK_PROVIDER")
 
@@ -130,6 +128,8 @@ class Settings(BaseSettings):
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     queue_consumer_enabled: bool = Field(default=True, alias="QUEUE_CONSUMER_ENABLED")
     queue_poll_seconds: float = Field(default=0.5, alias="QUEUE_POLL_SECONDS")
+    # Idle wait between lease polls; a new or resumed job wakes the consumer early.
+    queue_idle_poll_seconds: float = Field(default=300.0, alias="QUEUE_IDLE_POLL_SECONDS")
     job_lease_seconds: int = Field(default=60, alias="JOB_LEASE_SECONDS")
     job_heartbeat_seconds: int = Field(default=15, alias="JOB_HEARTBEAT_SECONDS")
     job_max_attempts: int = Field(default=3, alias="JOB_MAX_ATTEMPTS")
@@ -260,14 +260,12 @@ class Settings(BaseSettings):
 
     def meta_last_resort_active(self) -> bool:
         """True when last-resort Muse may run after the free chain is exhausted."""
-        key = self.resolved_meta_api_key()
-        if not key:
+        if self.meta_last_resort_enabled is not True or not self.resolved_meta_api_key():
             return False
-        if self.meta_last_resort_enabled is False:
+        try:
+            _assert_model_allowed(self.meta_last_resort_model, self.allowlist)
+        except ValueError:
             return False
-        if self.meta_last_resort_enabled is True:
-            return True
-        # None = auto-enable when a Meta key is present.
         return True
 
     def configured_model_ids(self) -> list[str]:
@@ -299,6 +297,8 @@ class Settings(BaseSettings):
                 "META_LAST_RESORT_MODEL must be a LiteLLM meta/ Muse route "
                 f"(got '{last_resort}'). Refusing so a Meta key is never sent elsewhere."
             )
+        if self.meta_last_resort_enabled is True:
+            _assert_model_allowed(last_resort, allow)
         if self.data_retention_days < 1:
             raise ValueError("DATA_RETENTION_DAYS must be at least 1.")
         if self.data_retention_interval_seconds < 1:
@@ -353,7 +353,7 @@ def _assert_model_allowed(model_id: str, allowlist: frozenset[str]) -> None:
                 f"Model '{model_id}' matches paid marker '{marker}'. "
                 "Paid models are not allowed in the demo profile."
             )
-    if model_id not in allowlist:
+    if model_id.strip() not in allowlist:
         raise ValueError(
             f"Model '{model_id}' is not in FREE_MODEL_ALLOWLIST. "
             "Only explicitly allowlisted free deployments may be configured."
