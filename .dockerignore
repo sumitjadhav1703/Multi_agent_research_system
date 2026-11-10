@@ -2,6 +2,7 @@
 .git
 .github
 .cursor
+.impeccable
 .venv
 venv
 **/__pycache__

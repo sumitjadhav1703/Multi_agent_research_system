@@ -12,7 +12,8 @@ mcp-server/.wrangler/
 evals/results/
 .deepeval/
 .DS_Store
-.cursor/hooks/
+.cursor/
+.impeccable/
 package-lock.json
 !frontend/package-lock.json
 !mcp-server/package-lock.json
