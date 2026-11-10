@@ -4,135 +4,96 @@
 
 # ResearchMind
 
-**From a public research question to an evidence-linked draft.**
+**Ask a public research question. Get an evidence-linked answer you can check.**
 
-A multi-agent research demo that plans, searches the public web, stores evidence,
-runs a bounded LangGraph workflow, and streams progress to a React console —
-with durable Postgres jobs, guest quotas, and a thin MCP Worker.
+A bounded multi-agent research system: it plans sub-questions, searches the public web,
+stores every source and passage, verifies claims against that evidence, and streams
+progress live to a React console. A durable Postgres job queue, guest quotas, and a
+thin MCP server sit around it.
 
 [![CI](https://github.com/sumitjadhav1703/Multi_agent_research_system/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/sumitjadhav1703/Multi_agent_research_system/actions/workflows/tests.yml)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-1C3C3C)](https://www.langchain.com/langgraph)
-[![React](https://img.shields.io/badge/UI-React%20%2B%20Vite-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![React](https://img.shields.io/badge/UI-React%2019%20%2B%20Vite-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Postgres](https://img.shields.io/badge/DB-Neon%20Postgres-4169E1?logo=postgresql&logoColor=white)](https://neon.tech/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22A06B)](LICENSE)
-[![Status](https://img.shields.io/badge/status-portfolio%20demo-orange)](#current-status)
 
-[**Live site**](https://researchmind-console.vercel.app/)
+[**Live demo**](https://researchmind-console.vercel.app/)
+· [Research Console](https://researchmind-console.vercel.app/app/)
 · [API health](https://researchmind-api-sg.onrender.com/api/v1/health/ready)
-· [MCP Worker](https://researchmind-mcp.jadhavsumit534.workers.dev/)
-· [Spec](docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md)
-· [Status](docs/IMPLEMENTATION_STATUS.md)
-· [Issues](https://github.com/sumitjadhav1703/Multi_agent_research_system/issues)
+· [MCP server](https://researchmind-mcp.jadhavsumit534.workers.dev/)
+· [Engineering story](docs/engineering-story/README.md)
 
 </div>
 
 ---
 
-## Table of contents
+## Contents
 
-- [Current status](#current-status)
-- [Resume after clone](#resume-after-clone)
-- [What it does](#what-it-does)
-- [Live stack](#live-stack)
+- [Highlights](#highlights)
+- [How a run works](#how-a-run-works)
 - [Architecture](#architecture)
+- [Live deployment](#live-deployment)
 - [Repository layout](#repository-layout)
-- [Prerequisites](#prerequisites)
-- [Quick start (local)](#quick-start-local)
-- [Environment variables](#environment-variables)
-- [Testing](#testing)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [API reference](#api-reference)
+- [MCP server](#mcp-server)
+- [Testing and CI](#testing-and-ci)
 - [Evaluation](#evaluation)
-- [Public demo walkthrough](#public-demo-walkthrough)
 - [Deployment](#deployment)
-- [Security and known limits](#security-and-known-limits)
-- [Docs map](#docs-map)
+- [Security and limits](#security-and-limits)
+- [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
 
 ---
 
-## Current status
+## Highlights
 
-ResearchMind 2.0 is a **portfolio / student demo** with a public Singapore stack.
-
-| Claim | Reality |
+| | |
 | --- | --- |
-| Public console | Live on Vercel (`sin1`) — landing at `/`, Research Console at `/app` |
-| Public API | Live on Render Free (`singapore`) |
-| Database | Neon Postgres (`aws-ap-southeast-1`) |
-| MCP | Thin Cloudflare Worker forwarding to the API |
-| Guest research | Needs Cloudflare Turnstile keys on console + API |
-| Real LLM runs | Need provider keys on Render and `USE_MOCK_PROVIDER=false` |
-| Cold starts | Render Free can sleep after idle; wake can take about a minute. A Cloudflare Worker cron (`*/10`) pings `/health/live` to reduce this; not an SLA |
-| “Production-ready” | **Not claimed.** Measured behavior and known limits are documented honestly |
-| Offline evaluation | Fixture DeepEval + deterministic checks **published** (not a V1 vs V2 table) |
-| Estimated cost | List-price token×rate (+ search call rate) when measured; **unknown** when not — never fake `$0` |
-
-Authoritative product/architecture text: [`docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md).  
-Live execution board: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).  
-Measured hosts: [`docs/deployment-report.md`](docs/deployment-report.md).  
-Eval write-up: [`docs/evals/RESULTS.md`](docs/evals/RESULTS.md).
+| **Evidence first** | Every claim in a report links to stored passages and source URLs. Claims are verified as supported, partial or insufficient before the writer sees them. |
+| **Bounded by design** | Hard caps on sub-questions (3), parallel workers (2), sources (6), searches (4), model calls (12) and wall-clock time. A run can't run away. |
+| **Free-only models** | A LiteLLM Router with a free-model allowlist per role (planner, researcher, verifier, writer), each with a fallback. Paid models make startup fail. |
+| **Durable jobs** | Postgres holds jobs, events, quotas, evidence and LangGraph checkpoints. Runs survive restarts, and a crashed job's lease is recovered. |
+| **Live progress** | REST for commands, Server-Sent Events for replayable progress. A refresh replays saved events. |
+| **Human in the loop** | Every report pauses for review: approve, request one revision, or reject. |
+| **Abuse limits** | One-use guest identities behind Cloudflare Turnstile, global active and daily caps, and SSRF-checked page fetching. |
+| **MCP access** | A Cloudflare Worker exposes the same runs as MCP tools by forwarding to the API. It does not run its own research. |
 
 ---
 
-## Resume after clone
+## How a run works
 
-GitHub `main` is the source of truth for code and docs. A wiped laptop recovers the repo with:
-
-```bash
-git clone https://github.com/sumitjadhav1703/Multi_agent_research_system.git
-cd Multi_agent_research_system
+```mermaid
+flowchart LR
+  V[validate] --> P[plan]
+  P --> S[schedule]
+  S -->|fan out ≤2| W[worker: search + fetch]
+  W --> M[merge]
+  M --> S
+  S --> X[extract_claims]
+  X --> R[verify]
+  R --> G{evidence_gate}
+  G -->|weak evidence, 1 retry| S
+  G --> WR[write]
+  WR --> C[validate_citations]
+  C --> H{human_review}
+  H -->|revise once| WR
+  H --> D[complete]
+  G -.-> F[fail]
 ```
 
-**Secrets are not in git.** Local `.env` is gitignored. After clone, recreate keys from cloud dashboards / a password manager (never from a committed file):
+1. **Plan.** The planner model splits the question into up to 3 sub-questions with search queries.
+2. **Research.** Workers run in parallel (max 2). Each searches Tavily, fetches up to 2 pages through the SSRF-checked fetcher, and stores sources and passages.
+3. **Extract and verify.** The researcher model pulls claims that cite passage IDs. The verifier model rates each claim against its quoted evidence.
+4. **Evidence gate.** If evidence is too thin, one follow-up search runs, but only when source slots are free and only for new URLs.
+5. **Write.** The writer produces a cited report, and citations are checked against the evidence ledger.
+6. **Review.** The run pauses as `review_required` until a person approves, revises once, or rejects.
 
-| Secret | Where it lives |
-| --- | --- |
-| `DATABASE_URL` | Neon + Render env |
-| Provider keys (`GROQ_*`, `GEMINI_*`, `MISTRAL_*`, `OPENROUTER_*`, `TAVILY_*`, optional `META_API_KEY`) | Render env |
-| `TURNSTILE_SECRET_KEY` | Render env |
-| `VITE_TURNSTILE_SITE_KEY`, `VITE_API_BASE` | Vercel env |
-| Cloudflare Worker / Actions (`CLOUDFLARE_*`, Worker secrets) | Cloudflare + GitHub Actions secrets |
-
-Then follow [Quick start (local)](#quick-start-local) for a mock offline run, or point at the live Singapore stack above.
-
----
-
-## What it does
-
-| Capability | Detail |
-| --- | --- |
-| Portfolio landing | Static HTML/CSS/JS full-bleed video hero at `/` (no Sign-in page) |
-| Research Console | React app at `/app` — ask one public question, watch SSE progress, open report + evidence |
-| Bounded research graph | LangGraph planners / workers / verifier / writer with evidence and claims |
-| Free-only providers | LiteLLM SDK Router allowlist for role models; fail closed if `ALLOW_PAID_MODELS=true`; optional Meta Muse Spark Contributor last-resort after free hops fail |
-| Durable jobs | PostgreSQL jobs, events, quotas, evidence, graph checkpoints (not in-memory queues) |
-| Guest quotas | One-use guest identity + global active/daily caps enforced in the backend |
-| Progress transport | REST for commands, SSE for replayable progress (no first-release WebSockets) |
-| MCP surface | Authenticated Cloudflare Worker that forwards to FastAPI; does not re-implement the graph |
-| V1 baseline | Frozen Streamlit pipeline tagged `v1-baseline` kept for regression visibility |
-
-**Who it is for:** recruiters, reviewers, and engineers evaluating a multi-agent research architecture demo.  
-**Who it is not for:** production research workloads, private/sensitive data, or unlimited public LLM usage.
-
----
-
-## Live stack
-
-| Surface | Region | URL |
-| --- | --- | --- |
-| Marketing landing + console | Vercel `sin1` | https://researchmind-console.vercel.app (`/` landing, `/app` console) |
-| API | Render `singapore` | https://researchmind-api-sg.onrender.com |
-| MCP Worker | Cloudflare Workers | https://researchmind-mcp.jadhavsumit534.workers.dev |
-| Postgres | Neon `aws-ap-southeast-1` | Wired as Render `DATABASE_URL` (secret; not in git) |
-
-Quick checks (`/health/ready` returns only `status`, `database`, `use_mock_provider`):
-
-```bash
-curl -fsS https://researchmind-api-sg.onrender.com/api/v1/health/live
-curl -fsS https://researchmind-api-sg.onrender.com/api/v1/health/ready
-```
+Final statuses: `completed`, `failed`, `cancelled`, `expired` (wall-clock limit), `rejected`.
 
 ---
 
@@ -140,298 +101,308 @@ curl -fsS https://researchmind-api-sg.onrender.com/api/v1/health/ready
 
 ```mermaid
 flowchart LR
-  Landing[Static landing /] -->|Get Started| Console[React console /app]
-  Console -->|REST + SSE| API[FastAPI on Render]
-  MCP[Cloudflare MCP Worker] -->|Bearer forward| API
-  API --> Graph[LangGraph research]
-  API --> Neon[(Neon Postgres)]
-  Graph --> LiteLLM[LiteLLM free allowlist]
-  Graph --> Search[Tavily + SSRF-checked fetch]
+  Landing["Static landing (/)"] --> Console["React console (/app)"]
+  Console -->|REST + SSE| API["FastAPI on Render"]
+  MCPClient[MCP client] --> Worker["Cloudflare MCP Worker"]
+  Worker -->|guest bearer| API
+  Worker -. "cron */10 health ping" .-> API
+  API --> Queue["In-process queue consumer"]
+  Queue --> Graph["LangGraph research graph"]
+  API --> DB[("Neon Postgres")]
+  Queue --> DB
+  Graph --> Router["LiteLLM Router (free allowlist)"]
+  Graph --> Web["Tavily search + SSRF-checked fetch"]
 ```
 
-Design constraints enforced in code and docs:
+- **One process, one consumer.** The API runs one Uvicorn worker. The queue consumer runs in the FastAPI lifespan, leases jobs from Postgres, and runs the graph. New runs, reviews and cancels wake it at once. When idle it checks only every `QUEUE_IDLE_POLL_SECONDS` (300 s), so Neon can scale to zero.
+- **Postgres is the source of truth** for jobs, events, idempotency keys, quotas, evidence and checkpoints. Nothing important lives only in memory.
+- **Secrets stay server-side.** No key is in the frontend bundle or the logs.
+- **Self-healing boot.** If the database is unreachable at startup, the API keeps retrying in the background (5 s backoff, up to 60 s) instead of staying down.
 
-- PostgreSQL is the durable source of truth for jobs, events, idempotency, quotas, evidence, and checkpoints
-- LiteLLM Router inside FastAPI first; free-only allowlist for role models; optional Meta Muse Spark Contributor last-resort after free hops exhaust
-- Secrets stay server-side (never in the frontend bundle or logs)
-- First Render deploy profile: one web service, one Uvicorn worker, one bounded queue consumer
+---
+
+## Live deployment
+
+| Surface | Host | URL |
+| --- | --- | --- |
+| Landing + Research Console | Vercel | https://researchmind-console.vercel.app (`/` landing, `/app` console) |
+| API | Render Free, Singapore | https://researchmind-api-sg.onrender.com |
+| MCP server | Cloudflare Workers | https://researchmind-mcp.jadhavsumit534.workers.dev |
+| Database | Neon Postgres, `aws-ap-southeast-1` | Private (`DATABASE_URL` on Render) |
+
+```bash
+curl -fsS https://researchmind-api-sg.onrender.com/api/v1/health/live
+curl -fsS https://researchmind-api-sg.onrender.com/api/v1/health/ready
+```
+
+> Render Free sleeps when idle. A Cloudflare cron pings the API every 10 minutes to keep it warm, but a cold start can still take up to a minute. This is a portfolio demo, not a service with an SLA.
+
+**Try it:** open the [console](https://researchmind-console.vercel.app/app/), pass the Turnstile check, and ask one public, non-sensitive question. Watch the live run, then open **Report** and **Evidence**. Each guest identity gets one run.
 
 ---
 
 ## Repository layout
 
 ```text
-backend/                 FastAPI app, LangGraph, jobs, quotas, providers, tests
-frontend/
-  landing/               Static portfolio landing (index.html, styles.css, main.js)
-  src/                   React Research Console
-  scripts/copy-landing.mjs
-  public/                Shared logo + display font for /app
-mcp-server/              Cloudflare Worker MCP forwarder
-docs/                    Spec, ADRs, status, deployment report, engineering story
-evals/                   Offline evaluation fixtures / harness
-infra/                   Docker entrypoint helpers
-scripts/                 run_offline_suites.sh (offline mock-provider test matrix)
-.github/workflows/       tests.yml, deploy-mcp-worker.yml, keep-api-awake.yml (manual only)
-render.yaml              Render blueprint (API web service researchmind-api-sg)
-vercel.json              Vercel build: landing at / , SPA under /app
-Dockerfile               API image (Python 3.13)
-.env.example             Backend env names (no secrets)
+backend/                FastAPI API (Python 3.13)
+  app/api/v1/           HTTP routes: guest, runs, SSE stream, reads, usage, health
+  app/graph/            LangGraph nodes, builder, runner, prompts, limits
+  app/research/         Evidence ledger, Tavily retrieval, safe page fetch
+  app/providers/        LiteLLM Router, model client, mock provider
+  app/jobs/             Queue consumer, leases, quotas, persistence, retention
+  app/security/         SSRF egress helper
+  app/db/               SQLAlchemy models, engine, migration runner
+  migrations/           SQL migrations (applied at boot)
+  tests/                Offline unit and integration tests
+frontend/               React + Vite Research Console (served at /app)
+  landing/              Static landing page (served at /)
+mcp-server/             Cloudflare Worker MCP server
+evals/                  Offline golden dataset, deterministic checks, DeepEval judge
+docs/                   ADRs, engineering story, eval results, status, risks
+infra/                  Docker entrypoint
+scripts/                Offline test matrix
+v1/                     Frozen V1 Streamlit app (not deployed)
+.github/workflows/      CI, MCP deploy, manual keep-awake
+Dockerfile · render.yaml · vercel.json · .env.example
 ```
 
-V1 Streamlit code lives in [`v1/`](v1/) (frozen baseline, tag `v1-baseline`; run with `streamlit run v1/app.py`; not deployed). Prefer the V2 paths above for new work.
-
 ---
 
-## Prerequisites
+## Getting started
 
-| Tool | Version / note |
-| --- | --- |
-| Python | **3.13** (3.15 has failed LiteLLM native builds in this environment) |
-| Node.js | 20+ recommended (Vercel project may use a newer Node) |
-| npm | Comes with Node; used for `frontend/` and `mcp-server/` |
-| Postgres | Optional locally; Neon URL required for durable hosted jobs |
-| Docker | Optional; used for the Render API image |
+**Prerequisites:** Python 3.13 (3.15 can't build LiteLLM's native deps yet), Node.js 24, npm. Postgres and Docker are optional: SQLite works locally.
 
----
-
-## Quick start (local)
-
-### 1. Clone and env
+### 1. Backend
 
 ```bash
 git clone https://github.com/sumitjadhav1703/Multi_agent_research_system.git
 cd Multi_agent_research_system
 
-cp .env.example .env
-# Edit .env locally. Never commit .env or real keys.
+python3.13 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements.txt
+cp .env.example .env   # never commit .env
 ```
 
-For a fast offline API boot, set at least:
+For an offline run with no keys, set these in `.env`:
 
 ```bash
 USE_MOCK_PROVIDER=true
-QUEUE_CONSUMER_ENABLED=false
-DATABASE_URL=
-TURNSTILE_SECRET_KEY=
+DATABASE_URL=sqlite:///./local.db
+QUEUE_CONSUMER_ENABLED=true
 ```
-
-### 2. Backend API
 
 ```bash
-python3.13 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt
-
-export PYTHONPATH=.
-uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+PYTHONPATH=. uvicorn backend.app.main:app --reload --port 8000
+curl -fsS http://127.0.0.1:8000/api/v1/health/ready
 ```
 
-Health:
+> The mock provider checks the plumbing (API, queue, SSE, quotas). It can't produce a real research plan, so a mock run ends as `failed`. For real runs, add provider keys and `TAVILY_API_KEY` and set `USE_MOCK_PROVIDER=false`.
+>
+> Guest sign-up needs `TURNSTILE_SECRET_KEY`. With no secret, the API rejects every guest. For local testing, use Cloudflare's published always-pass test secret `1x0000000000000000000000000000000AA`.
 
-```bash
-curl -fsS http://127.0.0.1:8000/api/v1/health/live
-```
-
-### 3. Frontend (landing + console)
+### 2. Frontend
 
 ```bash
 cd frontend
-cp .env.example .env
-# Leave VITE_API_BASE empty to use the Vite /api proxy → 127.0.0.1:8000
 npm ci
-npm run dev
+npm run dev        # landing: http://127.0.0.1:5173/  console: http://127.0.0.1:5173/app/
 ```
 
-- Dev landing: `http://127.0.0.1:5173/`
-- Dev console: `http://127.0.0.1:5173/app/`
+Leave `VITE_API_BASE` empty to use the Vite proxy to `127.0.0.1:8000`. See `frontend/.env.example`.
 
-Production-like local build:
-
-```bash
-cd frontend
-npm run build
-npx serve dist -l 4173
-# / = landing, /app = console
-```
-
-### 4. Optional: MCP Worker (local)
+### 3. MCP server (optional)
 
 ```bash
 cd mcp-server
 npm ci
 npm test
-# RESEARCHMIND_API_BASE is set in mcp-server/wrangler.jsonc (Singapore API origin).
-# Use .dev.vars (see .dev.vars.example) to point `npm run dev` at a local API.
+npm run dev        # set RESEARCHMIND_API_BASE in .dev.vars (see .dev.vars.example) to use a local API
 ```
 
 ---
 
-## Environment variables
+## Configuration
 
-### Backend (server-side only)
+All backend settings are environment variables, read by `backend/app/core/config.py`. The full annotated list is in [`.env.example`](.env.example).
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | Neon/Postgres connection string (durable jobs) |
-| `USE_MOCK_PROVIDER` | `true` for offline/CI; `false` for live free providers |
-| `ALLOW_PAID_MODELS` | Must stay `false` (startup fails closed if true) |
-| `FREE_MODEL_ALLOWLIST` | Comma-separated LiteLLM free model ids |
-| `GROQ_API_KEY` / `GEMINI_API_KEY` / `MISTRAL_API_KEY` / … | Provider keys when not mocking |
+| `DATABASE_URL` | Postgres (Neon) or `sqlite:///…` connection string |
+| `USE_MOCK_PROVIDER` | `true` for offline and CI, `false` for real models |
+| `ALLOW_PAID_MODELS` | Must stay `false`. Startup fails if a paid model is configured. |
+| `FREE_MODEL_ALLOWLIST` | Comma-separated LiteLLM model ids every role model must match |
+| `PLANNER_* / RESEARCH_* / VERIFIER_* / WRITER_*_MODEL` | Primary and fallback model per role |
+| `GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `OPENROUTER_API_KEY` | Provider keys |
 | `TAVILY_API_KEY` | Web search |
-| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile verify (guest issuance) |
-| `CORS_ORIGINS` | Exact console origins, comma-separated, no `*`, no paths |
-| `QUEUE_CONSUMER_ENABLED` | Run the in-process queue consumer |
+| `META_LAST_RESORT_ENABLED` | Optional last-resort model. Off unless `true` and its model is allowlisted. |
+| `TURNSTILE_SECRET_KEY` | Verifies guest sign-up |
+| `CORS_ORIGINS` | Exact console origins, comma-separated. These hosts are also the only accepted Turnstile hostnames. |
 | `GLOBAL_MAX_ACTIVE_RUNS` / `GLOBAL_DAILY_RUN_CAP` | Demo load caps |
-| `MAX_MODEL_CALLS_PER_RUN` / `MAX_RUN_WALL_CLOCK_SECONDS` | Per-run budgets |
+| `MAX_MODEL_CALLS_PER_RUN` / `MAX_RUN_WALL_CLOCK_SECONDS` | Per-run budgets (model calls are capped at 12 regardless) |
+| `QUEUE_POLL_SECONDS` / `QUEUE_IDLE_POLL_SECONDS` | Busy and idle queue polling intervals |
+| `DATA_RETENTION_DAYS` | Old runs and stale reviews are purged after this many days |
 
-Full annotated list: [`.env.example`](.env.example).
-
-### Frontend (public)
-
-| Variable | Purpose |
-| --- | --- |
-| `VITE_API_BASE` | Public API origin with no trailing path (empty = same-origin / Vite proxy) |
-| `VITE_TURNSTILE_SITE_KEY` | Public Turnstile site key (empty shows a paste field) |
-
-See [`frontend/.env.example`](frontend/.env.example). Never put `TURNSTILE_SECRET_KEY`, provider keys, or `DATABASE_URL` in Vite env.
+Frontend (public, build time): `VITE_API_BASE` (API origin) and `VITE_TURNSTILE_SITE_KEY`. Never put a secret in a `VITE_` variable.
 
 ---
 
-## Testing
+## API reference
+
+Base path `/api/v1`. Everything except health and guest sign-up needs `Authorization: Bearer <guest_token>`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health/live` | Process is up (no DB call) |
+| `GET` | `/health/ready` | DB reachable: `status`, `database`, `use_mock_provider` |
+| `POST` | `/guest-identities` | Exchange a Turnstile token for a guest token |
+| `POST` | `/research-runs` | Start a run. Needs an `Idempotency-Key` header and returns `202` with the queued run. |
+| `GET` | `/research-runs/{id}` | Run snapshot: status, budgets, usage |
+| `GET` | `/research-runs/{id}/events` | Saved events (replay) |
+| `GET` | `/research-runs/{id}/events/stream` | Live SSE stream, with `Last-Event-ID` resume |
+| `POST` | `/research-runs/{id}/approve` · `/revise` · `/reject` | Review a paused run |
+| `POST` | `/research-runs/{id}/cancel` | Cancel a run |
+| `GET` | `/research-runs/{id}/report` | Final report |
+| `GET` | `/research-runs/{id}/sources` | Sources and passages |
+| `GET` | `/research-runs/{id}/claims/{claim_id}/evidence` | Evidence behind one claim |
+| `GET` | `/me/usage` | Quota meters and usage ledger totals |
+| `GET` | `/evaluation/summary` | Published offline evaluation snapshot |
+
+Interactive docs: `/docs` on any running API.
+
+---
+
+## MCP server
+
+The Worker at `https://researchmind-mcp.jadhavsumit534.workers.dev/mcp` exposes six tools. Each forwards to the API with the caller's guest bearer token.
+
+| Tool | Does |
+| --- | --- |
+| `create_research_run` | Start a run |
+| `get_research_run` | Status and snapshot |
+| `get_research_report` | Final report |
+| `list_research_sources` | Sources for a run |
+| `get_claim_evidence` | Evidence for a claim |
+| `get_evaluation_summary` | Published eval snapshot |
+
+Details: [`mcp-server/README.md`](mcp-server/README.md).
+
+---
+
+## Testing and CI
 
 ```bash
-# V2 backend (Python 3.13)
+scripts/run_offline_suites.sh                       # V1 + backend + evals (mock provider, SQLite)
+RUN_NODE_SUITES=1 scripts/run_offline_suites.sh     # plus frontend and MCP
+```
+
+Or each suite on its own:
+
+```bash
 USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECRET_KEY= \
-  PYTHONPATH=. python -m unittest discover -s backend/tests
-
-# V1 baseline (frozen Streamlit path)
-cd v1 && python -m unittest discover -s tests
-
-# Frontend
-cd frontend && npm test && npm run build
-
-# MCP worker
+  PYTHONPATH=. python -m unittest discover -s backend/tests      # backend
+PYTHONPATH=. python -m unittest discover -s evals/tests            # evals
+cd v1 && python -m unittest discover -s tests                     # frozen V1
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 cd mcp-server && npm test
 ```
 
-CI workflow: [`.github/workflows/tests.yml`](.github/workflows/tests.yml) (jobs: `v1`, `backend` + `pip check`, `evals`, `mcp`, `docker`, `frontend`). Offline counts at 2026-11-10: V1 16, backend 221, evals 15, frontend 47, MCP 31.
+[GitHub Actions](.github/workflows/tests.yml) runs six jobs on every push and PR: `v1`, `backend` (with `pip check`), `evals`, `mcp`, `docker` (image build) and `frontend`.
+
+| Suite | Tests (2026-11-10) |
+| --- | --- |
+| Backend | 221 |
+| Frontend | 47 |
+| MCP Worker | 31 |
+| V1 | 16 |
+| Evals | 15 |
+
+Postgres-only behaviour (`FOR UPDATE SKIP LOCKED` leasing) has a test that runs only when a real Postgres URL is provided; CI uses SQLite.
 
 ---
 
 ## Evaluation
 
-Offline harness results (2026-11-09). These score **hand-built fixture artifacts**, not live V1/V2 research runs.
+An offline harness scores hand-built fixture runs from a 32-case golden dataset (`golden-v0.1`). These are fixture scores, not scores of live research runs.
 
 | Check | Result |
 | --- | --- |
-| Deterministic fixture self-check | **20/20** matched (`golden-v0.1`, 32 cases in the set) |
-| DeepEval judge | `meta/muse-spark-1.3-contributor` (Meta Model API) |
-| Faithfulness mean | **0.925** (n=20) |
-| Answer relevancy mean | **0.700** (n=20) |
-| Contextual precision mean | **0.833** (n=18) |
-| Contextual recall mean | **0.667** (n=18) |
-| Numeric scores / errors | **80** scored · **0** errors |
-| Trace metrics | Skipped (public graph is not DeepEval-traced) |
-| V1 vs V2 comparison | **Not measured** |
-
-Published JSON (API + console Evaluation page): [`docs/evals/published-summary.json`](docs/evals/published-summary.json).  
-Narrative + history: [`docs/evals/RESULTS.md`](docs/evals/RESULTS.md).
+| Deterministic fixture checks | 20/20 matched |
+| Faithfulness (mean) | 0.925 (n=20) |
+| Answer relevancy (mean) | 0.700 (n=20) |
+| Contextual precision (mean) | 0.833 (n=18) |
+| Contextual recall (mean) | 0.667 (n=18) |
+| Judge | DeepEval with `meta/muse-spark-1.3-contributor`, 80 scores, 0 errors |
+| V1 vs V2 comparison | Not measured |
 
 ```bash
 PYTHONPATH=. python -m evals.cli deterministic
-RM_EVAL_JUDGE=1 PYTHONPATH=. python -m evals.cli judge --confirm-offline
+RM_EVAL_JUDGE=1 PYTHONPATH=. python -m evals.cli judge --confirm-offline   # needs evals/requirements.txt and a judge key
 ```
 
----
-
-## Public demo walkthrough
-
-1. Open https://researchmind-console.vercel.app/ — portfolio landing (video hero).
-2. Click **Get Started** → `/app`.
-3. Complete Turnstile (requires keys on Vercel + Render). Without keys, the gate shows a paste field and cannot complete a normal guest flow.
-4. Ask one **public, non-sensitive** question. Expect HTTP `202`, then SSE progress.
-5. Open **Report** and **Evidence** for the same run. Refresh should replay saved events.
-6. A second start with the same guest should hit the one-use quota.
-
-If the API banner says the service is sleeping, wait for Render Free wake (~1 minute), then retry.
+[`docs/evals/published-summary.json`](docs/evals/published-summary.json) is the only source for these numbers. The console Evaluation page, the API and the MCP tool all read it. Write-up: [`docs/evals/RESULTS.md`](docs/evals/RESULTS.md).
 
 ---
 
 ## Deployment
 
-### Frontend (Vercel)
+| Target | How it deploys | Config |
+| --- | --- | --- |
+| **API** (Render) | Auto-deploys on push to `main`. Docker image, one worker, migrations run at boot. | [`render.yaml`](render.yaml), [`Dockerfile`](Dockerfile), [`infra/docker-entrypoint.sh`](infra/docker-entrypoint.sh) |
+| **Console** (Vercel) | Auto-deploys on push to `main`. Vite builds `/app` and copies the landing page to `/`. | [`vercel.json`](vercel.json) |
+| **MCP server** (Cloudflare) | A GitHub Action deploys on pushes that touch `mcp-server/**`. | [`deploy-mcp-worker.yml`](.github/workflows/deploy-mcp-worker.yml), [`wrangler.jsonc`](mcp-server/wrangler.jsonc) |
 
-Configured by root [`vercel.json`](vercel.json):
+**Secrets are never in git.** Set them in each dashboard:
 
-- Install: `npm ci --prefix frontend`
-- Build: `npm run build --prefix frontend` (Vite builds `/app`, then copies `frontend/landing` to dist root)
-- Output: `frontend/dist`
-- Rewrites: `/app` and `/app/*` → SPA `index.html`; `/` serves the static landing
+| Where | Secrets |
+| --- | --- |
+| Render | `DATABASE_URL`, provider keys, `TAVILY_API_KEY`, `TURNSTILE_SECRET_KEY`, `CORS_ORIGINS` |
+| Vercel | `VITE_API_BASE`, `VITE_TURNSTILE_SITE_KEY` |
+| GitHub Actions | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
 
-Set on Vercel:
+Keep `WEB_CONCURRENCY=1`: each Uvicorn worker would start its own queue consumer, so the entrypoint refuses any other value.
 
-- `VITE_API_BASE=https://researchmind-api-sg.onrender.com`
-- `VITE_TURNSTILE_SITE_KEY=<public site key>`
-
-Push to `main` triggers production deploy when the Git integration is connected.
-
-### API (Render)
-
-- Blueprint: [`render.yaml`](render.yaml) — Docker web service `researchmind-api-sg`, `WEB_CONCURRENCY=1`, Singapore region, `autoDeployTrigger: commit` on `main`
-- Image: [`Dockerfile`](Dockerfile) + [`infra/docker-entrypoint.sh`](infra/docker-entrypoint.sh)
-- Required dashboard secrets: `DATABASE_URL`, provider keys, `TURNSTILE_SECRET_KEY`, `CORS_ORIGINS` (exact Vercel origin)
-
-### MCP Worker (Cloudflare)
-
-Pushes to `main` that touch `mcp-server/**` deploy via [`.github/workflows/deploy-mcp-worker.yml`](.github/workflows/deploy-mcp-worker.yml) (needs GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). Manual deploy:
-
-```bash
-cd mcp-server
-npx wrangler deploy
-```
-
-`RESEARCHMIND_API_BASE` is set in [`mcp-server/wrangler.jsonc`](mcp-server/wrangler.jsonc). The Worker also has a `*/10` cron that pings the API's `/api/v1/health/live`.
-
-Deeper checklist: [`docs/deployment-report.md`](docs/deployment-report.md).
+More: [`docs/deployment-report.md`](docs/deployment-report.md).
 
 ---
 
-## Security and known limits
+## Security and limits
 
-| Topic | Honest position |
+| Topic | Position |
 | --- | --- |
-| Quotas | One guest research run per issued identity; global caps in Postgres |
-| Providers | Free-model allowlist for role primary/fallback; paid markers / `ALLOW_PAID_MODELS=true` fail closed; optional Meta Muse Spark Contributor last-resort only when `META_LAST_RESORT_ENABLED=true`, `META_API_KEY` is set, and the model is allowlisted |
-| Secrets | Server-side only; not logged or shipped in the frontend bundle |
-| Turnstile | Required for normal guest issuance when secret + site key are configured |
-| SSRF | In-process checked IP dial (`backend/app/research/fetch.py` with an overall read deadline, `egress_fetch.py`); residual DNS-rebinding / connect-time risk — **not** claimed closed without an egress proxy |
-| Hosting | Render Free idle sleep; cold start not a measured SLA |
-| Data | Demo for public topics only — do not submit private or sensitive content |
-| Eval | Offline fixture DeepEval + deterministic results published on README / Evaluation / Evidence empty state; not part of every public request |
+| Quotas | One run per guest identity. Global active and daily caps are enforced in Postgres with conditional updates. |
+| Providers | Free allowlist only. A paid model or `ALLOW_PAID_MODELS=true` makes startup fail. |
+| Secrets | Server-side only. Log fields are redacted. |
+| Turnstile | Guest sign-up requires it. The response's hostname must match `CORS_ORIGINS`. |
+| SSRF | Page fetches resolve DNS, block private addresses, and connect to the checked IP with an overall read deadline. **Not fully closed:** there is no separate egress proxy (risk R04). |
+| Data | Public topics only. Runs are deleted after the retention window. |
+| Hosting | Free tiers. Cold starts happen, and there is no SLA. |
+
+Open risks and known issues are tracked in [`docs/RISK_REGISTER.md`](docs/RISK_REGISTER.md) and [`docs/BUG_INVENTORY.md`](docs/BUG_INVENTORY.md).
 
 ---
 
-## Docs map
+## Documentation
 
-| Doc | Use when |
+| Doc | What it covers |
 | --- | --- |
-| [`docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md) | Product + architecture authority |
-| [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) | Milestone board and test evidence |
-| [`docs/deployment-report.md`](docs/deployment-report.md) | Hosts, regions, deploy checklist |
-| [`docs/engineering-story/`](docs/engineering-story/) | Portfolio narrative: bottlenecks, decisions, eval, deploy |
+| [`AGENTS.md`](AGENTS.md) | Full guide for working on this repo (start here) |
+| [`docs/engineering-story/`](docs/engineering-story/README.md) | Design narrative: pipeline, retrieval, streaming, cost, security, evaluation |
 | [`docs/ADR/`](docs/ADR/) | Architecture decision records |
-| [`AGENTS.md`](AGENTS.md) | Learned preferences for coding agents |
+| [`docs/RISK_REGISTER.md`](docs/RISK_REGISTER.md) · [`docs/BUG_INVENTORY.md`](docs/BUG_INVENTORY.md) | Open risks and bugs |
+| [`docs/TEST_INVENTORY.md`](docs/TEST_INVENTORY.md) | What each test suite covers |
+| [`docs/deployment-report.md`](docs/deployment-report.md) | Hosts and deploy checks |
+| [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md) | Milestone history |
+| [`docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md) | Original 2.0 spec |
+| [`v1/README.md`](v1/README.md) | The frozen V1 Streamlit app |
 
 ---
 
 ## Contributing
 
-1. Prefer Python **3.13** for backend work.
-2. Keep V1 modules and offline V1 tests green while extending V2 under `backend/` / `frontend/`.
-3. Do not commit `.env`, credentials, or secret values.
-4. Run the relevant test suite before opening a PR.
-5. Update `docs/IMPLEMENTATION_STATUS.md` when milestone behavior changes — with real command output, not invented pass claims.
+1. Branch from `main` and use Python 3.13.
+2. Never commit `.env` or any secret.
+3. Run the relevant suites (see [Testing and CI](#testing-and-ci)) before opening a PR; CI must be green.
+4. When behaviour changes, update the docs that describe it, with real command output and not assumed results.
 
 Issues: https://github.com/sumitjadhav1703/Multi_agent_research_system/issues
 
@@ -439,9 +410,7 @@ Issues: https://github.com/sumitjadhav1703/Multi_agent_research_system/issues
 
 ## License
 
-**MIT** — see [LICENSE](LICENSE).
-
----
+[MIT](LICENSE)
 
 <div align="center">
 
