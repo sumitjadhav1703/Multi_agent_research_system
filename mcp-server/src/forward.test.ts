@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { redactValue, resolveApiBase } from "./forward";
 import { EdgeLimiter } from "./limits";
+import { inputSchemas } from "./server";
 import { executeTool, type ToolDeps } from "./tools";
 
 const TOKEN = "guest-token-value-ok-20";
@@ -64,12 +65,23 @@ describe("forwarder", () => {
     expect(request?.url).not.toContain(TOKEN);
   });
 
-  it("does not fetch when create input is invalid", async () => {
-    const fetchImpl = vi.fn();
-    const result = await executeTool("create_research_run", { topic: "   ", idempotency_key: "key-1" }, deps(fetchImpl));
-    expect(result.isError).toBe(true);
-    expect(JSON.parse(result.content[0].text).code).toBe("invalid_input");
-    expect(fetchImpl).not.toHaveBeenCalled();
+  it("zod schemas reject invalid create and id input", () => {
+    const create = inputSchemas.create_research_run;
+    expect(create.safeParse({ topic: "   ", idempotency_key: "key-1" }).success).toBe(false);
+    expect(create.safeParse({ topic: "ok", idempotency_key: "has space" }).success).toBe(false);
+    expect(create.safeParse({ topic: "ok", idempotency_key: "key-1" }).success).toBe(true);
+    expect(inputSchemas.list_research_sources.safeParse({ run_id: "../admin" }).success).toBe(false);
+    expect(inputSchemas.list_research_sources.safeParse({ run_id: RUN_ID }).success).toBe(true);
+    expect(inputSchemas.get_claim_evidence.safeParse({ run_id: RUN_ID, claim_id: "a/b" }).success).toBe(false);
+  });
+
+  it("keeps token counts but strips secret-like keys", () => {
+    expect(
+      redactValue(
+        { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3, guest_token: "x", access_token: "x", token: "x", client_secret: "x", Cookie: "x", api_key: "x" },
+        TOKEN,
+      ),
+    ).toEqual({ prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 });
   });
 
   it("maps quota exhaustion and does not retry", async () => {
@@ -175,10 +187,8 @@ describe("forwarder", () => {
     expect(failed).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects a bad run id and a cleartext API base before fetch", async () => {
+  it("rejects a cleartext API base before fetch", async () => {
     const fetchImpl = vi.fn();
-    const badId = await executeTool("list_research_sources", { run_id: "../admin" }, deps(fetchImpl));
-    expect(JSON.parse(badId.content[0].text).code).toBe("invalid_input");
     const badBase = await executeTool(
       "get_research_run",
       { run_id: RUN_ID },

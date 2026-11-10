@@ -12,7 +12,7 @@ from evals.dataset.golden_v0 import CASES, dumps
 from evals.load import default_dataset_path, default_runs_path, load_jsonl, load_runs, validate_golden
 
 ROOT = Path(__file__).resolve().parents[2]
-PYTHON = "/tmp/rm_v2_venv/bin/python"
+PYTHON = sys.executable
 
 
 class DatasetTests(unittest.TestCase):
@@ -94,10 +94,25 @@ class DeterministicTests(unittest.TestCase):
             "file:///etc/passwd",
             "http://[::1]/",
             "http://0177.0.0.1/",
+            "http://127.1/",
+            "http://0x7f.1/",
+            "http://0x7f000001/",
         ]
         for url in blocked:
             self.assertIsNotNone(static_url_problem(url), url)
         self.assertIsNone(static_url_problem("https://example.com/lab"))
+
+    def test_empty_excerpt_and_none_usage_and_retrieved_at(self) -> None:
+        base = {
+            "sources": [{"source_id": "s", "url": "https://a.example/x", "excerpt": "  ", "retrieved_at": "2026-11-07"}],
+            "passages": [{"evidence_id": "e", "source_id": "s", "url": "https://a.example/x", "quote": "anything"}],
+            "claims": [{"claim_id": "c", "evidence_ids": ["e"], "status": "supported"}],
+        }
+        self.assertIn("quote_not_in_source", issue_codes(evaluate_run(base, None)))
+        run = {**base, "usage": {"search_calls": None, "max_search_calls": None}, "tool_calls": [{"name": "web_search"}]}
+        evaluate_run(run, None)  # must not raise
+        golden = {"expected_behavior": "require_dated_source"}
+        self.assertIn("undated_current_claim", issue_codes(evaluate_run(base, golden)))
 
     def test_contradiction_hidden_in_sidecar_is_not_preservation(self) -> None:
         golden = next(case for case in CASES if case["id"] == "g014")

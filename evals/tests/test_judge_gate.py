@@ -20,7 +20,7 @@ from evals.judge import (
 from evals.load import default_runs_path
 
 ROOT = Path(__file__).resolve().parents[2]
-PYTHON = "/tmp/rm_v2_venv/bin/python"
+PYTHON = sys.executable
 DEEPEVAL_PROBE = Path("/tmp/deepeval_inspect")
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -113,7 +114,7 @@ def _citations(run: dict) -> list[Issue]:
                 continue
             quote = passage.get("quote") or ""
             excerpt = source.get("excerpt") or ""
-            if quote not in excerpt and excerpt not in quote:
+            if not quote.strip() or not excerpt.strip() or (quote not in excerpt and excerpt not in quote):
                 issues.append(Issue("evidence_passage", "quote_not_in_source", evidence_id))
                 continue
             valid = True
@@ -167,13 +168,13 @@ def _quota(run: dict) -> list[Issue]:
         ("source_count", "max_sources"),
     )
     for used_key, max_key in pairs:
-        if used_key in usage and max_key in usage and usage[used_key] > usage[max_key]:
+        if used_key in usage and max_key in usage and (usage[used_key] or 0) > (usage[max_key] or 0):
             issues.append(Issue("quota_budget", "budget_exceeded", used_key))
     search_calls = sum(1 for call in run.get("tool_calls") or [] if call.get("name") in SEARCH_TOOLS)
     fetch_calls = sum(1 for call in run.get("tool_calls") or [] if call.get("name") in FETCH_TOOLS)
-    if "max_search_calls" in usage and search_calls > usage["max_search_calls"]:
+    if usage.get("max_search_calls") is not None and search_calls > usage["max_search_calls"]:
         issues.append(Issue("quota_budget", "budget_exceeded", "tool_search_calls"))
-    if "max_fetch_calls" in usage and fetch_calls > usage["max_fetch_calls"]:
+    if usage.get("max_fetch_calls") is not None and fetch_calls > usage["max_fetch_calls"]:
         issues.append(Issue("quota_budget", "budget_exceeded", "tool_fetch_calls"))
     return issues
 
@@ -277,7 +278,7 @@ def _dated(run: dict) -> list[Issue]:
         for evidence_id in claim.get("evidence_ids") or []:
             passage = passages.get(evidence_id)
             source = sources.get((passage or {}).get("source_id"))
-            if source and (source.get("published_at") or source.get("retrieved_at")):
+            if source and (source.get("published_at")):
                 dated = True
         if not dated:
             issues.append(Issue("behavior_compliance", "undated_current_claim", claim.get("claim_id", "")))
@@ -340,22 +341,10 @@ def _literal_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | No
         return ipaddress.ip_address(host)
     except ValueError:
         pass
-    if host.isdigit():
-        try:
-            return ipaddress.IPv4Address(int(host))
-        except (ValueError, ipaddress.AddressValueError):
-            return None
-    if host.startswith("0x"):
-        try:
-            return ipaddress.IPv4Address(int(host, 16))
-        except (ValueError, ipaddress.AddressValueError):
-            return None
-    if host.count(".") == 3 and all(part.isdecimal() for part in host.split(".")):
-        try:
-            return ipaddress.IPv4Address(host)
-        except ipaddress.AddressValueError:
-            return None
-    return None
+    try:  # inet_aton also accepts short forms: 127.1, 0x7f.1, 2130706433
+        return ipaddress.IPv4Address(socket.inet_aton(host))
+    except OSError:
+        return None
 
 
 def _looks_like_ip_literal(host: str) -> bool:

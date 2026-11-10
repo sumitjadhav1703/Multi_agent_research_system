@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-DATASET_VERSION = "golden-v0.1"
+from evals import DATASET_VERSION
+
 CATEGORIES = frozenset(
     {
         "factual",

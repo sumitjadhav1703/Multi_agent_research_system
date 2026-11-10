@@ -4,6 +4,8 @@ Thin Cloudflare Worker. It speaks stateless Streamable HTTP MCP and forwards six
 
 The Worker is not deployed in this milestone. There is no public MCP URL yet.
 
+A Cloudflare cron trigger (every 10 minutes) pings `$RESEARCHMIND_API_BASE/api/v1/health/live` to keep the API awake; deploying the Worker applies it.
+
 ## Tools
 
 | Tool | FastAPI route | Effect |

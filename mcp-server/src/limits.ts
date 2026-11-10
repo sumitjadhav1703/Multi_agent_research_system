@@ -36,18 +36,17 @@ export class EdgeLimiter {
     }
     stamps.push(now);
     this.buckets.set(id, { stamps, seen: now });
-    this.trim(now);
+    this.trim();
     return true;
   }
 
-  private trim(now: number): void {
+  private trim(): void {
     if (this.buckets.size <= this.maxBuckets) return;
     const ranked = [...this.buckets.entries()].sort((left, right) => left[1].seen - right[1].seen);
     const extra = this.buckets.size - this.maxBuckets;
     for (const [key] of ranked.slice(0, extra)) {
       this.buckets.delete(key);
     }
-    void now;
   }
 }
 

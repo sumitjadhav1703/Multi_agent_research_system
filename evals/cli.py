@@ -40,8 +40,6 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         if isinstance(exc, JudgeDependencyError):
             return 3
-        if isinstance(exc, (JudgeDisabled, JudgeConfigError)):
-            return 2
         return 2
 
 
