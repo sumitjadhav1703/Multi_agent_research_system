@@ -21,26 +21,6 @@ describe("downloadMarkdown", () => {
     const body = "# Answer\n\nProvisional notes about SMR costs.";
     downloadMarkdown("run-1", body);
 
-    // #region agent log
-    fetch("http://127.0.0.1:7852/ingest/121a75ee-5e4a-4dda-bdc0-1f16831db8ba", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "003bae" },
-      body: JSON.stringify({
-        sessionId: "003bae",
-        runId: "post-fix",
-        hypothesisId: "A",
-        location: "ReportPage.test.ts:downloadMarkdown",
-        message: "blob capture after downloadMarkdown",
-        data: {
-          called: createObjectURL.mock.calls.length,
-          blobType: captured?.type ?? null,
-          clicked: click.mock.calls.length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(captured).toBeInstanceOf(Blob);
     expect(captured?.type).toBe("text/markdown;charset=utf-8");
