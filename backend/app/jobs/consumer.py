@@ -21,6 +21,8 @@ from backend.app.jobs.retention import retention_due, run_retention_pass
 from backend.app.jobs.timeutil import utc_now
 from backend.app.observability import emit, error_class, start_span
 
+FAILED_POLL_RETRY_SECONDS = 5.0
+
 _consumer_guard = threading.Lock()
 _running_consumer: QueueConsumer | None = None
 
@@ -68,6 +70,7 @@ def _execute_leased(
     job_id: str,
 ) -> ExecutionResult:
     stop = threading.Event()
+    lost = threading.Event()
 
     def _beat() -> None:
         while not stop.wait(max(heartbeat_seconds, 0.05)):
@@ -82,6 +85,7 @@ def _execute_leased(
                 )
                 beat.commit()
                 if not owned:
+                    lost.set()  # the runner stops between graph steps
                     return
             except Exception:
                 beat.rollback()
@@ -91,6 +95,7 @@ def _execute_leased(
 
     beater = threading.Thread(target=_beat, name=f"heartbeat-{job_id[:8]}", daemon=True)
     beater.start()
+    token = LEASE_LOST.set(lost)
     try:
         result = executor.execute(session_factory, job_id)
     except Exception:
@@ -102,6 +107,7 @@ def _execute_leased(
             error_detail="worker_exception",
         )
     finally:
+        LEASE_LOST.reset(token)
         stop.set()
         beater.join(timeout=1)
     finalize_job(session_factory, job_id, result, worker_id=worker_id)
@@ -250,6 +256,7 @@ class QueueConsumer:
         self._last_recover_at = utc_now()
         while not self._stop.is_set():
             worked = False
+            failed = False
             try:
                 self.maybe_recover()
                 self.maybe_purge_retention()
@@ -264,6 +271,7 @@ class QueueConsumer:
                     is not None
                 )
             except Exception as exc:
+                failed = True
                 emit(
                     "job.queue_iteration_failed",
                     {"error.code": "database_error", "error.class": error_class(exc)},
@@ -271,8 +279,12 @@ class QueueConsumer:
                 )
             if not worked:
                 # Clear before waiting: a wake() that lands mid-iteration is kept for the next wait.
-                self._wake.wait(self.idle_poll_seconds)
+                self._wake.wait(self._failed_retry_seconds() if failed else self.idle_poll_seconds)
                 self._wake.clear()
+
+    def _failed_retry_seconds(self) -> float:
+        # A DB error is not an empty queue: retry soon so a queued run does not wait the idle interval.
+        return min(self.idle_poll_seconds, max(self.poll_seconds, FAILED_POLL_RETRY_SECONDS))
 
 
 def _close_session(session: Any) -> None:

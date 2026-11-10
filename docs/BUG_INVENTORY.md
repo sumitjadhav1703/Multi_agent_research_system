@@ -84,7 +84,7 @@ Prior matrix: V1 16; backend 154; evals 14; discovery promoted to hard gates. Se
 
 ## 2026-11-10 audit (fix/audit-hardening)
 
-Findings below were fixed 2026-11-10 on fix/audit-hardening. Suites after the fix: V1 16, backend 221, evals 15, frontend 47, MCP 31.
+Findings below were fixed 2026-11-10 on fix/audit-hardening. Suites after the fix: V1 16, backend 224, evals 15, frontend 47, MCP 31.
 
 | Finding | Status |
 | --- | --- |

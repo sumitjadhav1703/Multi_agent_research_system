@@ -36,7 +36,7 @@ RUN_NODE_SUITES=1 bash scripts/run_offline_suites.sh
 
 GitHub Actions (`.github/workflows/tests.yml`) has six jobs: `v1` (`v1/requirements.txt`, `v1/tests/`), `backend` (`USE_MOCK_PROVIDER=true`, plus `pip check`), `evals` (unit tests), `mcp` (Vitest), `docker` (image build), and `frontend` (lint, typecheck, Vitest, build). It does not run the judge or Postgres-only lease checks.
 
-Counts at 2026-11-10 on fix/audit-hardening: V1 16, backend 221, evals 15, frontend 47, MCP 31. The backend API image no longer imports V1 `tools.py`. V1 (`app.py`, `tools.py`, `tests/`, ...) moved unchanged into `v1/` and is still tested in the `v1` job.
+Counts at 2026-11-10 on fix/audit-hardening: V1 16, backend 224, evals 15, frontend 47, MCP 31. The backend API image no longer imports V1 `tools.py`. V1 (`app.py`, `tools.py`, `tests/`, ...) moved unchanged into `v1/` and is still tested in the `v1` job.
 
 ## Judge (manual only)
 

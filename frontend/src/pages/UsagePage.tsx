@@ -221,7 +221,8 @@ function RunRow({ runId }: { runId: string }) {
     events.data || entry?.snapshot
       ? sourcesSeenCount(eventList, entry?.snapshot?.sources.length)
       : null;
-  const rowUsage = entry?.snapshot?.usage ?? usageFromEvents(eventList);
+  // Ledger usage from the run row covers review_required runs, which have no usage.updated event yet.
+  const rowUsage = entry?.snapshot?.usage ?? item?.usage ?? usageFromEvents(eventList);
 
   return (
     <tr>

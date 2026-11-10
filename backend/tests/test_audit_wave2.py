@@ -386,6 +386,83 @@ class ConsumerTests(_Base):
             consumer.stop()
 
 
+class CodexReviewTests(_Base):
+    def test_lost_lease_is_visible_to_the_executor(self) -> None:
+        from backend.app.jobs.executor import LEASE_LOST
+
+        job_id = self.job()
+        seen: list[bool] = []
+
+        class _Executor:
+            def execute(self, _factory: object, _job_id: str) -> ExecutionResult:
+                lost = LEASE_LOST.get()
+                assert lost is not None, "consumer must hand the lost-lease event to the executor"
+                seen.append(lost.wait(2))  # heartbeat reports the lease gone
+                return ExecutionResult(status="completed", provider_work_started=True)
+
+        with patch("backend.app.jobs.consumer.heartbeat", return_value=False):
+            process_one(
+                session_factory=self.factory,
+                executor=_Executor(),
+                worker_id="w",
+                lease_seconds=60,
+                heartbeat_seconds=0.05,
+            )
+        self.assertEqual(seen, [True])
+
+    def test_failed_poll_retries_before_the_idle_interval(self) -> None:
+        calls: list[float] = []
+
+        def _flaky(**_kwargs: object) -> None:
+            calls.append(time.monotonic())
+            if len(calls) == 1:
+                raise OperationalError("SELECT 1", {}, Exception("down"))
+            return None
+
+        consumer = QueueConsumer(
+            session_factory=self.factory,
+            executor=object(),
+            worker_id="w",
+            poll_seconds=0.01,
+            idle_poll_seconds=60,
+            retention_enabled=False,
+        )
+        with patch("backend.app.jobs.consumer.process_one", side_effect=_flaky), patch(
+            "backend.app.jobs.consumer.FAILED_POLL_RETRY_SECONDS", 0.05
+        ):
+            consumer.start()
+            try:
+                deadline = time.monotonic() + 3
+                while len(calls) < 2 and time.monotonic() < deadline:
+                    time.sleep(0.02)
+            finally:
+                consumer.stop()
+        self.assertGreaterEqual(len(calls), 2, "a failed poll must not wait the 60 s idle interval")
+
+    def test_get_run_includes_ledger_usage(self) -> None:
+        owner_token = self.token()
+        job_id = self.job(owner_token)
+        self.update(job_id, status="running", lease_owner="w")
+        finalize_job(
+            self.factory,
+            job_id,
+            ExecutionResult(
+                status="review_required",
+                provider_work_started=True,
+                usage={"llm_calls": 4, "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            ),
+            worker_id="w",
+        )
+        app = create_app()
+        app.state.session_factory = self.factory
+        app.state.consumer_enabled = False
+        body = TestClient(app).get(
+            f"/api/v1/research-runs/{job_id}", headers={"Authorization": f"Bearer {owner_token}"}
+        ).json()
+        self.assertEqual(body["status"], "review_required")
+        self.assertEqual(body["usage"]["llm_calls"], 4)
+
+
 class LostLeaseTests(unittest.TestCase):
     def test_runner_stops_between_steps_when_told_to(self) -> None:
         runner, _router = _runner(success_roles(1), FixtureRetrieval(LAB_HITS, LAB_PAGES))

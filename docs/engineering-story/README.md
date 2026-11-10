@@ -199,7 +199,7 @@ Profile A (approved): one Render Free Docker web service (`WEB_CONCURRENCY=1`), 
 | Area | Status |
 |---|---|
 | V1 baseline frozen | VERIFIED offline (16 tests) |
-| V2 backend | IMPLEMENTED · VERIFIED offline (221 backend tests) |
+| V2 backend | IMPLEMENTED · VERIFIED offline (224 backend tests) |
 | React console | IMPLEMENTED · VERIFIED (47 unit tests + build) |
 | MCP Worker | IMPLEMENTED · VERIFIED (31 tests) · deployed |
 | Singapore public stack | Documented live |

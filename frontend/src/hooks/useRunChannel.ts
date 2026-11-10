@@ -20,8 +20,8 @@ export function useRunChannel(runId: string | undefined) {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (!status || TERMINAL_STATUSES.has(status)) return false;
-      // SSE keeps the run fresh while live; poll only as a fallback.
-      return entry?.connection === "live" ? false : 3000;
+      // queued -> running writes no event, so SSE alone cannot show it; poll slowly while live.
+      return entry?.connection === "live" ? 8000 : 3000;
     },
   });
 

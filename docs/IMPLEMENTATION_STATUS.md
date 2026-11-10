@@ -15,7 +15,7 @@
 - `/health/ready` returns only `status`, `database`, `use_mock_provider`. Eval summary single source `docs/evals/published-summary.json`. `render.yaml`: `autoDeployTrigger: commit`, service `researchmind-api-sg`, duplicate static console removed; Docker `HEALTHCHECK` removed.
 - Keep-awake is the Cloudflare Worker cron `*/10` in `mcp-server`; `keep-api-awake.yml` is manual only.
 - Frontend: Tailwind removed, EvaluationPage lazy-loaded (main chunk 848 to 485 KB), revise button hidden after one revision, `src_*` citations route to `?source=`.
-- Suites: V1 16, backend 221, evals 15, frontend 47, MCP 31. R04 SSRF stays OPEN (no egress proxy). See [`BUG_INVENTORY.md`](BUG_INVENTORY.md).
+- Suites: V1 16, backend 224, evals 15, frontend 47, MCP 31. R04 SSRF stays OPEN (no egress proxy). See [`BUG_INVENTORY.md`](BUG_INVENTORY.md).
 
 ### Follow-up: wipe-ready handoff (2026-11-10, evening)
 

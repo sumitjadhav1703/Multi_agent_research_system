@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.api.v1.deps import bearer_token, call_db, current_settings, get_session, wake_consumer
+from backend.app.api.v1.snapshot import run_usage
 from backend.app.core.config import Settings
 from backend.app.db.models import JobEvent, ResearchJob
 from backend.app.graph.limits import GraphLimits
@@ -132,7 +133,8 @@ def get_run(
 ) -> dict[str, object]:
     identity = call_db(lambda: identity_from_token(session, token))
     job = call_db(lambda: get_owned_job(session, run_id, identity.id))
-    return public_job(job)
+    usage = call_db(lambda: run_usage(session, job.id))
+    return {**public_job(job), "usage": usage}
 
 
 @router.get("/research-runs/{run_id}/events")
