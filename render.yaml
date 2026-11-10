@@ -3,12 +3,12 @@
 # Do not add a Render Postgres database. DATABASE_URL must be a Neon URL,
 # set in the dashboard (sync: false). Do not commit the value.
 # Apply this blueprint only after the secret names below are filled in the dashboard.
-# Pick either this static site or the Vercel project in vercel.json, then set
-# CORS_ORIGINS to that site's exact origin.
+# The console is the Vercel project in vercel.json (not served from Render).
+# Set CORS_ORIGINS to that site's exact origin.
 
 services:
   - type: web
-    name: researchmind-api
+    name: researchmind-api-sg
     runtime: docker
     plan: free
     region: singapore
@@ -17,7 +17,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/v1/health/live
-    autoDeployTrigger: "off"
+    autoDeployTrigger: commit
     envVars:
       - key: WEB_CONCURRENCY
         value: "1"
@@ -29,6 +29,8 @@ services:
         value: "false"
       - key: QUEUE_CONSUMER_ENABLED
         value: "true"
+      - key: QUEUE_IDLE_POLL_SECONDS
+        value: "300"
       - key: GLOBAL_MAX_ACTIVE_RUNS
         value: "1"
       - key: GLOBAL_DAILY_RUN_CAP
@@ -52,7 +54,7 @@ services:
       - key: LOG_LEVEL
         value: INFO
       - key: FREE_MODEL_ALLOWLIST
-        value: groq/openai/gpt-oss-20b,gemini/gemini-flash-latest,gemini/gemini-2.0-flash,mistral/mistral-small-latest,openrouter/meta-llama/llama-3.2-3b-instruct:free,mock/free-model
+        value: groq/openai/gpt-oss-20b,gemini/gemini-flash-latest,mistral/mistral-small-latest,openrouter/meta-llama/llama-3.2-3b-instruct:free
       - key: PLANNER_PRIMARY_MODEL
         value: groq/openai/gpt-oss-20b
       - key: PLANNER_FALLBACK_MODEL
@@ -88,26 +90,4 @@ services:
       - key: TAVILY_API_KEY
         sync: false
       - key: TURNSTILE_SECRET_KEY
-        sync: false
-
-  - type: web
-    name: researchmind-console
-    runtime: static
-    branch: main
-    buildCommand: cd frontend && npm ci && npm run build
-    staticPublishPath: frontend/dist
-    autoDeployTrigger: "off"
-    routes:
-      - type: rewrite
-        source: /app/*
-        destination: /app/index.html
-      - type: rewrite
-        source: /app
-        destination: /app/index.html
-    envVars:
-      - key: NODE_VERSION
-        value: "24"
-      - key: VITE_API_BASE
-        sync: false
-      - key: VITE_TURNSTILE_SITE_KEY
         sync: false

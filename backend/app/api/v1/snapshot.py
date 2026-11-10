@@ -18,14 +18,8 @@ from backend.app.db.models import (
     UsageLedger,
 )
 from backend.app.cost_estimate import estimate_usage_cost_usd
+from backend.app.jobs.quota import sum_optional_ints
 from backend.app.schemas.research import EVIDENCE_WORDING
-
-
-def sum_optional(values: list[int | None]) -> int | None:
-    present = [item for item in values if isinstance(item, int) and not isinstance(item, bool)]
-    if not present:
-        return None
-    return sum(present)
 
 
 def evidence_ids(raw: str) -> list[str]:
@@ -48,6 +42,9 @@ def build_snapshot(session: Session, run_id: str) -> dict[str, object]:
     passages = session.scalars(select(EvidencePassage).where(EvidencePassage.job_id == run_id)).all()
     claims = session.scalars(select(ResearchClaim).where(ResearchClaim.job_id == run_id)).all()
     usage_rows = session.scalars(select(UsageLedger).where(UsageLedger.job_id == run_id)).all()
+    prompt_tokens = sum_optional_ints([row.prompt_tokens for row in usage_rows])
+    completion_tokens = sum_optional_ints([row.completion_tokens for row in usage_rows])
+    search_calls = sum_optional_ints([row.search_calls for row in usage_rows])
     costs = [row.estimated_cost_usd for row in usage_rows if row.estimated_cost_usd]
     report_body = None
     if report is not None and report.markdown.strip():
@@ -95,18 +92,18 @@ def build_snapshot(session: Session, run_id: str) -> dict[str, object]:
             for row in claims
         ],
         "usage": {
-            "llm_calls": sum_optional([row.llm_calls for row in usage_rows]),
-            "prompt_tokens": sum_optional([row.prompt_tokens for row in usage_rows]),
-            "completion_tokens": sum_optional([row.completion_tokens for row in usage_rows]),
-            "total_tokens": sum_optional([row.total_tokens for row in usage_rows]),
-            "search_calls": sum_optional([row.search_calls for row in usage_rows]),
+            "llm_calls": sum_optional_ints([row.llm_calls for row in usage_rows]),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": sum_optional_ints([row.total_tokens for row in usage_rows]),
+            "search_calls": search_calls,
             "estimated_cost_usd": (
                 costs[0]
                 if len(costs) == 1
                 else estimate_usage_cost_usd(
-                    prompt_tokens=sum_optional([row.prompt_tokens for row in usage_rows]),
-                    completion_tokens=sum_optional([row.completion_tokens for row in usage_rows]),
-                    search_calls=sum_optional([row.search_calls for row in usage_rows]),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    search_calls=search_calls,
                 )
             ),
         },

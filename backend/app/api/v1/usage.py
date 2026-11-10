@@ -20,7 +20,7 @@ def my_usage(
     token: Annotated[str, Depends(bearer_token)],
 ) -> dict[str, object]:
     settings = current_settings(request)
-    identity = identity_from_token(session, token)
+    identity = call_db(lambda: identity_from_token(session, token))
     return call_db(
         lambda: usage_snapshot(
             session,

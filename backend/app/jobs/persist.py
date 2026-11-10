@@ -1,6 +1,7 @@
 """Persist graph output and finish a leased job. Artifact rows are replaced; events append."""
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from collections.abc import Callable
@@ -19,7 +20,7 @@ from backend.app.db.models import (
 )
 from backend.app.jobs.executor import ExecutionResult
 from backend.app.jobs.quota import TERMINAL_STATUSES, refund_entitlement
-from backend.app.jobs.timeutil import add_seconds, utc_now
+from backend.app.jobs.timeutil import utc_now
 from backend.app.observability import start_span
 from backend.app.cost_estimate import estimate_usage_cost_usd
 
@@ -58,38 +59,32 @@ def _finalize_owned(
             job.provider_work_started = 1
         _replace_artifacts(session, job.id, job.owner_id, result, now)
         _append_new_events(session, job.id, result.events, now)
-        if result.retryable and result.status == "failed" and job.attempts < job.max_attempts:
-            job.status = "queued"
-            job.next_attempt_at = add_seconds(now, min(30, 2 ** max(job.attempts, 1)))
-            job.error_code = result.error_code
-            job.error_detail = _safe(result.error_detail)
+        # Re-read cancel_requested so a /cancel that committed after the first
+        # load is not overwritten by completed/review_required.
+        _refresh_cancel_flag(session, job)
+        status = result.status if result.status in _KNOWN else "failed"
+        if job.cancel_requested and status in {"completed", "review_required", "rejected"}:
+            status = "cancelled"
+        job.status = status
+        job.approval_status = result.approval_status
+        job.stop_reason = result.stop_reason
+        if status == "cancelled" and job.cancel_requested:
+            job.error_code = "cancelled"
         else:
-            # Re-read cancel_requested so a /cancel that committed after the first
-            # load is not overwritten by completed/review_required.
-            _refresh_cancel_flag(session, job)
-            status = result.status if result.status in _KNOWN else "failed"
-            if job.cancel_requested and status in {"completed", "review_required", "rejected"}:
-                status = "cancelled"
-            job.status = status
-            job.approval_status = result.approval_status
-            job.stop_reason = result.stop_reason
-            if status == "cancelled" and job.cancel_requested:
-                job.error_code = "cancelled"
-            else:
-                job.error_code = result.error_code
-            job.error_detail = _safe(result.error_detail)
-            job.resume_action = None
-            job.resume_comments = None
-            if job.status in TERMINAL_STATUSES or job.status == "expired":
-                job.finished_at = now
-            if job.status == "failed" and not job.provider_work_started:
-                refund_entitlement(session, job, now=now, reason="failed_before_provider")
-            _append_new_events(
-                session,
-                job.id,
-                [{"type": f"run.{job.status}", "payload": {"status": job.status}}],
-                now,
-            )
+            job.error_code = result.error_code
+        job.error_detail = _safe(result.error_detail)
+        job.resume_action = None
+        job.resume_comments = None
+        if job.status in TERMINAL_STATUSES:
+            job.finished_at = now
+        if job.status == "failed" and not job.provider_work_started:
+            refund_entitlement(session, job, now=now, reason="failed_before_provider")
+        _append_new_events(
+            session,
+            job.id,
+            [{"type": f"run.{job.status}", "payload": {"status": job.status}}],
+            now,
+        )
         job.lease_owner = None
         job.lease_expires_at = None
         job.updated_at = now
@@ -142,6 +137,14 @@ def _refresh_cancel_flag(session: Session, job) -> None:
     job.cancel_requested = int(flag)
 
 
+def _bounded_key(value: object, limit: int = 80) -> str:
+    """Fit a key into the column without letting two long keys collide on a prefix."""
+    key = str(value or "")
+    if len(key) <= limit:
+        return key
+    return f"{key[: limit - 13]}-{hashlib.sha1(key.encode('utf-8')).hexdigest()[:12]}"
+
+
 def _usage_has_values(usage: dict) -> bool:
     keys = ("llm_calls", "prompt_tokens", "completion_tokens", "total_tokens", "search_calls")
     return any(usage.get(key) is not None for key in keys)
@@ -157,7 +160,7 @@ def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: Exe
     seen_urls: set[str] = set()
     seen_keys: set[str] = set()
     for source in result.sources:
-        key = str(source.get("source_id") or "")[:80]
+        key = _bounded_key(source.get("source_id"))
         url = str(source.get("canonical_url") or source.get("url") or key)[:1000]
         if not key or key in seen_keys or url in seen_urls:
             continue
@@ -179,7 +182,7 @@ def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: Exe
             )
         )
     for passage in result.passages:
-        key = str(passage.get("evidence_id") or "")[:80]
+        key = _bounded_key(passage.get("evidence_id"))
         if not key:
             continue
         session.add(
@@ -187,13 +190,13 @@ def _replace_artifacts(session: Session, job_id: str, owner_id: str, result: Exe
                 id=str(uuid.uuid4()),
                 job_id=job_id,
                 evidence_key=key,
-                source_key=str(passage.get("source_id") or "")[:80],
+                source_key=_bounded_key(passage.get("source_id")),
                 subquestion_id=(str(passage.get("subquestion_id"))[:80] if passage.get("subquestion_id") else None),
                 quote=str(passage.get("quote") or "")[:4000],
             )
         )
     for claim in result.claims:
-        key = str(claim.get("claim_id") or "")[:80]
+        key = _bounded_key(claim.get("claim_id"))
         if not key:
             continue
         session.add(
@@ -254,11 +257,11 @@ def _append_new_events(session: Session, job_id: str, events: list[dict], now: s
     # Dedupe by (event_id, event_type). Same id with a different type must land
     # (review.awaiting vs review.resumed after a renumber collision).
     seen_pairs: set[tuple[int, str]] = set()
-    seen_types: set[str] = set()
     current = 0
+    last_type = ""
     for row in existing:
-        current = max(current, row.sequence_id)
-        seen_types.add(row.event_type)
+        if row.sequence_id > current:
+            current, last_type = row.sequence_id, row.event_type
         try:
             payload = json.loads(row.payload)
         except json.JSONDecodeError:
@@ -270,9 +273,12 @@ def _append_new_events(session: Session, job_id: str, events: list[dict], now: s
         event_id = event.get("event_id")
         if isinstance(event_id, int) and (event_id, event_type) in seen_pairs:
             continue
-        if event_type.startswith("run.") and event_type in seen_types and not isinstance(event_id, int):
+        # Finalize re-announces the graph's own run.* status; skip only a direct repeat,
+        # so a second run.review_required after a revise still lands.
+        if event_type.startswith("run.") and not isinstance(event_id, int) and event_type == last_type:
             continue
         current += 1
+        last_type = event_type
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
         if isinstance(event_id, int):
             payload = {**payload, "event_id": event_id}
@@ -286,7 +292,6 @@ def _append_new_events(session: Session, job_id: str, events: list[dict], now: s
                 created_at=now,
             )
         )
-        seen_types.add(event_type)
         if isinstance(event_id, int):
             seen_pairs.add((event_id, event_type))
 

@@ -36,8 +36,8 @@ class HealthApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["status"], "ready")
         self.assertEqual(body["database"], "not_configured")
-        self.assertFalse(body["allow_paid_models"])
-        self.assertIn("planner", body["roles"])
+        for leaked in ("app_env", "allow_paid_models", "roles", "allowlist_size"):
+            self.assertNotIn(leaked, body)
 
     def test_root(self) -> None:
         response = self.client.get("/")

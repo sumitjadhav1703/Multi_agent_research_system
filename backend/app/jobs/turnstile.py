@@ -66,10 +66,12 @@ class HttpTurnstileVerifier:
         *,
         client: httpx.Client | None = None,
         allow_unpinned_url: bool = False,
+        allowed_hostnames: frozenset[str] = frozenset(),
     ) -> None:
         self.secret = secret
         self.verify_url = verify_url if allow_unpinned_url else canonical_turnstile_verify_url(verify_url)
         self._client = client
+        self.allowed_hostnames = allowed_hostnames
 
     def verify(self, token: str, remote_ip: str | None) -> bool:
         if not token or not self.secret:
@@ -89,11 +91,25 @@ class HttpTurnstileVerifier:
         finally:
             if owns_client:
                 client.close()
-        return bool(isinstance(body, dict) and body.get("success") is True)
+        if not (isinstance(body, dict) and body.get("success") is True):
+            return False
+        # A token solved on another site is not ours. A missing hostname is not a failure.
+        hostname = body.get("hostname")
+        if self.allowed_hostnames and isinstance(hostname, str) and hostname.lower() not in self.allowed_hostnames:
+            return False
+        return True
 
 
-def build_turnstile_verifier(*, secret: str | None, verify_url: str) -> TurnstileVerifier:
+def hostnames_from_origins(origins: list[str]) -> frozenset[str]:
+    return frozenset(host.lower() for origin in origins if (host := urlparse(origin).hostname))
+
+
+def build_turnstile_verifier(
+    *, secret: str | None, verify_url: str, cors_origins: list[str] | None = None
+) -> TurnstileVerifier:
     pinned = canonical_turnstile_verify_url(verify_url)
     if secret:
-        return HttpTurnstileVerifier(secret, pinned)
+        return HttpTurnstileVerifier(
+            secret, pinned, allowed_hostnames=hostnames_from_origins(cors_origins or [])
+        )
     return RejectingTurnstileVerifier()

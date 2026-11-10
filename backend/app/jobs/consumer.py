@@ -14,12 +14,12 @@ from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
-from backend.app.jobs.executor import ExecutionResult
+from backend.app.jobs.executor import LEASE_LOST, ExecutionResult
 from backend.app.jobs.lease import heartbeat, lease_next, recover_expired_leases
 from backend.app.jobs.persist import finalize_job
 from backend.app.jobs.retention import retention_due, run_retention_pass
 from backend.app.jobs.timeutil import utc_now
-from backend.app.observability import emit, start_span
+from backend.app.observability import emit, error_class, start_span
 
 _consumer_guard = threading.Lock()
 _running_consumer: QueueConsumer | None = None
@@ -122,6 +122,7 @@ class QueueConsumer:
         retention_days: int = 2,
         retention_interval_seconds: int = 3600,
         retention_batch_size: int = 100,
+        idle_poll_seconds: float | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.executor = executor
@@ -129,12 +130,16 @@ class QueueConsumer:
         self.lease_seconds = lease_seconds
         self.heartbeat_seconds = heartbeat_seconds
         self.poll_seconds = poll_seconds
+        # Idle wait between lease attempts. wake() cuts it short; None keeps the fast poll.
+        self.idle_poll_seconds = poll_seconds if idle_poll_seconds is None else idle_poll_seconds
         self.retention_enabled = retention_enabled
         self.retention_days = retention_days
         self.retention_interval_seconds = retention_interval_seconds
         self.retention_batch_size = retention_batch_size
         self._last_retention_at: str | None = None
+        self._last_recover_at: str | None = None
         self._stop = threading.Event()
+        self._wake = threading.Event()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -151,9 +156,14 @@ class QueueConsumer:
             self._thread = thread
             _running_consumer = self
 
+    def wake(self) -> None:
+        """Poll now instead of waiting out the idle interval (new or resumed job)."""
+        self._wake.set()
+
     def stop(self) -> None:
         global _running_consumer
         self._stop.set()
+        self._wake.set()
         thread = self._thread
         if thread is not None:
             thread.join(timeout=5)
@@ -168,13 +178,17 @@ class QueueConsumer:
             recovered = recover_expired_leases(session)
             session.commit()
             return recovered
-        except Exception:
+        except Exception as exc:
             if session is not None:
                 try:
                     session.rollback()
                 except Exception:
                     pass
-            emit("job.lease_recovery_failed", {"error.class": "database_error"}, level=logging.ERROR)
+            emit(
+                "job.lease_recovery_failed",
+                {"error.code": "database_error", "error.class": error_class(exc)},
+                level=logging.ERROR,
+            )
             return []
         finally:
             _close_session(session)
@@ -200,31 +214,44 @@ class QueueConsumer:
                 batch_size=self.retention_batch_size,
             )
             session.commit()
-        except Exception:
+        except Exception as exc:
             if session is not None:
                 try:
                     session.rollback()
                 except Exception:
                     pass
             # Advance the schedule even on failure so a broken purge cannot
-            # retry on every QUEUE_POLL_SECONDS tick (~0.5s).
-            emit("retention.failed", {"error.class": "database_error"}, level=logging.ERROR)
+            # retry on every wakeup.
+            emit(
+                "retention.failed",
+                {"error.code": "database_error", "error.class": error_class(exc)},
+                level=logging.ERROR,
+            )
         finally:
             self._last_retention_at = now
             _close_session(session)
 
+    def maybe_recover(self) -> None:
+        """Recover expired or stranded jobs at most once per idle interval."""
+        now = utc_now()
+        if retention_due(last_run_at=self._last_recover_at, interval_seconds=int(self.idle_poll_seconds), now=now):
+            self._last_recover_at = now
+            self.recover()
+
     def _loop(self) -> None:
         try:
             self.recover()
-        except Exception:
-            emit("job.lease_recovery_failed", {"error.class": "database_error"}, level=logging.ERROR)
+        except Exception as exc:
+            emit("job.lease_recovery_failed", {"error.class": error_class(exc)}, level=logging.ERROR)
         try:
             self.maybe_purge_retention(force=True)
-        except Exception:
-            emit("retention.failed", {"error.class": "database_error"}, level=logging.ERROR)
+        except Exception as exc:
+            emit("retention.failed", {"error.class": error_class(exc)}, level=logging.ERROR)
+        self._last_recover_at = utc_now()
         while not self._stop.is_set():
             worked = False
             try:
+                self.maybe_recover()
                 self.maybe_purge_retention()
                 worked = (
                     process_one(
@@ -236,10 +263,16 @@ class QueueConsumer:
                     )
                     is not None
                 )
-            except Exception:
-                emit("job.queue_iteration_failed", {"error.class": "database_error"}, level=logging.ERROR)
+            except Exception as exc:
+                emit(
+                    "job.queue_iteration_failed",
+                    {"error.code": "database_error", "error.class": error_class(exc)},
+                    level=logging.ERROR,
+                )
             if not worked:
-                self._stop.wait(self.poll_seconds)
+                # Clear before waiting: a wake() that lands mid-iteration is kept for the next wait.
+                self._wake.wait(self.idle_poll_seconds)
+                self._wake.clear()
 
 
 def _close_session(session: Any) -> None:
@@ -247,8 +280,12 @@ def _close_session(session: Any) -> None:
         return
     try:
         session.close()
-    except Exception:
-        emit("job.session_close_failed", {"error.class": "database_error"}, level=logging.ERROR)
+    except Exception as exc:
+        emit(
+            "job.session_close_failed",
+            {"error.code": "database_error", "error.class": error_class(exc)},
+            level=logging.ERROR,
+        )
 
 
 def consumer_enabled(app_state: Any, configured: bool) -> bool:

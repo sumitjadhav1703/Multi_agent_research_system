@@ -17,6 +17,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app
 
 COPY --chown=app:app backend /app/backend
+# Read by backend/app/api/v1/mcp_reads.py at /app/docs/evals/published-summary.json.
+COPY --chown=app:app docs/evals/published-summary.json /app/docs/evals/published-summary.json
 COPY --chown=app:app infra/docker-entrypoint.sh /app/infra/docker-entrypoint.sh
 RUN chmod 755 /app/infra/docker-entrypoint.sh
 
@@ -24,7 +26,5 @@ USER app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PORT', '8000') + '/api/v1/health/live', timeout=3)"
-
+# No HEALTHCHECK: Render uses healthCheckPath in render.yaml and ignores it.
 CMD ["/app/infra/docker-entrypoint.sh"]

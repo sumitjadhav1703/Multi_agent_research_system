@@ -19,7 +19,7 @@ from backend.app.api.v1.runs import router as runs_router
 from backend.app.api.v1.stream import router as stream_router
 from backend.app.api.v1.usage import router as usage_router
 from backend.app.core.config import Settings, clear_settings_cache, get_settings
-from backend.app.observability import configure_observability, emit, shutdown_observability
+from backend.app.observability import configure_observability, emit, error_class, shutdown_observability
 from backend.app.observability.middleware import RequestSpanMiddleware
 from backend.app.db.engine import make_engine, make_session_factory
 from backend.app.db.migrate import apply_migrations
@@ -34,16 +34,13 @@ from backend.app.jobs.turnstile import build_turnstile_verifier
 logger = logging.getLogger(__name__)
 
 
-def _error_class(exc: BaseException) -> str:
-    """Class name only. Exception text can contain a database URL or secret."""
-    name = type(exc).__name__
-    if name.isidentifier() and len(name) <= 64:
-        return name
-    return "Exception"
+# Retry schedule for a database that was not reachable at boot (Neon cold wake).
+_DB_INIT_BACKOFF_SECONDS = 5.0
+_DB_INIT_BACKOFF_MAX_SECONDS = 60.0
 
 
 def _emit_failure(event: str, exc: BaseException) -> None:
-    emit(event, {"error.class": _error_class(exc)}, level=logging.ERROR)
+    emit(event, {"error.class": error_class(exc)}, level=logging.ERROR)
 
 
 def _dispose_engine(engine: object) -> None:
@@ -107,6 +104,7 @@ def _start_queue_consumer(app: FastAPI, settings) -> QueueConsumer | None:
         lease_seconds=settings.job_lease_seconds,
         heartbeat_seconds=settings.job_heartbeat_seconds,
         poll_seconds=settings.queue_poll_seconds,
+        idle_poll_seconds=settings.queue_idle_poll_seconds,
         retention_enabled=settings.data_retention_enabled,
         retention_days=settings.data_retention_days,
         retention_interval_seconds=settings.data_retention_interval_seconds,
@@ -160,13 +158,14 @@ async def lifespan(app: FastAPI):
         app.state.turnstile_verifier = build_turnstile_verifier(
             secret=settings.turnstile_secret_key,
             verify_url=settings.turnstile_verify_url,
+            cors_origins=settings.cors_origin_list,
         )
 
     owns_engine = False
     consumer: QueueConsumer | None = None
     init_task: asyncio.Task | None = None
 
-    async def _init_database() -> None:
+    async def _init_database() -> bool:
         nonlocal owns_engine, consumer
         engine = None
         try:
@@ -184,13 +183,22 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             owns_engine = False
             _mark_database_unavailable(app, engine, exc)
-        else:
-            # Best-effort only; periodic retention still runs inside QueueConsumer.
-            if settings.data_retention_enabled and app.state.session_factory is not None:
-                await asyncio.to_thread(_startup_retention, app.state.session_factory, settings)
-            consumer = _start_queue_consumer(app, settings)
+            return False
         finally:
             app.state.database_starting = False
+        # Best-effort only; periodic retention still runs inside QueueConsumer.
+        if settings.data_retention_enabled and app.state.session_factory is not None:
+            await asyncio.to_thread(_startup_retention, app.state.session_factory, settings)
+        consumer = _start_queue_consumer(app, settings)
+        return True
+
+    async def _init_until_ready() -> None:
+        # A boot-time failure must not leave the database unavailable forever:
+        # liveness stays 200, so the platform would never restart the service.
+        delay = _DB_INIT_BACKOFF_SECONDS
+        while not await _init_database():
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, _DB_INIT_BACKOFF_MAX_SECONDS)
 
     injected = getattr(app.state, "session_factory", None) is not None
     if injected:
@@ -199,7 +207,7 @@ async def lifespan(app: FastAPI):
         app.state.database_starting = False
     elif settings.database_configured:
         app.state.database_starting = True
-        init_task = asyncio.create_task(_init_database(), name="researchmind-db-init")
+        init_task = asyncio.create_task(_init_until_ready(), name="researchmind-db-init")
     else:
         app.state.database_starting = False
 
@@ -212,7 +220,6 @@ async def lifespan(app: FastAPI):
     elif init_task is not None:
         with suppress(Exception):
             await init_task
-    shutdown_observability()
     if consumer is not None:
         consumer.stop()
     elif getattr(app.state, "consumer", None) is not None:
@@ -220,6 +227,8 @@ async def lifespan(app: FastAPI):
     engine = getattr(app.state, "engine", None)
     if owns_engine and engine is not None:
         engine.dispose()
+    # Last, so shutdown-time spans and logs from the consumer still flush.
+    shutdown_observability()
 
 
 def install_cors(application: FastAPI) -> None:

@@ -251,11 +251,8 @@ function assignUsage(target: UsageFigures, payload: Record<string, unknown>) {
 
 export function isRejected(run: Pick<ResearchRun, "approval_status" | "stop_reason">): boolean {
   if (run.approval_status === "rejected") return true;
-  return (
-    run.stop_reason === "human_rejected" ||
-    run.stop_reason === "revision_limit" ||
-    run.stop_reason === "invalid_review_action"
-  );
+  // revision_limit is only a warning now: the run returns to review, it is not rejected.
+  return run.stop_reason === "human_rejected" || run.stop_reason === "invalid_review_action";
 }
 
 export function insufficientEvidence(events: readonly RunEvent[], snapshot: ArtifactSnapshot | null): boolean {

@@ -49,9 +49,20 @@ def configure_logging() -> None:
     _CONFIGURED = True
 
 
+def error_class(exc: BaseException) -> str:
+    """Class name only. Exception text can contain a database URL or secret."""
+    name = type(exc).__name__
+    if name.isidentifier() and len(name) <= 64:
+        return name
+    return "Exception"
+
+
 def emit(event: str, fields: dict[str, Any] | None = None, *, level: int = logging.INFO) -> None:
-    configure_logging()
+    if not _CONFIGURED:
+        configure_logging()
     logger = logging.getLogger(_LOGGER_NAME)
+    if not logger.isEnabledFor(level):
+        return
     logger.log(level, event, extra={"telemetry": sanitize_attributes(fields or {})})
 
 

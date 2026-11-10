@@ -2,10 +2,10 @@
 # edge requests (TLS ok, 0-byte body, no app logs) until a redeploy. Ping live
 # health often enough that the student demo usually stays warm. This is a
 # demo keep-alive, not an SLA.
+# Manual only: GitHub throttles scheduled workflows to every few hours. The
+# scheduled ping is the Cloudflare Worker cron in mcp-server/wrangler.jsonc.
 name: Keep API awake
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
 permissions:
   contents: read

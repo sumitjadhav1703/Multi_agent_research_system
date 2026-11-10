@@ -46,7 +46,11 @@ def current_turnstile(request: Request):
     if verifier is not None:
         return verifier
     settings = current_settings(request)
-    verifier = build_turnstile_verifier(secret=settings.turnstile_secret_key, verify_url=settings.turnstile_verify_url)
+    verifier = build_turnstile_verifier(
+        secret=settings.turnstile_secret_key,
+        verify_url=settings.turnstile_verify_url,
+        cors_origins=settings.cors_origin_list,
+    )
     request.app.state.turnstile_verifier = verifier
     return verifier
 
@@ -58,3 +62,10 @@ def call_db(action):
         raise
     except SQLAlchemyError:
         raise JobServiceError(503, "database_unavailable", "Database is unavailable.") from None
+
+
+def wake_consumer(request: Request) -> None:
+    """Tell the queue consumer there is work now; it idles on a long poll otherwise."""
+    consumer = getattr(request.app.state, "consumer", None)
+    if consumer is not None:
+        consumer.wake()

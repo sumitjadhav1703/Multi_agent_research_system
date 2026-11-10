@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from backend.app.core.config import get_settings
-from backend.app.db.engine import make_engine, ping
+from backend.app.db.engine import ping
 
 router = APIRouter(tags=["health"])
 
@@ -18,14 +18,11 @@ def live() -> dict[str, str]:
 
 @router.get("/health/ready")
 def ready(request: Request) -> JSONResponse:
-    settings = get_settings()
+    # Public endpoint: status only. Config (env, allowlist, roles) stays out.
+    # use_mock_provider stays because the console Usage page shows it.
     body: dict[str, object] = {
         "status": "ready",
-        "app_env": settings.app_env,
-        "allow_paid_models": settings.allow_paid_models,
-        "use_mock_provider": settings.use_mock_provider,
-        "roles": sorted(settings.role_models().keys()),
-        "allowlist_size": len(settings.allowlist),
+        "use_mock_provider": get_settings().use_mock_provider,
         "database": "not_configured",
     }
     if getattr(request.app.state, "database_startup_error", None):
@@ -38,16 +35,9 @@ def ready(request: Request) -> JSONResponse:
         body["database"] = "starting"
         return JSONResponse(status_code=503, content=body)
     factory = getattr(request.app.state, "session_factory", None)
-    if factory is not None or settings.database_configured:
+    if factory is not None:
         try:
-            if factory is not None:
-                ping(factory)
-            else:
-                engine = make_engine(settings.database_url or "")
-                try:
-                    ping(engine)
-                finally:
-                    engine.dispose()
+            ping(factory)
             body["database"] = "ok"
         except Exception:
             body["status"] = "not_ready"

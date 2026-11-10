@@ -28,14 +28,14 @@ def create_guest_identity(
 ) -> JSONResponse:
     settings = current_settings(request)
     verifier = current_turnstile(request)
-    remote = request.client.host if request.client else None
-
     def _issue() -> str:
         return issue_guest_identity(
             session,
             verifier=verifier,
             turnstile_token=body.turnstile_token,
-            remote_ip=remote,
+            # No remoteip: it is optional for siteverify, and behind the proxy
+            # (forwarded-allow-ips='*') the client address is spoofable.
+            remote_ip=None,
             ttl_hours=settings.guest_token_ttl_hours,
         )
 

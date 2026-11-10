@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
+from contextvars import ContextVar
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +18,10 @@ from backend.app.graph.runner import ResearchGraphRunner, RunNotPaused
 from backend.app.jobs.timeutil import utc_now
 from backend.app.cost_estimate import refresh_estimated_cost
 from backend.app.schemas.research import ReviewDecision
+
+
+# Set by the consumer (same thread as execute) when the heartbeat loses the lease.
+LEASE_LOST: ContextVar[threading.Event | None] = ContextVar("lease_lost", default=None)
 
 
 @dataclass
@@ -32,7 +38,6 @@ class ExecutionResult:
     claims: list[dict[str, Any]] = field(default_factory=list)
     report_markdown: str | None = None
     usage: dict[str, Any] = field(default_factory=dict)
-    retryable: bool = False
 
 
 class GraphJobExecutor:
@@ -111,7 +116,7 @@ class GraphJobExecutor:
                 error_code="graph_error",
                 error_detail=type(exc).__name__,
             )
-        return _honor_cancel(session_factory, job_id, result)
+        return result
 
     def _runner(self, max_model_calls: int) -> ResearchGraphRunner:
         client = self.model_client
@@ -186,6 +191,8 @@ def _run_graph(
     if isinstance(runner, ResearchGraphRunner):
         # The runner checks this between graph steps; an in-flight provider call is not interrupted.
         runner.deadline = time.monotonic() + max_wall_clock_seconds
+        lost = LEASE_LOST.get()
+        runner.should_stop = lost.is_set if lost is not None else None
     if resume_action:
         return _from_outcome(
             runner.resume(
@@ -201,35 +208,6 @@ def _run_graph(
             return _from_outcome(runner.continue_from_checkpoint(job_id))
     outcome = runner.start(topic, owner_id=owner_id, run_id=job_id)
     return _from_outcome(outcome)
-
-
-def _honor_cancel(
-    session_factory: Callable[[], Session],
-    job_id: str,
-    result: ExecutionResult,
-) -> ExecutionResult:
-    """If cancel landed while the graph ran, do not report completed or review_required.
-
-    This does not interrupt an HTTP call already in flight. The check runs after
-    start, resume, or continue_from_checkpoint returns.
-    """
-    if result.status not in {"completed", "review_required", "rejected"}:
-        return result
-    try:
-        session = session_factory()
-    except Exception:
-        return result
-    try:
-        job = session.get(ResearchJob, job_id)
-        if job is not None and job.cancel_requested:
-            result.status = "cancelled"
-            result.error_code = "cancelled"
-        return result
-    except Exception:
-        session.rollback()
-        return result
-    finally:
-        session.close()
 
 
 def _from_outcome(outcome: Any) -> ExecutionResult:

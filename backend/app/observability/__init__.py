@@ -1,5 +1,5 @@
 """Runtime telemetry. DeepEval scores are a separate path and are not emitted here."""
-from backend.app.observability.logging import configure_logging, emit
+from backend.app.observability.logging import configure_logging, emit, error_class
 from backend.app.observability.redaction import redact_text, safe_token, sanitize_attributes
 from backend.app.observability.tracing import (
     configure_tracing,
@@ -14,6 +14,7 @@ __all__ = [
     "configure_observability",
     "configure_tracing",
     "emit",
+    "error_class",
     "export_mode",
     "redact_text",
     "safe_token",

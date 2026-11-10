@@ -195,6 +195,12 @@ class BugDiscoveryP1Tests(unittest.TestCase):
             )
             session.commit()
 
+        # Created long ago but touched recently (a fresh review cycle): kept.
+        with self.factory() as session:
+            session.execute(
+                ResearchJob.__table__.update().where(ResearchJob.id == job_id).values(updated_at=now)
+            )
+            session.commit()
         with self.factory() as session:
             purge_expired_data(session, retention_days=2, now=now, batch_size=50)
             session.commit()

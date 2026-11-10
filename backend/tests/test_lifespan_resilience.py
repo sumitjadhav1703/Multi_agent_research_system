@@ -9,7 +9,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ["USE_MOCK_PROVIDER"] = "true"
 os.environ["DATABASE_URL"] = ""
@@ -69,7 +69,6 @@ class LifespanResilienceTests(unittest.TestCase):
         with self.assertLogs("researchmind.telemetry", level="ERROR") as captured:
             with (
                 patch("backend.app.main.make_engine", side_effect=RuntimeError(_SECRET_URL)),
-                patch("backend.app.api.v1.health.make_engine") as health_engine,
                 patch("backend.app.api.v1.health.ping") as health_ping,
             ):
                 with TestClient(create_app()) as client:
@@ -85,9 +84,33 @@ class LifespanResilienceTests(unittest.TestCase):
         self.assertEqual(ready.json()["database"], "unavailable")
         self.assertNotIn("supersecret", ready.text)
         self.assertNotIn("postgresql://", ready.text)
-        health_engine.assert_not_called()
         health_ping.assert_not_called()
         self._assert_class_only(captured.records, "database.startup_failed", "RuntimeError")
+
+    def test_failed_init_is_retried_until_ready(self) -> None:
+        os.environ["DATABASE_URL"] = _SECRET_URL
+        os.environ["DATA_RETENTION_ENABLED"] = "false"
+        clear_settings_cache()
+        engine = MagicMock()
+        with (
+            patch("backend.app.main._DB_INIT_BACKOFF_SECONDS", 0.01),
+            patch("backend.app.main.make_engine", side_effect=[RuntimeError(_SECRET_URL), engine]) as made,
+            patch("backend.app.main.apply_migrations"),
+            patch("backend.app.main.make_session_factory", return_value=MagicMock()),
+            patch("backend.app.main.setup_postgres_checkpointer", new=AsyncMock()),
+            patch("backend.app.main._recover_leases"),
+            patch("backend.app.api.v1.health.ping"),
+        ):
+            with TestClient(create_app()) as client:
+                deadline = time.monotonic() + 3
+                ready = client.get("/api/v1/health/ready")
+                while time.monotonic() < deadline and ready.status_code != 200:
+                    time.sleep(0.01)
+                    ready = client.get("/api/v1/health/ready")
+        self.assertEqual(made.call_count, 2)
+        self.assertIsNone(client.app.state.database_startup_error)
+        self.assertEqual(ready.status_code, 200)
+        self.assertEqual(ready.json()["database"], "ok")
 
     def test_checkpointer_failure_does_not_kill_boot(self) -> None:
         os.environ["DATABASE_URL"] = _SECRET_URL

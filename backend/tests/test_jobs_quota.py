@@ -85,7 +85,7 @@ class QuotaJobTests(unittest.TestCase):
         apply_migrations(self.engine)
         with self.factory() as session:
             versions = [row[0] for row in session.execute(text("SELECT version FROM schema_migrations"))]
-        self.assertEqual(versions, ["0001_identity_jobs_quota.sql"])
+        self.assertEqual(versions, ["0001_identity_jobs_quota.sql", "0002_index_cleanup.sql"])
 
     def test_guest_token_is_hashed_and_turnstile_is_required(self) -> None:
         with self.assertRaises(JobServiceError) as caught:
@@ -912,8 +912,7 @@ class QuotaJobTests(unittest.TestCase):
                 return _Runner()
 
         result = _Executor(mock_settings()).execute(factory, job_id)
-        self.assertEqual(result.status, "cancelled")
-        self.assertEqual(result.error_code, "cancelled")
+        # finalize_job (not the executor) turns a late cancel into "cancelled".
         self.assertTrue(result.provider_work_started)
         self.assertEqual(result.usage.get("llm_calls"), 4)
         self.assertEqual(result.events[0]["type"], "worker.done")

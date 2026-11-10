@@ -126,7 +126,6 @@ class CommandGateTests(unittest.TestCase):
         requirements = (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
         self.assertNotIn("deepeval", workflow.lower())
         self.assertNotIn("deepeval", requirements.lower())
-        self.assertNotIn("evals/tests", workflow)
 
     @unittest.skipUnless(DEEPEVAL_PROBE.is_dir(), "local DeepEval probe directory is absent")
     def test_dry_run_constructs_litellm_model_without_reading_env_file(self) -> None:

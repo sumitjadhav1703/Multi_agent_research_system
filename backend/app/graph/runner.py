@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 from langgraph.types import Command
@@ -60,6 +61,8 @@ class ResearchGraphRunner:
         self._elapsed_ms: dict[str, int] = {}
         # time.monotonic() cutoff for one invocation; checked between graph steps.
         self.deadline: float | None = None
+        # Polled between graph steps; true means stop (e.g. the job lease was lost).
+        self.should_stop: Callable[[], bool] | None = None
 
     def start(self, topic: str, *, owner_id: str = "local-owner", run_id: str | None = None) -> RunOutcome:
         run_id = run_id or uuid.uuid4().hex
@@ -99,7 +102,9 @@ class ResearchGraphRunner:
         for chunk in self.graph.stream(payload, config, context=self.context, stream_mode="updates"):
             if isinstance(chunk, dict) and "__interrupt__" in chunk:
                 interrupt_raw = chunk["__interrupt__"]
-            if self.deadline is not None and time.monotonic() > self.deadline:
+            if (self.deadline is not None and time.monotonic() > self.deadline) or (
+                self.should_stop is not None and self.should_stop()
+            ):
                 expired = True
                 break
         snapshot = self.graph.get_state(config)

@@ -265,14 +265,25 @@ def cancel_run(session: Session, job_id: str, owner_id: str) -> ResearchJob:
     if job.status in TERMINAL_STATUSES:
         return job
     now = utc_now()
-    job.cancel_requested = 1
-    job.updated_at = now
-    if job.status in {"queued", "review_required"} and not job.lease_owner:
-        job.status = "cancelled"
-        job.finished_at = now
-        job.error_code = "cancelled"
-        _append_event(session, job.id, "run.cancelled", {"status": "cancelled"}, now)
+    # Conditional UPDATEs: a lease or review that lands between the read and the
+    # write must not be overwritten by a stale in-memory copy.
+    cancelled = session.execute(
+        update(ResearchJob)
+        .where(ResearchJob.id == job_id, ResearchJob.status.in_(("queued", "review_required")))
+        .where(ResearchJob.lease_owner.is_(None))
+        .values(cancel_requested=1, status="cancelled", finished_at=now, error_code="cancelled", updated_at=now)
+    )
+    if cancelled.rowcount == 1:
+        _append_event(session, job_id, "run.cancelled", {"status": "cancelled"}, now)
+    else:
+        # Leased or running: the worker honours the flag. Terminal by now: no-op.
+        session.execute(
+            update(ResearchJob)
+            .where(ResearchJob.id == job_id, ResearchJob.status.in_(ACTIVE_STATUSES + ("review_required",)))
+            .values(cancel_requested=1, updated_at=now)
+        )
     session.commit()
+    session.refresh(job)
     return job
 
 
@@ -288,15 +299,35 @@ def request_review(
     job = get_owned_job(session, job_id, owner_id)
     if job.status != "review_required":
         raise JobServiceError(409, "not_awaiting_review", "This run is not waiting for review.")
+    if job.cancel_requested:
+        raise JobServiceError(409, "cancel_requested", "This run was cancelled.")
     now = utc_now()
-    job.resume_action = action
-    job.resume_comments = comments.strip()[:2000]
-    job.status = "queued"
-    job.lease_owner = None
-    job.lease_expires_at = None
-    job.updated_at = now
-    _append_event(session, job.id, "review.requested", {"action": action}, now)
+    # attempts restarts: review cycles must not use up max_attempts, or the
+    # resumed job could never lease again and would hold the global slot.
+    resumed = session.execute(
+        update(ResearchJob)
+        .where(ResearchJob.id == job_id, ResearchJob.status == "review_required")
+        .where(ResearchJob.cancel_requested == 0)
+        .values(
+            resume_action=action,
+            resume_comments=comments.strip()[:2000],
+            status="queued",
+            lease_owner=None,
+            lease_expires_at=None,
+            next_attempt_at=None,
+            attempts=0,
+            updated_at=now,
+        )
+    )
+    if resumed.rowcount != 1:
+        session.rollback()
+        session.refresh(job)
+        if job.cancel_requested:
+            raise JobServiceError(409, "cancel_requested", "This run was cancelled.")
+        raise JobServiceError(409, "not_awaiting_review", "This run is not waiting for review.")
+    _append_event(session, job_id, "review.requested", {"action": action}, now)
     session.commit()
+    session.refresh(job)
     return job
 
 
@@ -311,7 +342,7 @@ def list_events(session: Session, job_id: str, owner_id: str, *, after: int) -> 
     )
 
 
-def _sum_optional_ints(values: list[int | None]) -> int | None:
+def sum_optional_ints(values: list[int | None]) -> int | None:
     present = [item for item in values if isinstance(item, int) and not isinstance(item, bool)]
     if not present:
         return None
@@ -342,9 +373,9 @@ def usage_snapshot(
     ledger_rows = session.scalars(
         select(UsageLedger).where(UsageLedger.identity_id == identity_id)
     ).all()
-    prompt_tokens = _sum_optional_ints([row.prompt_tokens for row in ledger_rows])
-    completion_tokens = _sum_optional_ints([row.completion_tokens for row in ledger_rows])
-    search_calls = _sum_optional_ints([row.search_calls for row in ledger_rows])
+    prompt_tokens = sum_optional_ints([row.prompt_tokens for row in ledger_rows])
+    completion_tokens = sum_optional_ints([row.completion_tokens for row in ledger_rows])
+    search_calls = sum_optional_ints([row.search_calls for row in ledger_rows])
     ledger_costs = []
     for row in ledger_rows:
         if row.estimated_cost_usd is None:
@@ -371,10 +402,10 @@ def usage_snapshot(
         "global_daily_cap": daily_cap,
         "global_daily_starts": int(daily),
         "limits": budgets,
-        "llm_calls": _sum_optional_ints([row.llm_calls for row in ledger_rows]),
+        "llm_calls": sum_optional_ints([row.llm_calls for row in ledger_rows]),
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
-        "total_tokens": _sum_optional_ints([row.total_tokens for row in ledger_rows]),
+        "total_tokens": sum_optional_ints([row.total_tokens for row in ledger_rows]),
         "search_calls": search_calls,
         "estimated_cost_usd": estimated_cost,
         "note": "One run per issued guest token, not one verified run per person.",

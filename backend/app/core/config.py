@@ -128,6 +128,8 @@ class Settings(BaseSettings):
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     queue_consumer_enabled: bool = Field(default=True, alias="QUEUE_CONSUMER_ENABLED")
     queue_poll_seconds: float = Field(default=0.5, alias="QUEUE_POLL_SECONDS")
+    # Idle wait between lease polls; a new or resumed job wakes the consumer early.
+    queue_idle_poll_seconds: float = Field(default=300.0, alias="QUEUE_IDLE_POLL_SECONDS")
     job_lease_seconds: int = Field(default=60, alias="JOB_LEASE_SECONDS")
     job_heartbeat_seconds: int = Field(default=15, alias="JOB_HEARTBEAT_SECONDS")
     job_max_attempts: int = Field(default=3, alias="JOB_MAX_ATTEMPTS")
