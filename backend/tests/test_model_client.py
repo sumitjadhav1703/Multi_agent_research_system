@@ -342,6 +342,7 @@ class ModelClientTests(unittest.TestCase):
         settings = mock_settings(META_API_KEY="meta-test-key", META_LAST_RESORT_ENABLED="true")
         # Bypass startup validator to prove the invoke-time guard.
         settings.meta_last_resort_model = "groq/openai/gpt-oss-20b"
+        settings.free_model_allowlist += ",groq/openai/gpt-oss-20b"  # keep the allowlist gate satisfied
         model_list, fallbacks = build_model_list_and_fallbacks(settings)
         router = MockRouter(
             model_list=model_list,

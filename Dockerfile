@@ -12,19 +12,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY backend/requirements.txt /tmp/requirements.txt
-COPY backend/requirements-fetch.txt /tmp/requirements-fetch.txt
-# langchain 1.4.7 depends on langgraph>=1.2.12. The API pins langgraph==1.1.10.
-# Install the fetch extras without dependencies so that pin is not replaced.
-# beautifulsoup4, tavily-python, and langchain import libraries already present
-# in backend/requirements.txt (typing-extensions, requests, httpx, tiktoken,
-# langchain-core). soupsieve is pinned beside beautifulsoup4.
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
-    && pip install --no-cache-dir --no-deps -r /tmp/requirements-fetch.txt \
-    && rm -rf /tmp/requirements.txt /tmp/requirements-fetch.txt \
+    && rm -rf /tmp/requirements.txt \
     && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app
 
 COPY --chown=app:app backend /app/backend
-COPY --chown=app:app tools.py /app/tools.py
 COPY --chown=app:app infra/docker-entrypoint.sh /app/infra/docker-entrypoint.sh
 RUN chmod 755 /app/infra/docker-entrypoint.sh
 

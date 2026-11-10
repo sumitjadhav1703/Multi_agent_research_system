@@ -58,7 +58,7 @@ def build_research_graph() -> StateGraph:
     builder.add_conditional_edges("evidence_gate", route_after_gate, ["schedule", "write", "fail"])
     builder.add_edge("write", "validate_citations")
     builder.add_conditional_edges("validate_citations", route_after_citations, ["human_review", "fail"])
-    builder.add_conditional_edges("human_review", route_after_review, ["write", "complete"])
+    builder.add_conditional_edges("human_review", route_after_review, ["write", "human_review", "complete"])
     builder.add_edge("complete", END)
     builder.add_edge("fail", END)
     return builder

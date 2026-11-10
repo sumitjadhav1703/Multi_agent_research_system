@@ -14,19 +14,12 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
 
-def build_checkpointer(kind: str = "memory", *, database_url: str | None = None) -> Any:
-    del database_url
+def build_checkpointer(kind: str = "memory") -> Any:
     if kind == "memory":
         from langgraph.checkpoint.memory import InMemorySaver
 
         return InMemorySaver()
-    if kind == "postgres":
-        raise RuntimeError(
-            "Postgres checkpoints need an open psycopg connection. "
-            "Call open_postgres_checkpointer(database_url) and AsyncPostgresSaver.setup(). "
-            "A postgresql DATABASE_URL is required; in-memory state is not a substitute."
-        )
-    raise ValueError(f"Unknown checkpointer kind '{kind}'.")
+    raise ValueError(f"Unknown checkpointer kind '{kind}'. Postgres uses open_postgres_checkpointer().")
 
 
 def _require_postgres_url(database_url: str) -> str:

@@ -6,11 +6,12 @@ This is not an invoice and not provider-billed spend.
 """
 from __future__ import annotations
 
-# Gemini 2.0 Flash published list rates (USD per 1M tokens). Reference for allowlist demos.
-# Source: Google AI Gemini API pricing docs (Flash input/output list price band).
+# Approximate blended list rates (USD per 1M tokens), one figure for every routed model
+# (default chain: groq gpt-oss-20b / gemini-flash-latest / mistral-small). Not per-model pricing.
 INPUT_USD_PER_MTOK = 0.10
 OUTPUT_USD_PER_MTOK = 0.40
-# Tavily-class web search order-of-magnitude list rate (USD per successful search call).
+# Order-of-magnitude Tavily-class list rate (USD per search call). Failed searches are
+# counted too (the worker records search_calls=1 even when the search errors).
 SEARCH_USD_PER_CALL = 0.005
 
 

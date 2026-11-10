@@ -102,6 +102,13 @@ class ModelClient:
         ) as span:
             try:
                 raw = self.router.completion(model=alias, messages=messages, **kwargs)
+                if (
+                    fallback
+                    and _extract_content(raw) is None
+                    and _fallback_used(_answered_by(raw), primary=primary, fallback=fallback, alias=alias) != "true"
+                ):
+                    # Empty content is a provider failure: Router only falls back on exceptions.
+                    raw = self.router.completion(model=f"{alias}-fallback", messages=messages, **kwargs)
             except Exception as exc:  # noqa: BLE001 — normalized below
                 mapped = self._map_exception(exc)
                 if self._should_try_last_resort(role, mapped):
@@ -252,7 +259,6 @@ class ModelClient:
 
     def _map_exception(self, exc: Exception) -> ModelClientError:
         name = type(exc).__name__.lower()
-        message = str(exc)
         status = getattr(exc, "status_code", None)
 
         if isinstance(exc, MockRateLimitError) or "ratelimit" in name or status == 429:
@@ -264,10 +270,15 @@ class ModelClient:
             return InvalidRequestError("Invalid request for configured model.")
         if isinstance(exc, MockTimeoutError) or "timeout" in name:
             return AllProvidersUnavailable("Provider timed out and no healthy fallback remained.")
-        if "notfound" in name or "model" in name and "not" in message.lower():
-            return AllProvidersUnavailable("Configured model is unavailable.")
         # When Router exhausted fallbacks it often surfaces the last error.
         return AllProvidersUnavailable("All configured providers failed for this role.")
+
+
+def _answered_by(raw: Any) -> str | None:
+    model_name = getattr(raw, "model", None)
+    if model_name is None and isinstance(raw, dict):
+        model_name = raw.get("model")
+    return model_name
 
 
 def _token_value(value: int | None) -> int | str:

@@ -1,33 +1,23 @@
-"""Search and fetch ports.
+"""Search and fetch adapters.
 
-The default adapters mirror V1: Tavily for search and `tools.validate_public_url`
-plus `tools.scrape_url` for bounded public HTML. PDF bytes are never parsed.
-`scrape_url` resolves each hop once and dials that global IP, with the original
-hostname as Host and TLS SNI. The validate call in this module is an earlier
-gate only; it does not supply the address that is dialed. This is in-process
-only. It is not a separate egress proxy and does not close SSRF.
+Tavily for search and `research.fetch.scrape_url` for bounded public HTML. PDF
+bytes are never parsed. The fetch resolves each hop once and dials that global
+IP, with the original hostname as Host and TLS SNI. This is in-process only. It
+is not a separate egress proxy and does not close SSRF.
 """
 from __future__ import annotations
 
 import hashlib
 import re
-from typing import Protocol
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from backend.app.core.config import get_settings
 from backend.app.observability import start_span
 from backend.app.schemas.research import FetchResult, SearchHit
 
 
 class RetrievalError(RuntimeError):
     pass
-
-
-class RetrievalPort(Protocol):
-    def search(self, query: str, *, max_results: int) -> list[SearchHit]:
-        ...
-
-    def fetch(self, url: str) -> FetchResult:
-        ...
 
 
 def canonical_url(url: str) -> str:
@@ -61,6 +51,23 @@ def clean_query(text: str, limit: int = 200) -> str:
     return collapsed[:limit]
 
 
+_SEARCH_TIMEOUT_SECONDS = 15.0
+_tavily_cache: tuple[str, object] | None = None
+
+
+def _tavily_client() -> object:
+    """One TavilyClient per process (per key); built lazily."""
+    global _tavily_cache
+    key = get_settings().tavily_api_key
+    if not key:
+        raise RetrievalError("missing_search_key")
+    if _tavily_cache is None or _tavily_cache[0] != key:
+        from tavily import TavilyClient
+
+        _tavily_cache = (key, TavilyClient(api_key=key))
+    return _tavily_cache[1]
+
+
 def search_public_web(query: str, *, max_results: int, client: object | None = None) -> list[SearchHit]:
     """Structured search using the same Tavily client pattern as V1 `web_search`."""
     with start_span("search.call", max_results=max_results) as span:
@@ -70,18 +77,10 @@ def search_public_web(query: str, *, max_results: int, client: object | None = N
 
 
 def _search_public_web(query: str, *, max_results: int, client: object | None = None) -> list[SearchHit]:
-    search_client = client
-    if search_client is None:
-        import os
-
-        key = os.environ.get("TAVILY_API_KEY")
-        if not key:
-            raise RetrievalError("missing_search_key")
-        from tavily import TavilyClient
-
-        search_client = TavilyClient(api_key=key)
+    search_client = client or _tavily_client()
     bounded = max(1, min(max_results, 5))
-    raw = search_client.search(query=query, max_results=bounded)  # type: ignore[attr-defined]
+    kwargs = {} if client is not None else {"timeout": _SEARCH_TIMEOUT_SECONDS}
+    raw = search_client.search(query=query, max_results=bounded, **kwargs)  # type: ignore[attr-defined]
     rows = raw.get("results") if isinstance(raw, dict) else getattr(raw, "results", None)
     hits: list[SearchHit] = []
     for row in rows or []:
@@ -100,43 +99,17 @@ def _search_public_web(query: str, *, max_results: int, client: object | None = 
     return hits
 
 
-def fetch_public_html(
-    url: str,
-    *,
-    validate_public_url=None,
-    scrape=None,
-) -> FetchResult:
-    """Validate then scrape one public HTML URL. Blocked URLs are not fetched."""
+def fetch_public_html(url: str, *, scrape=None) -> FetchResult:
+    """Scrape one public HTML URL. Blocked URLs fail inside the fetch and are not dialed."""
     with start_span("source.fetch", domain=domain_of(url)) as span:
-        result = _fetch_public_html(url, validate_public_url=validate_public_url, scrape=scrape)
+        result = _fetch_public_html(url, scrape=scrape)
         span.set(extraction_method=result.extraction_method, fetched=result.extraction_method == "html")
         return result
 
 
-def _fetch_public_html(
-    url: str,
-    *,
-    validate_public_url=None,
-    scrape=None,
-) -> FetchResult:
-    if validate_public_url is None or scrape is None:
-        from tools import scrape_url
-        from tools import validate_public_url as v1_validate
-
-        validate_public_url = validate_public_url or v1_validate
-        if scrape is None:
-            def scrape(target: str) -> str:
-                return str(scrape_url.invoke({"url": target}))
-
-    try:
-        validate_public_url(url)
-    except Exception:
-        return FetchResult(
-            url=url,
-            text="",
-            extraction_method="failed",
-            caveat="URL blocked by the public-web policy.",
-        )
+def _fetch_public_html(url: str, *, scrape=None) -> FetchResult:
+    if scrape is None:
+        from backend.app.research.fetch import scrape_url as scrape
     try:
         raw = scrape(url)
     except Exception:

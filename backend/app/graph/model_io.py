@@ -23,7 +23,6 @@ def complete_json(
 ) -> tuple[dict | None, dict[str, Any], str | None]:
     current = dict(usage or empty_usage())
     if int(current.get("llm_calls") or 0) >= max_model_calls:
-        current["estimated_cost_usd"] = None
         return None, current, "model_budget"
     try:
         response = client.complete(
@@ -42,14 +41,16 @@ def complete_json(
 
 
 def record_usage(usage: dict[str, Any], response: Any) -> dict[str, Any]:
-    """Count the call. Unknown token totals stay unknown instead of becoming zero."""
+    """Count the call. Unknown token totals stay unknown instead of becoming zero.
+
+    token_usage_complete goes False once any call lacks usage and stays False as a
+    signal that totals are a lower bound; tokens from later calls are still summed.
+    """
     updated = dict(usage)
     updated["llm_calls"] = int(updated.get("llm_calls") or 0) + 1
     token_usage = getattr(response, "usage", None)
     if response is None or token_usage is None or getattr(token_usage, "is_unknown", True):
         updated["token_usage_complete"] = False
-        return refresh_estimated_cost(updated)
-    if updated.get("token_usage_complete") is False:
         return refresh_estimated_cost(updated)
     prompt = token_usage.prompt_tokens
     completion = token_usage.completion_tokens
@@ -60,5 +61,4 @@ def record_usage(usage: dict[str, Any], response: Any) -> dict[str, Any]:
     updated["prompt_tokens"] = int(updated.get("prompt_tokens") or 0) + prompt
     updated["completion_tokens"] = int(updated.get("completion_tokens") or 0) + completion
     updated["total_tokens"] = int(updated.get("total_tokens") or 0) + total
-    updated["token_usage_complete"] = True
     return refresh_estimated_cost(updated)

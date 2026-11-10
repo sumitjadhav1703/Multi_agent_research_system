@@ -111,9 +111,6 @@ class MockRouter:
                 )
             raise
 
-    async def acompletion(self, model: str, messages: list[dict[str, Any]], **kwargs: Any) -> MockResponse:
-        return self.completion(model, messages, **kwargs)
-
 
 def failing_then_fallback_success(fail_models: set[str]) -> Behavior:
     def _behavior(model: str, messages: list[dict[str, Any]], kwargs: dict[str, Any]) -> MockResponse:

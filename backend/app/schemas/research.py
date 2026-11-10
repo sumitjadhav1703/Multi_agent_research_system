@@ -29,12 +29,6 @@ class SubQuestion(BaseModel):
     worker_status: str | None = None
 
 
-class ResearchPlan(BaseModel):
-    topic: str
-    subquestions: list[SubQuestion]
-    planner_notes: str = ""
-
-
 class SourceRecord(BaseModel):
     source_id: str
     url: str
@@ -61,7 +55,6 @@ class Passage(BaseModel):
     url: str
     relevance_reason: str
     term_overlap: int = 0
-    page_or_section: str | None = None
 
 
 class Claim(BaseModel):
@@ -70,7 +63,6 @@ class Claim(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     status: ClaimStatus = "insufficient"
     verification_reason: str
-    subquestion_id: str | None = None
 
 
 class Contradiction(BaseModel):

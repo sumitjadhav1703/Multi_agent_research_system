@@ -23,6 +23,7 @@ from backend.app.research.evidence import (
     contradictions_for,
     enforce_claim_assessments,
     finalize_ledger,
+    is_auto_passage_claim,
     latest_worker_status,
     merge_worker_outputs,
     new_result_id,
@@ -36,10 +37,22 @@ from backend.app.schemas.research import (
     Passage,
     ReportDraft,
     ReportSection,
-    ResearchPlan,
     SourceRecord,
     SubQuestion,
 )
+
+
+def select_prompt_passages(passages: list[Passage], limit: int = 6) -> list[Passage]:
+    """Up to `limit` passages, round-robin across subquestions so later ones (incl. followup) are seen."""
+    groups: dict[str, list[Passage]] = {}
+    for passage in passages:
+        groups.setdefault(passage.subquestion_id, []).append(passage)
+    picked: list[Passage] = []
+    queues = list(groups.values())
+    while queues and len(picked) < limit:
+        picked.append(queues[0].pop(0))
+        queues = [q for q in queues[1:] + queues[:1] if q]
+    return picked
 
 
 def utc_now() -> str:
@@ -133,12 +146,10 @@ def plan_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str,
     warnings = list(state.get("warnings") or [])
     if len(raw_items) > limits.max_subquestions:
         warnings.append(f"Planner output truncated to {limits.max_subquestions} subquestions.")
-    plan = ResearchPlan(topic=state.get("topic") or "", subquestions=[SubQuestion.model_validate(sq) for sq in subquestions])
     events.append(
         emit("planner.completed", "plan", {"subquestions": len(subquestions), "truncated": len(raw_items) > len(subquestions)})
     )
     return {
-        "research_plan": plan.model_dump(),
         "subquestions": subquestions,
         "usage": usage,
         "warnings": _unique(warnings),
@@ -214,6 +225,8 @@ def route_after_schedule(state: ResearchState) -> str | list[Send]:
                         "topic": state.get("topic"),
                         "run_id": state.get("run_id"),
                         "fetch_budget": int(budgets.get(subquestion_id, 0)),
+                        # Already-stored URLs: the worker must not re-fetch them (merge would drop them).
+                        "known_urls": [str(src.get("canonical_url")) for src in state.get("sources") or []],
                     },
                 )
             )
@@ -229,6 +242,7 @@ def worker_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[st
         question=str(task.get("question") or ""),
         search_query=clean_query(str(task.get("search_query") or task.get("question") or "")),
         fetch_budget=int(state.get("fetch_budget") or 0),
+        skip_urls=frozenset(state.get("known_urls") or ()),
         retrieval=runtime.context.retrieval,
         limits=runtime.context.limits,
         retrieved_at=utc_now(),
@@ -310,7 +324,7 @@ def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) ->
         return {"claims": [], "contradictions": [], "events": events}
     known = {passage.evidence_id for passage in passages}
     listing = ["Evidence IDs you may cite:"]
-    for passage in passages[:6]:
+    for passage in select_prompt_passages(passages):
         listing.append(f"ID={passage.evidence_id} URL={passage.url}")
         listing.append(untrusted_block(passage.quote))
     parsed, usage, error = complete_json(
@@ -356,7 +370,7 @@ def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) ->
     return {
         "claims": [claim.model_dump() for claim in proposals],
         "contradictions": [],
-        "usage": usage if parsed is not None or error else state.get("usage"),
+        "usage": usage,
         "warnings": _unique(warnings),
         "events": events,
     }
@@ -373,23 +387,29 @@ def verify_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[st
         listing.append(f"CLAIM {claim.claim_id}: {claim.text}")
         listing.append(f"EVIDENCE_IDS {', '.join(claim.evidence_ids)}")
     by_passage = {passage.evidence_id: passage for passage in passages}
+    quoted: set[str] = set()
     for claim in claims:
         for evidence_id in claim.evidence_ids:
             passage = by_passage.get(evidence_id)
-            if passage:
+            if passage and evidence_id not in quoted:
+                quoted.add(evidence_id)
                 listing.append(f"QUOTE {passage.evidence_id}")
                 listing.append(untrusted_block(passage.quote))
-    parsed, usage, error = complete_json(
-        runtime.context.model_client,
-        state.get("usage"),
-        role="verifier",
-        messages=[
-            {"role": "system", "content": VERIFIER_SYSTEM},
-            {"role": "user", "content": "\n".join(listing)},
-        ],
-        max_tokens=800,
-        max_model_calls=limits.max_model_calls,
-    )
+    if all(is_auto_passage_claim(claim) for claim in claims):
+        # Seeds are forced insufficient by enforce_claim_assessments; skip the LLM call.
+        parsed, usage, error = None, state.get("usage") or empty_usage(), None
+    else:
+        parsed, usage, error = complete_json(
+            runtime.context.model_client,
+            state.get("usage"),
+            role="verifier",
+            messages=[
+                {"role": "system", "content": VERIFIER_SYSTEM},
+                {"role": "user", "content": "\n".join(listing)},
+            ],
+            max_tokens=800,
+            max_model_calls=limits.max_model_calls,
+        )
     decisions = {}
     if parsed:
         for row in parsed.get("results") or []:
@@ -443,6 +463,7 @@ def evidence_gate_node(state: ResearchState, runtime: Runtime[GraphContext]) -> 
     can_retry = (
         retry < limits.max_evidence_retries
         and searches < limits.max_search_calls
+        and len(state.get("sources") or []) < limits.max_sources
         and not any(item.get("kind") == "followup" for item in state.get("subquestions") or [])
     )
     if can_retry:
@@ -506,7 +527,7 @@ def write_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str
     supported = [claim for claim in claims if claim.status == "supported"]
     if not supported and passages:
         lines.append("Stored passage excerpts you may paraphrase only inside a caveat (never invent evidence IDs):")
-        for passage in passages[:6]:
+        for passage in select_prompt_passages(passages):
             lines.append(f"ID={passage.evidence_id}")
             lines.append(untrusted_block(passage.quote))
     if feedback and int(state.get("revision_count") or 0) >= 1:
@@ -614,12 +635,14 @@ def human_review_node(state: ResearchState, runtime: Runtime[GraphContext]) -> d
         }
     if action == "revise":
         if revision_count >= limits.max_revisions:
+            # No more revisions: back to review so approve/reject stay available.
             return {
-                "approval_status": "rejected",
-                "review_feedback": comments,
-                "stop_reason": "revision_limit",
-                "warnings": _unique(list(state.get("warnings") or []) + ["Revision limit reached."]),
-                "events": events,
+                "approval_status": "awaiting_review",
+                "stop_reason": None,
+                "warnings": _unique(
+                    list(state.get("warnings") or []) + ["Revision limit reached; no more revisions are allowed."]
+                ),
+                "events": events + [emit("warning", "human_review", {"code": "revision_limit"})],
             }
         return {
             "approval_status": "revision_requested",
@@ -637,8 +660,11 @@ def human_review_node(state: ResearchState, runtime: Runtime[GraphContext]) -> d
 
 
 def route_after_review(state: ResearchState) -> str:
-    if state.get("approval_status") == "revision_requested":
+    status = state.get("approval_status")
+    if status == "revision_requested":
         return "write"
+    if status == "awaiting_review":
+        return "human_review"
     return "complete"
 
 

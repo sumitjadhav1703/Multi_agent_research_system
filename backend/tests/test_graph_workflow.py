@@ -247,7 +247,7 @@ class GraphWorkflowTests(unittest.TestCase):
         self.assertTrue(supported)
         self.assertTrue(all(claim["evidence_ids"] for claim in supported))
 
-    def test_one_revision_then_the_next_revise_is_refused(self) -> None:
+    def test_one_revision_then_the_next_revise_returns_to_review(self) -> None:
         retrieval = FixtureRetrieval(LAB_HITS, LAB_PAGES)
         runner, router = _runner(success_roles(1), retrieval)
         paused = runner.start("Widget latency", run_id="revise")
@@ -255,13 +255,16 @@ class GraphWorkflowTests(unittest.TestCase):
         self.assertTrue(revised.interrupted)
         self.assertEqual(revised.state["revision_count"], 1)
         refused = runner.resume("revise", ReviewDecision(action="revise", comments="Do it again."))
-        self.assertFalse(refused.interrupted)
-        self.assertEqual(refused.stop_reason, "revision_limit")
-        self.assertEqual(refused.approval_status, "rejected")
+        self.assertTrue(refused.interrupted)
+        self.assertEqual(refused.approval_status, "awaiting_review")
+        self.assertIsNone(refused.stop_reason)
         self.assertEqual(refused.state["revision_count"], 1)
+        self.assertIn("revision_limit", [e["payload"].get("code") for e in refused.events if e["type"] == "warning"])
         writer_calls = _role_calls(router, "writer")
         self.assertEqual(len(writer_calls), 2)
         self.assertIn("Emphasize the limitation.", writer_calls[1]["messages"][-1]["content"])
+        approved = runner.resume("revise", ReviewDecision(action="approve"))
+        self.assertEqual(approved.approval_status, "approved")
 
     def test_reject_stops_without_another_draft(self) -> None:
         retrieval = FixtureRetrieval(LAB_HITS, LAB_PAGES)
@@ -280,9 +283,14 @@ class GraphWorkflowTests(unittest.TestCase):
             runner.resume("empty", ReviewDecision(action="approve"))
 
     def test_postgres_checkpointer_requires_database_url(self) -> None:
+        from backend.app.graph.checkpointer import open_postgres_checkpointer
+
         with self.assertRaises(RuntimeError) as caught:
-            build_checkpointer("postgres")
+            with open_postgres_checkpointer(""):
+                pass
         self.assertIn("DATABASE_URL", str(caught.exception))
+        with self.assertRaises(ValueError):
+            build_checkpointer("postgres")
 
     def test_custom_stream_emits_planner_event(self) -> None:
         retrieval = FixtureRetrieval(LAB_HITS, LAB_PAGES)

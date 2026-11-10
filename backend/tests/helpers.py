@@ -8,7 +8,7 @@ def mock_settings(**overrides: object) -> Settings:
     clear_settings_cache()
     base = {
         "_env_file": None,
-        "FREE_MODEL_ALLOWLIST": "mock/free-model,mock/free-fallback",
+        "FREE_MODEL_ALLOWLIST": "mock/free-model,mock/free-fallback,meta/muse-spark-1.3-contributor",
         "PLANNER_PRIMARY_MODEL": "mock/free-model",
         "PLANNER_FALLBACK_MODEL": "mock/free-fallback",
         "RESEARCH_PRIMARY_MODEL": "mock/free-model",

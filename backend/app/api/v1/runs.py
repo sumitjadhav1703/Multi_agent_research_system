@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.v1.deps import bearer_token, call_db, current_settings, get_session
 from backend.app.core.config import Settings
 from backend.app.db.models import JobEvent, ResearchJob
+from backend.app.graph.limits import GraphLimits
 from backend.app.observability import start_span
 from backend.app.jobs.quota import (
     cancel_run,
@@ -45,7 +46,7 @@ def server_budgets(settings: Settings) -> dict[str, int]:
         "max_search_calls": 4,
         "max_evidence_retries": 1,
         "max_revisions": 1,
-        "max_model_calls": settings.max_model_calls_per_run,
+        "max_model_calls": GraphLimits(max_model_calls=settings.max_model_calls_per_run).clamped().max_model_calls,
         "max_wall_clock_seconds": settings.max_run_wall_clock_seconds,
     }
 
