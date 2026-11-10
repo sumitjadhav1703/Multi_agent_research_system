@@ -2,7 +2,7 @@
 
 **Deployment is definition-of-done** for ResearchMind 2.0 (SoT).  
 **Live Singapore profile:** documented in [`../deployment-report.md`](../deployment-report.md)  
-**Artifacts:** `Dockerfile`, `infra/docker-entrypoint.sh`, `render.yaml`, `vercel.json`, `mcp-server/wrangler.jsonc`  
+**Artifacts:** `Dockerfile`, `infra/docker-entrypoint.sh`, `render.yaml`, `vercel.json`, `mcp-server/wrangler.jsonc`, `.github/workflows/` (`tests.yml`, `deploy-mcp-worker.yml`, `keep-api-awake.yml`)  
 **External doc check:** Render / Neon / Cloudflare / Vercel — 2026-11-08
 
 ---
@@ -45,7 +45,7 @@ Oregon/US experiments were deleted (user request for Singapore).
 | Health checks | Supported | `/api/v1/health/live` |
 | Ephemeral FS | Yes | No critical data on disk |
 | `WEB_CONCURRENCY` | Must be 1 | Entrypoint refuses otherwise |
-| Region | singapore | `render.yaml` |
+| Region | singapore | `render.yaml` (service `researchmind-api-sg`, `plan: free`, `autoDeployTrigger: commit`, `numInstances: 1`) |
 
 Free Render Postgres expires ~30 days — **rejected** in favor of Neon.
 
@@ -53,7 +53,7 @@ Free Render Postgres expires ~30 days — **rejected** in favor of Neon.
 
 1. `POST` run inserts `research_jobs` + idempotency key; returns 202.  
 2. Lifespan `QueueConsumer` leases with `FOR UPDATE SKIP LOCKED`.  
-3. Heartbeats; expired leases recover.  
+3. Heartbeats; expired leases and stranded jobs recover periodically; a lost lease stops the graph.  
 4. LangGraph checkpoints in Postgres.  
 5. Events append for SSE replay.  
 6. Restart mid-LLM → at-least-once (documented).  
@@ -79,11 +79,11 @@ Hitting CU-hours suspends compute until next period or upgrade — data not auto
 
 | Topic | Notes |
 |---|---|
-| Hobby static SPA | Fits `frontend/dist` |
+| Hobby static SPA | `vercel.json` builds `frontend/` into `frontend/dist`; console served under `/app`, portfolio landing at `/` |
 | Env | `VITE_API_BASE`, `VITE_TURNSTILE_SITE_KEY` only |
 | SSE | Browser talks to **Render**, not through Vercel functions |
 | CORS | API must allow exact console origin |
-| Region | `sin1` documented |
+| Region | `sin1` per deployment-report; not set in `vercel.json` |
 
 ---
 
@@ -92,12 +92,12 @@ Hitting CU-hours suspends compute until next period or upgrade — data not auto
 | Item | Detail |
 |---|---|
 | Base | Python 3.13 slim |
-| Deps | `backend/requirements.txt` + `--no-deps` fetch extras |
+| Deps | `backend/requirements.txt` only (no V1 code, no `requirements-fetch.txt`; fetch lives in `backend/app/research/fetch.py`) |
 | User | uid 10001 |
 | Start | `infra/docker-entrypoint.sh` → Uvicorn `backend.app.main:app` |
 | Port | `$PORT` |
-| Healthcheck | present in Dockerfile |
-| Local image build in some audit sessions | Failed when Docker.app missing — rebuild on a machine with Docker |
+| Healthcheck | none in Dockerfile; Render uses `healthCheckPath: /api/v1/health/live` |
+| CI | `docker` job runs `docker build .` (no push) |
 
 ---
 
@@ -108,7 +108,7 @@ Hitting CU-hours suspends compute until next period or upgrade — data not auto
 | Render + Neon | Yes | Yes | Neon ongoing free caps | **Yes** |
 | Railway | Yes | Yes | Usage-based; not first pick | Alternative |
 | Fly.io | Yes | Yes | More ops; not first pick | Alternative |
-| Streamlit Cloud | V1 only | N/A | N/A | V1 baseline only |
+| Streamlit Cloud | V1 only (V1 is not currently deployed) | N/A | N/A | V1 baseline only |
 
 Do not pick a host only because marketing says “free.” Render Free sleep and Neon CU-hours are real limits.
 
@@ -145,7 +145,7 @@ Secrets stay in host dashboards — never in git.
 
 | Risk | Mitigation |
 |---|---|
-| Render sleep | Banner in UI; Neon durability |
+| Render sleep | Banner in UI; Neon durability; Worker cron pings `/api/v1/health/live` every 10 min (`mcp-server/wrangler.jsonc`); `keep-api-awake.yml` is manual-only because GitHub throttled its schedule |
 | Neon scale-to-zero + Render wake | Compounded latency — NOT MEASURED |
 | Single Uvicorn worker | Simplicity; no HA |
 | Gemini alias unverified | Live smoke before demos |

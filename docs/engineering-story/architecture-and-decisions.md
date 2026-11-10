@@ -1,7 +1,7 @@
 # Architecture and technology decisions
 
 **Verification date for external docs:** 2026-11-08  
-**Code baseline:** `main` @ `fa0f544`  
+**Last verified:** 2026-11-10 (branch `fix/audit-hardening`)  
 **Related ADRs:** [`../ADR/0001-approved-architecture.md`](../ADR/0001-approved-architecture.md) through [`0006`](../ADR/0006-cloudflare-mcp.md) (ADR 0005 streaming/hosting write-up is **missing** — numbering jumped to 0006).
 
 For every major choice: problem → selection → alternatives rejected → performance/cost/infra → limitations → status in this repo.
@@ -42,7 +42,7 @@ Typed request/response schemas and fail-closed settings (`ALLOW_PAID_MODELS`, al
 
 ### Async processing — PARTIALLY IMPLEMENTED
 
-FastAPI is async; the graph runner uses sync `invoke` with a sync Postgres saver inside the lifespan consumer thread (`docs/IMPLEMENTATION_STATUS.md` M3). Full async end-to-end graph execution is **not** the current path.
+FastAPI is async; the graph runner uses the sync graph API (`stream`) with a sync Postgres saver inside the lifespan consumer thread (`docs/IMPLEMENTATION_STATUS.md` M3). Full async end-to-end graph execution is **not** the current path.
 
 ### PostgreSQL (Neon) — IMPLEMENTED · VERIFIED (local) · live wired
 
@@ -96,7 +96,7 @@ Aliases: `rm-planner`, `rm-researcher`, `rm-verifier`, `rm-writer`, `rm-eval-jud
 | Technology | Status | Notes |
 |---|---|---|
 | Multi-query planning ≤3 | IMPLEMENTED · VERIFIED | Planner node + clamp |
-| Tavily search | IMPLEMENTED · VERIFIED (offline mocks) | V1 tool wrapped; V2 caps results lower |
+| Tavily search | IMPLEMENTED · VERIFIED (offline mocks) | Client in `research/retrieval.py`; V2 caps results at 3 (V1 used 5) |
 | Multi-source extract ≤6 | IMPLEMENTED · VERIFIED | vs V1’s one reader scrape |
 | Structured evidence passages | IMPLEMENTED · VERIFIED | `research/evidence.py` |
 | Claim verification (passage overlap) | IMPLEMENTED · VERIFIED | “evidence assessed,” not absolute fact-check |
@@ -110,9 +110,9 @@ Aliases: `rm-planner`, `rm-researcher`, `rm-verifier`, `rm-writer`, `rm-eval-jud
 
 ### DeepEval — PARTIALLY IMPLEMENTED
 
-Selected as primary LLM-app eval framework (SoT). Pin `deepeval==4.3.3` in `evals/requirements.txt` only — **not** in CI or backend venv. Judge gated by `RM_EVAL_JUDGE=1` + `--confirm-offline`. Scores **NOT MEASURED**. RAGAS explicitly not primary.
+Selected as primary LLM-app eval framework (SoT). Pin `deepeval==4.3.3` in `evals/requirements.txt` only — the judge is **not** installed in CI or the backend venv. Judge gated by `RM_EVAL_JUDGE=1` + `--confirm-offline`. Judge scores exist only for hand-built fixtures (2026-11-09, Meta Muse); V1/V2 scores **NOT MEASURED**. RAGAS explicitly not primary.
 
-Deterministic Python checks for fixtures: IMPLEMENTED · VERIFIED (`evals/checks.py`, 14 eval unit tests).
+Deterministic Python checks for fixtures: IMPLEMENTED · VERIFIED (`evals/checks.py`, 15 eval unit tests; CI runs them plus the deterministic self-check).
 
 ---
 
@@ -147,7 +147,7 @@ Cloudflare Worker + Streamable HTTP-style MCP surface: IMPLEMENTED · VERIFIED �
 | Neon Free (Singapore) | IMPLEMENTED (live) | Durable Postgres without 30-day Render free DB expiry |
 | Vercel Hobby console (`sin1`) | IMPLEMENTED (live) | Static SPA |
 | Cloudflare Workers Free MCP | IMPLEMENTED (live) | Thin forwarder; 100k req/day, 10 ms CPU ([CF limits](https://developers.cloudflare.com/workers/platform/limits/), verified 2026-11-08) |
-| Docker | IMPLEMENTED | Portable API image; `WEB_CONCURRENCY=1` enforced |
+| Docker | IMPLEMENTED | Portable API image (built in CI, no push); `WEB_CONCURRENCY=1` enforced |
 
 ### Platform alternatives considered
 

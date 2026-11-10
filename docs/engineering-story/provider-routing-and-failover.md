@@ -30,10 +30,10 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 |---|---|---|
 | `groq/openai/gpt-oss-20b` | planner / researcher / writer primary | M2 live text smoke: pass at `max_tokens=128` |
 | `gemini/gemini-flash-latest` | verifier / eval_judge primary; several fallbacks | Alias for current Flash; **fresh live capability NOT VERIFIED** in M3+ |
-| `gemini/gemini-2.0-flash` | allowlisted for boot compat (removed from the default/production allowlist 2026-11-10) | M2 smoke: HTTP **404** (retired) |
+| `gemini/gemini-2.0-flash` | no longer allowlisted (removed 2026-11-10); an environment that still names it fails at boot | M2 smoke: HTTP **404** (retired) |
 | `mistral/mistral-small-latest` | verifier/writer fallback | Live not fully matrix-tested |
 | `openrouter/meta-llama/llama-3.2-3b-instruct:free` | allowlisted | Free suffix; still subject to OpenRouter account limits |
-| `mock/free-model` (removed from the default/production allowlist 2026-11-10) | CI | `USE_MOCK_PROVIDER=true` |
+| `mock/free-model` | in the code default allowlist; omitted from `render.yaml`'s production list | `USE_MOCK_PROVIDER=true` |
 
 `ALLOW_PAID_MODELS=true` or paid markers (`gpt-4`, `claude-sonnet-4`, …) → **fail closed at startup**.
 
@@ -49,7 +49,7 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 | writer | `rm-writer` | groq/openai/gpt-oss-20b | mistral/mistral-small-latest |
 | eval_judge | `rm-eval-judge` | gemini/gemini-flash-latest | none |
 
-Fallbacks must also be on the allowlist. Exhaustion of all approved options → stop safely; preserve completed stages/events. **Never** escalate to paid.
+`eval_judge` is only the in-app alias; the offline DeepEval judge uses `meta/muse-spark-1.3-contributor` (`evals/__init__.py`). Fallbacks must also be on the allowlist. Exhaustion of all approved options → stop safely; preserve completed stages/events. **Never** escalate to paid.
 
 ---
 
@@ -87,8 +87,9 @@ Research date: **2026-11-08**. Official dashboards remain authoritative.
 | Timeout | `LITELLM_REQUEST_TIMEOUT` default 45s | IMPLEMENTED |
 | Rate-limit handling | Error mapping in `ModelClient`; job may fail/pause path | IMPLEMENTED |
 | Circuit breakers | Rely on LiteLLM Router deployment health where configured; app keeps fallbacks minimal | PARTIAL |
-| Fallback conditions | Only configured allowlisted hop | IMPLEMENTED · VERIFIED offline |
-| Token tracking | Usage ledger; null stays null | IMPLEMENTED · VERIFIED |
+| Fallback conditions | Only configured allowlisted hop; an empty provider reply also falls back to the role fallback model | IMPLEMENTED · VERIFIED offline |
+| Meta last resort | One post-chain call to `META_LAST_RESORT_MODEL` only when `META_LAST_RESORT_ENABLED=true`, a Meta key is set, and the model is allowlisted; off in `render.yaml` | IMPLEMENTED (optional) |
+| Token tracking | Usage ledger; null stays null; tokens are counted after failed calls | IMPLEMENTED · VERIFIED |
 | Cost estimates | List-price when measured; null/unknown when not | IMPLEMENTED |
 | Failure recovery | Persist events; no paid escape hatch | IMPLEMENTED |
 

@@ -30,7 +30,7 @@
 | Estimated cost | Model $ if prices known — often **null** in app |
 | Actual billed cost | Invoice |
 
-ResearchMind stores `estimated_cost_usd` as null when unmeasured — never fake $0.00. When tokens/search calls exist, `backend/app/cost_estimate.py` writes a list-price USD string (Gemini Flash USD/1M + search call rate), not an invoice.
+ResearchMind stores `estimated_cost_usd` as null when unmeasured — never fake $0.00. When tokens/search calls exist, `backend/app/cost_estimate.py` writes a list-price USD string (one blended USD-per-1M-token rate for every routed model + a per-search rate), not an invoice.
 
 ---
 
@@ -42,7 +42,7 @@ ResearchMind stores `estimated_cost_usd` as null when unmeasured — never fake 
 | Global active runs | `GLOBAL_MAX_ACTIVE_RUNS` (SoT demo: 1) |
 | Global daily cap | `GLOBAL_DAILY_RUN_CAP` (SoT demo: 3) |
 | Per-run model calls | `MAX_MODEL_CALLS_PER_RUN` + graph `max_model_calls` |
-| Wall clock | `MAX_RUN_WALL_CLOCK_SECONDS` (zero budget honored — Codex P2) |
+| Wall clock | `MAX_RUN_WALL_CLOCK_SECONDS` (180 s on Render; zero budget honored — Codex P2; checked between graph steps, status `expired`) |
 | Worker concurrency | ≤2 |
 | Sources / searches / fetches | GraphLimits ceilings |
 | Passage size | ≤500 chars, ≤2 / source |
@@ -58,7 +58,7 @@ ResearchMind stores `estimated_cost_usd` as null when unmeasured — never fake 
 1. LiteLLM / provider returns rate-limit or auth errors.  
 2. `ModelClient` maps errors; may try **one** allowlisted fallback.  
 3. If all approved options fail → job fails safely; completed events/artifacts remain.  
-4. **No** paid model is selected.  
+4. **No** paid model is selected. The only extra hop is the optional Meta Muse last resort, which runs only when `META_LAST_RESORT_ENABLED=true`, a Meta key is set, and the model is allowlisted (not enabled in `render.yaml`).  
 5. Guest may have already consumed the one-use entitlement if provider work started — refunds only before that commit (quota rules).
 
 ---

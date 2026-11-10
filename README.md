@@ -171,13 +171,15 @@ mcp-server/              Cloudflare Worker MCP forwarder
 docs/                    Spec, ADRs, status, deployment report, engineering story
 evals/                   Offline evaluation fixtures / harness
 infra/                   Docker entrypoint helpers
-render.yaml              Render blueprint (API + optional static)
+scripts/                 run_offline_suites.sh (offline mock-provider test matrix)
+.github/workflows/       tests.yml, deploy-mcp-worker.yml, keep-api-awake.yml (manual only)
+render.yaml              Render blueprint (API web service researchmind-api-sg)
 vercel.json              Vercel build: landing at / , SPA under /app
 Dockerfile               API image (Python 3.13)
 .env.example             Backend env names (no secrets)
 ```
 
-V1 Streamlit code lives in [`v1/`](v1/) (frozen baseline, tag `v1-baseline`). Prefer the V2 paths above for new work.
+V1 Streamlit code lives in [`v1/`](v1/) (frozen baseline, tag `v1-baseline`; run with `streamlit run v1/app.py`; not deployed). Prefer the V2 paths above for new work.
 
 ---
 
@@ -259,7 +261,8 @@ npx serve dist -l 4173
 cd mcp-server
 npm ci
 npm test
-# Deploy only after RESEARCHMIND_API_BASE points at a real API origin (not loopback)
+# RESEARCHMIND_API_BASE is set in mcp-server/wrangler.jsonc (Singapore API origin).
+# Use .dev.vars (see .dev.vars.example) to point `npm run dev` at a local API.
 ```
 
 ---
@@ -375,19 +378,20 @@ Push to `main` triggers production deploy when the Git integration is connected.
 
 ### API (Render)
 
-- Blueprint: [`render.yaml`](render.yaml) — Docker web service, `WEB_CONCURRENCY=1`, Singapore region
+- Blueprint: [`render.yaml`](render.yaml) — Docker web service `researchmind-api-sg`, `WEB_CONCURRENCY=1`, Singapore region, `autoDeployTrigger: commit` on `main`
 - Image: [`Dockerfile`](Dockerfile) + [`infra/docker-entrypoint.sh`](infra/docker-entrypoint.sh)
 - Required dashboard secrets: `DATABASE_URL`, provider keys, `TURNSTILE_SECRET_KEY`, `CORS_ORIGINS` (exact Vercel origin)
 
 ### MCP Worker (Cloudflare)
 
+Pushes to `main` that touch `mcp-server/**` deploy via [`.github/workflows/deploy-mcp-worker.yml`](.github/workflows/deploy-mcp-worker.yml) (needs GitHub secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). Manual deploy:
+
 ```bash
 cd mcp-server
-# Set RESEARCHMIND_API_BASE to the public API origin
 npx wrangler deploy
 ```
 
-Do not deploy while `RESEARCHMIND_API_BASE` still points at `127.0.0.1`.
+`RESEARCHMIND_API_BASE` is set in [`mcp-server/wrangler.jsonc`](mcp-server/wrangler.jsonc). The Worker also has a `*/10` cron that pings the API's `/api/v1/health/live`.
 
 Deeper checklist: [`docs/deployment-report.md`](docs/deployment-report.md).
 

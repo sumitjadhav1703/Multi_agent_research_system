@@ -1,7 +1,6 @@
 # ResearchMind 2.0 — Engineering Story
 
-**Audit date:** 2026-11-08 (Asia/Calcutta)  
-**Code baseline:** `main` @ `fa0f544` (includes PR #8 Codex P2 + public hygiene)  
+**Last verified:** 2026-11-10 against branch `fix/audit-hardening`  
 **Authoritative product/architecture spec:** [`../RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](../RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md)  
 **Live execution status:** [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md)  
 **Measured hosts:** [`../deployment-report.md`](../deployment-report.md)
@@ -27,7 +26,7 @@ This folder is the portfolio engineering narrative for ResearchMind. It explains
 
 ## 1. Project overview
 
-ResearchMind turns a research question into an evidence-linked draft. The original product (V1) was a Streamlit workspace with a sequential Search → Reader → Writer → Critic pipeline on Groq + Tavily. ResearchMind 2.0 keeps that V1 tree as a frozen baseline (`v1-baseline`) and adds a deployable FastAPI + LangGraph + Neon + React + Cloudflare MCP stack beside it.
+ResearchMind turns a research question into an evidence-linked draft. The original product (V1) was a Streamlit workspace with a sequential Search → Reader → Writer → Critic pipeline on Groq + Tavily. ResearchMind 2.0 keeps that V1 tree (now under `v1/`, not deployed) as a frozen baseline (`v1-baseline`) and adds a deployable FastAPI + LangGraph + Neon + React + Cloudflare MCP stack beside it.
 
 **Engineering objective (not “connect agents”):** demonstrate measurable improvements in research quality, retrieval performance, reliability, execution time, resource use, and inference cost — under a student-demo budget with free-only model routing and no silent paid fallback.
 
@@ -40,7 +39,7 @@ ResearchMind turns a research question into an evidence-linked draft. The origin
 | MCP Worker | https://researchmind-mcp.jadhavsumit534.workers.dev | Documented deployed forwarder |
 | Neon | `aws-ap-southeast-1` project `lively-star-88380432` | Wired as API `DATABASE_URL` |
 
-Cold-start latency, RSS, hosted research-run p95, and DeepEval judge scores are **NOT MEASURED**.
+Cold-start latency, RSS, hosted research-run p95, and any V1 versus V2 quality scores are **NOT MEASURED**. DeepEval scores exist only for hand-built fixtures (2026-11-09).
 
 ---
 
@@ -55,7 +54,7 @@ Cold-start latency, RSS, hosted research-run p95, and DeepEval judge scores are 
 | Reading | Prompted to scrape **one** HTML URL; no PDF | `v1/agents.py` `build_reader_agent`; `v1/tools.py` `scrape_url` |
 | Critic | Same-model review; not passage-grounded verification | `v1/agents.py` critic prompt |
 | Recovery | `PipelinePaused` + manual Resume; in-memory / Streamlit session | `v1/pipeline.py`, `v1/app.py` |
-| Tests | 14 offline unittest cases; providers mocked | `tests/`, `.github/workflows/tests.yml` |
+| Tests | 16 offline unittest cases; providers mocked | `v1/tests/`, `.github/workflows/tests.yml` |
 
 V1 is frozen at tag `v1-baseline` → `f1881b9`. See [`../BASELINE_REPORT.md`](../BASELINE_REPORT.md).
 
@@ -63,7 +62,7 @@ V1 is frozen at tag `v1-baseline` → `f1881b9`. See [`../BASELINE_REPORT.md`](.
 
 ```mermaid
 flowchart TD
-  User[Browser] --> ST[Streamlit app.py]
+  User[Browser] --> ST[Streamlit v1/app.py]
   ST --> Pipe[pipeline.run_research_pipeline]
   Pipe --> S[search agent]
   Pipe --> R[reader agent]
@@ -106,7 +105,7 @@ flowchart LR
   API --> Neon[(Neon Postgres<br/>IMPLEMENTED)]
   API --> Graph[LangGraph ≤2 workers<br/>IMPLEMENTED]
   Graph --> Router[LiteLLM free allowlist<br/>IMPLEMENTED]
-  Graph --> Search[Tavily + V1 fetch<br/>IMPLEMENTED]
+  Graph --> Search[Tavily + public-web fetch<br/>IMPLEMENTED]
   Eval[DeepEval offline harness<br/>PARTIALLY] -.->|not on request path| Graph
   OTEL[OTEL export<br/>PARTIALLY] -.-> API
 ```
@@ -119,7 +118,7 @@ flowchart LR
 | Postgres jobs/quotas/events/checkpoints | IMPLEMENTED · VERIFIED (local Postgres; Neon live wired) |
 | SSE replay + React console | IMPLEMENTED · VERIFIED (unit) |
 | Thin MCP Worker | IMPLEMENTED · VERIFIED · deployed |
-| DeepEval scored comparison | PARTIALLY (harness only; scores NOT MEASURED) |
+| DeepEval scored comparison | PARTIALLY (harness + fixture-only judge run; V1/V2 comparison NOT MEASURED) |
 | OpenTelemetry collector path | PARTIALLY (code + redaction; export default off) |
 | PDF parsing / pgvector / WebSockets / MCP OAuth | DEFERRED / PLANNED |
 | SSRF egress proxy | PLANNED (residual risk open) |
@@ -185,13 +184,13 @@ flowchart TB
 ## 6. Optimization experiments and evaluation
 
 Experiment register: [`optimization-and-experiments.md`](optimization-and-experiments.md).  
-Most experiments remain **PLANNED** or **NOT MEASURED**. Deterministic eval fixtures pass (`dataset=32`, `runs=20`, `fixture_mismatches=0`); LLM-judge scores are **NOT MEASURED** ([`../evals/RESULTS.md`](../evals/RESULTS.md)).
+Most experiments remain **PLANNED** or **NOT MEASURED**. Deterministic eval fixtures pass (`dataset=32`, `runs=20`, `fixture_mismatches=0`). A 2026-11-09 offline judge run scored the 20 fixtures only (Meta Muse; faithfulness 0.925); V1 versus V2 scores are **NOT MEASURED** ([`../evals/RESULTS.md`](../evals/RESULTS.md)).
 
 ---
 
 ## 7. Deployment architecture (honest)
 
-Profile A (approved): one Render Free Docker web service (`WEB_CONCURRENCY=1`), Neon Postgres, Vercel static console, Cloudflare Workers MCP. Jobs and checkpoints live in Neon; the container filesystem is ephemeral. Render Free spins down after ~15 minutes idle and wakes in ~1 minute ([Render free docs](https://render.com/docs/free), verified 2026-11-08).
+Profile A (approved): one Render Free Docker web service (`WEB_CONCURRENCY=1`), Neon Postgres, Vercel static console (`/app`, landing at `/`), Cloudflare Workers MCP. Jobs and checkpoints live in Neon; the container filesystem is ephemeral. Render Free spins down after ~15 minutes idle and wakes in ~1 minute ([Render free docs](https://render.com/docs/free), verified 2026-11-08).
 
 ---
 
@@ -199,12 +198,12 @@ Profile A (approved): one Render Free Docker web service (`WEB_CONCURRENCY=1`), 
 
 | Area | Status |
 |---|---|
-| V1 baseline frozen | VERIFIED offline (14 tests) |
-| V2 backend | IMPLEMENTED · VERIFIED offline (documented peak 95 backend tests) |
-| React console | IMPLEMENTED · VERIFIED (16 unit tests + build) |
-| MCP Worker | IMPLEMENTED · VERIFIED (29 tests) · deployed |
+| V1 baseline frozen | VERIFIED offline (16 tests) |
+| V2 backend | IMPLEMENTED · VERIFIED offline (221 backend tests) |
+| React console | IMPLEMENTED · VERIFIED (47 unit tests + build) |
+| MCP Worker | IMPLEMENTED · VERIFIED (31 tests) · deployed |
 | Singapore public stack | Documented live |
-| End-to-end live research quality scores | NOT MEASURED |
+| End-to-end live research quality scores (V1 or V2) | NOT MEASURED |
 | Cold-start / RSS / cost USD | NOT MEASURED |
 | SSRF fully closed | NOT IMPLEMENTED (residual) |
 

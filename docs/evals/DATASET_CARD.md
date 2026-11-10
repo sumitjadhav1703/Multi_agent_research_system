@@ -3,24 +3,24 @@
 Dataset contents, review limits, and the expansion TODO are in `evals/DATASET_CARD.md`. This file is how to run the checks and how to read the two kinds of result.
 
 **Dataset:** `golden-v0.1`, 32 author-reviewed questions, no frozen page snapshot, no independent second review.  
-**Judge pin:** DeepEval `4.3.3`, LiteLLM model `gemini/gemini-flash-latest` (same id as `EVAL_JUDGE_PRIMARY_MODEL` in `.env.example`). Temperature 0.  
+**Judge pin:** DeepEval `4.3.3`, LiteLLM model `meta/muse-spark-1.3-contributor` (`EVALUATOR_MODEL` in `evals/__init__.py`). Temperature 0.  
 **Threshold 0.5:** DeepEval 4.3.3's library default. It is not a calibrated ResearchMind pass bar.  
 **Python:** `python` (3.13). Run from the repository root with `PYTHONPATH=.`.
 
-No scores in this card were produced by a model.
+No scores are stored in this card. The judge results are in `docs/evals/RESULTS.md`.
 
 ## Two kinds of result
 
 | Kind | What it is | When it runs |
 |---|---|---|
-| Deterministic | Python checks over a saved run artifact: citation integrity, passage consistency, contradiction preservation, duplicate sources, quota and tool budget, static URL safety, and expected-behavior compliance | Local command below. Not wired into GitHub Actions. |
+| Deterministic | Python checks over a saved run artifact: citation integrity, passage consistency, contradiction preservation, duplicate sources, quota and tool budget, static URL safety, and expected-behavior compliance | Local command below. CI also runs the eval unit tests and `python -m evals.cli deterministic` (the `evals` job). |
 | LLM judge | DeepEval Faithfulness, Answer Relevancy, Contextual Precision, Contextual Recall, Tool Correctness, Argument Correctness, Task Completion, Plan Adherence, and Step Efficiency | Only with `RM_EVAL_JUDGE=1` and `--confirm-offline`. Never on a public request. |
 
 Null judge scores are not zeros. Fixture runs are not V1 or V2 benchmark rows.
 
 Trace-only metrics (Task Completion, Plan Adherence, Step Efficiency) stay skipped unless the saved run has a `trace` object. The public research graph is not wrapped in DeepEval `@observe`. Contextual Precision and Contextual Recall are skipped when the reference answer starts with `TIME_DEPENDENT`, because that answer is a dated review note.
 
-Static URL safety does not resolve DNS and does not replace `tools.validate_public_url`. SSRF is not closed.
+Static URL safety does not resolve DNS and does not replace the connect-time checks in `backend/app/security/egress_fetch.py`. SSRF is not closed.
 
 ## Deterministic command
 
@@ -45,9 +45,9 @@ PYTHONPATH=. python evals/fixtures/make_runs.py
 
 ## Judge command
 
-Export `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the process environment. The command sets `DEEPEVAL_DISABLE_DOTENV=1`, `DEEPEVAL_TELEMETRY_OPT_OUT=1`, and `LITELLM_MODE=PRODUCTION` before import so DeepEval and LiteLLM do not read a `.env` file. Do not print those keys.
+Export `META_API_KEY` (aliases `MODEL_API_KEY`, `LLAMA_API_KEY`) in the process environment. The command sets `DEEPEVAL_DISABLE_DOTENV=1`, `DEEPEVAL_TELEMETRY_OPT_OUT=1`, and `LITELLM_MODE=PRODUCTION` before import so DeepEval and LiteLLM do not read a `.env` file. Do not print those keys.
 
-Keep DeepEval out of `the project virtualenv`. The unit test that expects exit code 3 runs with that interpreter and a clean `PYTHONPATH`. Install the judge extra in a separate environment. `deepeval==4.3.3` does not depend on LiteLLM, and `LiteLLMModel` imports it only when a completion runs, so `evals/requirements.txt` also pins `litellm==1.108.2` (the backend pin).
+Keep DeepEval out of the project virtualenv. The unit test that expects exit code 3 runs with that interpreter and a clean `PYTHONPATH`. Install the judge extra in a separate environment. `deepeval==4.3.3` does not depend on LiteLLM, and `LiteLLMModel` imports it only when a completion runs, so `evals/requirements.txt` also pins `litellm==1.108.2` (the backend pin).
 
 ```text
 uv venv /tmp/rm_eval_judge --python python3.13
@@ -73,6 +73,6 @@ RM_EVAL_JUDGE=1 PYTHONPATH=. /tmp/rm_eval_judge/bin/python -m evals.cli judge \
   --output evals/results/judge.json
 ```
 
-Load `GEMINI_API_KEY` or `GOOGLE_API_KEY` into that process with dotenv. Do not print the values. `LiteLLMModel` forwards `GOOGLE_API_KEY` when that variable is set. `evals/results/` is gitignored. Without the flag or `--confirm-offline`, the command exits 2. Without DeepEval installed, it exits 3. It does not call `deepeval.evaluate()`, which can sync to Confident AI. It calls `metric.measure()` on eligible metrics only.
+Load `META_API_KEY` into that process. Do not print the value. LiteLLM's `meta/` route reads `META_API_KEY`. `evals/results/` is gitignored. Without the flag or `--confirm-offline`, the command exits 2. Without DeepEval installed, it exits 3. It does not call `deepeval.evaluate()`, which can sync to Confident AI. It calls `metric.measure()` on eligible metrics only.
 
-A dry run on 2026-11-07 constructed the metric classes and recorded only null scores. On 2026-11-09 a two-fixture judge called `gemini/gemini-flash-latest` and recorded one numeric score. The other eligible scores stayed null. See `docs/evals/RESULTS.md`.
+A dry run on 2026-11-07 constructed the metric classes and recorded only null scores. On 2026-11-09 a two-fixture Gemini probe recorded one numeric score, then a full run over the 20 fixtures with `meta/muse-spark-1.3-contributor` recorded 80 numeric scores. See `docs/evals/RESULTS.md`.

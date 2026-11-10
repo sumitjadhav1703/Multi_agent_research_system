@@ -1,6 +1,6 @@
 # Retrieval and evidence engine
 
-**Code:** `backend/app/research/retrieval.py`, `backend/app/research/evidence.py`, V1 `tools.py` (V2 fetch moved to `backend/app/research/fetch.py` 2026-11-10)  
+**Code:** `backend/app/research/retrieval.py`, `backend/app/research/evidence.py`, `backend/app/research/fetch.py`, `backend/app/security/egress_fetch.py`  
 **Tests:** `backend/tests/test_retrieval.py`, `test_citations.py`  
 **Limits:** `GraphLimits` in `backend/app/graph/limits.py`
 
@@ -28,7 +28,7 @@ Adding a vector database would increase Neon storage, embedding cost/latency, an
 flowchart TD
   Plan[Multi-query plan ≤3] --> Search[Tavily search]
   Search --> Dedupe[URL / content-hash dedupe]
-  Dedupe --> Fetch[HTML fetch via validate_public_url + scrape_url]
+  Dedupe --> Fetch[HTML fetch via research/fetch.scrape_url → egress_fetch]
   Fetch --> Passages[Passage extraction ≤2 × 500 chars]
   Passages --> Claims[Atomic claims]
   Claims --> Verify[Grounding + polarity]
@@ -41,7 +41,7 @@ Planner emits ≤3 subquestions. Workers search with capped `max_search_results`
 
 ### Source selection and dedupe — IMPLEMENTED
 
-Merge node dedupes by canonical URL and content hash. `max_sources` ≤6.
+Merge node dedupes by canonical URL and content hash. `max_sources` ≤6. Prompt passages are taken round-robin across sources so follow-up evidence is used; the evidence retry needs a free source slot and skips known URLs.
 
 ### Domain diversity / publication dates — PARTIAL / UNKNOWN
 
@@ -49,7 +49,7 @@ UI may show unknown publication date unless a stored field exists (`IMPLEMENTATI
 
 ### HTML extraction — IMPLEMENTED
 
-Uses `scrape_url` in `backend/app/research/fetch.py` (moved out of root `tools.py` 2026-11-10; overall read deadline added): public DNS checks, redirect limit, 1 MB cap, script/style strip, excerpt bounds. Process-wide DNS pin lock serializes scrapes.
+Uses `scrape_url` in `backend/app/research/fetch.py` (moved out of V1 `tools.py` 2026-11-10; the backend no longer imports V1): `egress_fetch.fetch_public_url` resolves each hop once, dials that IP, re-checks redirects, caps the body at 1 MB with a 15 s overall read deadline, then script/style/nav strip and a 6000-char text bound.
 
 ### PDF extraction — DEFERRED
 
@@ -113,7 +113,7 @@ Inline citation markers in markdown mapped to source/passage ids; validated by `
 
 ## SSRF note
 
-Retrieval still uses V1-level defenses. Residual DNS-rebinding / non-getaddrinfo connector risk remains. See [`security-and-abuse-prevention.md`](security-and-abuse-prevention.md).
+Retrieval uses the shared in-process fetch in `egress_fetch.py`. There is no separate egress proxy (R04 open), so other sockets in the process are not filtered. See [`security-and-abuse-prevention.md`](security-and-abuse-prevention.md).
 
 ---
 

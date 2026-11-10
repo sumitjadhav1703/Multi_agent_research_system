@@ -36,12 +36,13 @@
 |---|---|---|
 | Event schema | IMPLEMENTED | Typed events in job log + snapshot |
 | Event identifiers | IMPLEMENTED | SSE `id` = persisted `sequence_id` |
-| Heartbeats | PARTIAL | Rely on proxy/client timeouts; document host behavior |
+| Heartbeats | IMPLEMENTED | `: heartbeat` comment every 15 s |
 | Reconnection | IMPLEMENTED (client) | `Last-Event-ID` + REST reconcile |
 | Event replay | IMPLEMENTED | From Postgres `job_events` |
 | Authentication | IMPLEMENTED | Bearer header only; **query token ignored** |
 | CORS | IMPLEMENTED | Exact origin allowlist |
-| Terminal states | IMPLEMENTED | completed / failed / cancelled / rejected |
+| Terminal states | IMPLEMENTED | completed / failed / cancelled / expired / rejected; the stream then sends `stream.closed` and ends |
+| Stream cap | IMPLEMENTED | 15 minutes, then `stream.closed` with status `reconnect`; client reconnects with `Last-Event-ID` |
 | Browser handling | IMPLEMENTED | `@microsoft/fetch-event-source` |
 | Deploy compatibility | ACCEPTED risk | Render Free sleep affects long watches |
 
@@ -53,21 +54,22 @@ URLs leak via logs, Referer, and browser history. The API explicitly ignores que
 
 ## Example event types
 
-Names below are the **product vocabulary**. Exact string enums in code may use dotted or underscored forms — always confirm against persisted events / snapshot builder (`api/v1/snapshot.py`).
+Names below are the event types the code emits (`backend/app/graph/nodes.py`, `backend/app/jobs/`). Confirm against persisted events and the snapshot builder (`api/v1/snapshot.py`) before relying on one.
 
 | Event | Meaning |
 |---|---|
-| `research.started` / job started | Run accepted and worker began |
+| `run.accepted` / `run.queued` | Run accepted and queued |
 | `planner.completed` | Plan ready |
 | `worker.started` | Parallel worker began |
-| `source.found` | Search hit recorded |
+| `source.discovered` | Search hit recorded |
 | `source.extracted` | Fetch/excerpt stored |
-| `claim.verified` | Claim assessment updated |
-| `report.generating` | Writer running |
-| `evaluation.completed` | Offline-only; **not** on public path |
-| `research.completed` | Terminal success |
-| `research.failed` | Terminal failure |
-| `snapshot` | Non-cursor bootstrap payload (no id) |
+| `evidence.extracted` / `claim.verified` | Passages stored / claim assessment updated |
+| `writer.started` / `writer.completed` | Writer running / done |
+| `review.awaiting` / `review.resumed` | Human review paused / resumed |
+| `usage.updated` | Usage ledger changed |
+| `run.completed` / `run.failed` / `run.cancelled` | Terminal events |
+| `stream.closed` | Server ends the stream (terminal status, `reconnect`, or `unavailable`) |
+| `snapshot` | Non-cursor bootstrap payload (no id); sent only when it changes |
 
 Snapshot includes report/sources/passages/claims/usage without moving the replay cursor.
 

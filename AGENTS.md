@@ -1,6 +1,6 @@
 ## Learned User Preferences
 
-- Parent orchestrator should be Claude Opus 5.5 High; coding, frontend, and test subagents should use Claude Sonnet 5 as pinned in `.cursor/agents/` when available.
+- Parent orchestrator should be Claude Opus 5.5 High; coding, frontend, and test subagents should use Claude Sonnet 5 (pin the model explicitly in the agent config) when available.
 - If a required/pinned model is unavailable, substituted, or exhausted, stop and report honestly; never claim Opus or Sonnet ran when they did not. User authorized Grok for coding subagents when Sonnet 5 weekly usage was exhausted.
 - Never read, print, log, cat, or commit `.env` or secret values; API keys stay local in `.env` (gitignored). Processes may load env via dotenv without displaying values.
 - Ask the user when blocked or when a decision is needed rather than guessing through ambiguity.
@@ -15,7 +15,7 @@
 
 ## Learned Workspace Facts
 
-- Workspace root is `/Users/sumitjadhav/Multi_agent_research_system/repo`; GitHub remote is `https://github.com/sumitjadhav1703/Multi_agent_research_system.git`. After a wiped machine, clone that remote and recreate `.env` from cloud dashboards — secrets are never in git.
+- GitHub remote is `https://github.com/sumitjadhav1703/Multi_agent_research_system.git`. After a wiped machine, clone that remote and recreate `.env` from cloud dashboards — secrets are never in git.
 - Authoritative ResearchMind 2.0 spec is `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`; track progress in `docs/IMPLEMENTATION_STATUS.md`, measured hosts in `docs/deployment-report.md`, suite run instructions in `docs/TEST_INVENTORY.md`, and confirmed bug-audit items in `docs/BUG_INVENTORY.md`.
 - V1 Streamlit/pipeline baseline is frozen at git tag `v1-baseline` and lives in `v1/` (app, pipeline, tools, tests, requirements); keep its offline tests green (`cd v1 && python -m unittest discover -s tests`) while V2 grows under `backend/`.
 - V2 stack target: FastAPI + LiteLLM SDK Router (free-only allowlist, no paid fallback), LangGraph bounded research, PostgreSQL/Neon durable jobs/quotas/checkpoints, REST + SSE (no first-release WebSockets), React/Vite Research Console, thin Cloudflare MCP Worker, Render deployability with a public URL as definition-of-done.

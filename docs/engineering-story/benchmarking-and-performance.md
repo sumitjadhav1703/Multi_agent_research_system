@@ -99,10 +99,11 @@ Keep questions, source snapshots, and model configs constant across V1 vs V2 com
 
 | Signal | Evidence |
 |---|---|
-| V1 unittest | 14 tests OK (documented) |
-| V2 backend unittest | Peak documented 95 OK in ~2.3s (mock) |
-| Frontend vitest | 16 OK + production build |
-| MCP vitest | 29 OK |
+| V1 unittest | 16 tests (CI `v1` job) |
+| V2 backend unittest | 221 tests, mock provider (CI `backend` job) |
+| Frontend vitest | 47 tests + production build (CI `frontend` job) |
+| MCP vitest | 31 tests (CI `mcp` job) |
+| Eval unit tests | 15 tests (CI `evals` job) |
 | Eval fixtures | 32/20 deterministic self-check |
 
 These prove **engineering test speed under mocks**, not research wall-clock on free LLMs.

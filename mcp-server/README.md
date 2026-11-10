@@ -2,7 +2,7 @@
 
 Thin Cloudflare Worker. It speaks stateless Streamable HTTP MCP and forwards six tools to the FastAPI research API. It does not run LangGraph, search the web, call model providers, or store jobs.
 
-The Worker is not deployed in this milestone. There is no public MCP URL yet.
+Live at https://researchmind-mcp.jadhavsumit534.workers.dev (MCP endpoint `/mcp`). Config: `wrangler.jsonc`; deploys via GitHub Actions on push to `main` (see Auto-deploy below).
 
 A Cloudflare cron trigger (every 10 minutes) pings `$RESEARCHMIND_API_BASE/api/v1/health/live` to keep the API awake; deploying the Worker applies it.
 
@@ -15,7 +15,7 @@ A Cloudflare cron trigger (every 10 minutes) pings `$RESEARCHMIND_API_BASE/api/v
 | `get_research_report` | `GET /api/v1/research-runs/{run_id}/report` | Stored report and short citation metadata. |
 | `list_research_sources` | `GET /api/v1/research-runs/{run_id}/sources` | Stored sources. |
 | `get_claim_evidence` | `GET /api/v1/research-runs/{run_id}/claims/{claim_id}/evidence` | One claim and its stored passages. |
-| `get_evaluation_summary` | `GET /api/v1/evaluation/summary` | Published evaluation note. Judge scores are null until a real benchmark is measured. |
+| `get_evaluation_summary` | `GET /api/v1/evaluation/summary` | Published evaluation summary (`docs/evals/published-summary.json`, copied into the API image). Offline fixture judge scores, not a V1 vs V2 comparison. |
 
 `create_research_run` requires `topic` and `idempotency_key`. Reuse the same key if a call times out. The Worker does not retry that POST itself. A second key after a successful start is rejected by the API quota, not by a second graph inside the Worker.
 
@@ -29,7 +29,7 @@ Authorization: Bearer <guest_token>
 
 Obtain `<guest_token>` from `POST /api/v1/guest-identities` on the FastAPI server (Turnstile applies there). The Worker checks that the header is a Bearer token of the same length rules as the API, then forwards that header. FastAPI decides whether the token is valid, which runs it owns, and whether quota remains.
 
-Missing or malformed authorization is HTTP 401 with `WWW-Authenticate: Bearer realm="researchmind-mcp"`. The body does not echo the header. This milestone does not publish OAuth discovery. Clients that can only log in through an OAuth dance will not connect until a later milestone adds Cloudflare's authorization server. Clients that can set a bearer header can connect. The reason is recorded in `docs/ADR/0006-cloudflare-mcp.md`.
+Missing or malformed authorization is HTTP 401 with `WWW-Authenticate: Bearer realm="researchmind-mcp"`. The body does not echo the header. The Worker does not publish OAuth discovery (deferred). Clients that can only log in through an OAuth dance will not connect until a later milestone adds Cloudflare's authorization server. Clients that can set a bearer header can connect. The reason is recorded in `docs/ADR/0006-cloudflare-mcp.md`.
 
 ## Configuration names
 
@@ -37,7 +37,7 @@ Missing or malformed authorization is HTTP 401 with `WWW-Authenticate: Bearer re
 |---|---|---|
 | `RESEARCHMIND_API_BASE` | Wrangler **var** in `wrangler.jsonc` | Yes. FastAPI origin only, such as `http://127.0.0.1:8000` or `https://…`. No path, query, user, or password. |
 
-No Worker secret is read in this milestone. Do not put a guest token, provider key, or database URL in source, `wrangler.jsonc`, or the frontend.
+No Worker secret is read. Do not put a guest token, provider key, or database URL in source, `wrangler.jsonc`, or the frontend.
 
 When a later change needs a secret, set it only with:
 
@@ -75,16 +75,14 @@ Two equivalent paths:
    - `CLOUDFLARE_ACCOUNT_ID` — from the Workers overview right sidebar
 2. **Workers Builds (dashboard Git integration):** Worker `researchmind-mcp` → **Settings** → **Builds** → **Connect** → GitHub repo `sumitjadhav1703/Multi_agent_research_system`, root directory `mcp-server`, deploy command `npx wrangler deploy`, production branch `main`. After that, Cloudflare pulls commits the same way Render does.
 
-There is no public MCP URL. Milestone 7 checked whether Wrangler was logged in and did not invent a workers.dev address. See `docs/deployment-report.md` for the command result.
-
-When the API origin is real and `npx wrangler whoami` succeeds:
+The Worker is deployed at https://researchmind-mcp.jadhavsumit534.workers.dev. See `docs/deployment-report.md` for measured checks. For a manual deploy when `npx wrangler whoami` succeeds:
 
 ```sh
 # from mcp-server/, after editing the var and running npm run cf-typegen
 npx wrangler deploy
 ```
 
-Set the var in `wrangler.jsonc` or with `npx wrangler secret` only if a later change adds a secret. This milestone still has no Worker secret. Do not put the guest token, a provider key, or `DATABASE_URL` in the Worker config.
+Set the var in `wrangler.jsonc` or with `npx wrangler secret` only if a later change adds a secret. The Worker has no secret today. Do not put the guest token, a provider key, or `DATABASE_URL` in the Worker config.
 
 `npx wrangler deploy --dry-run` packages the Worker and does not upload it. A dry run is not a deployment.
 
@@ -108,7 +106,7 @@ A dry run does not prove a live `workers.dev` URL. `npx wrangler dev` serves `/m
 
 ## MCP Inspector (manual)
 
-This check was not run against a deployed Worker. After FastAPI is running and you have a guest token:
+Point the inspector at a local Worker (`wrangler dev`) rather than the deployed one. After FastAPI is running and you have a guest token:
 
 ```sh
 npx wrangler dev
@@ -123,7 +121,7 @@ npx @modelcontextprotocol/inspector
 Use Streamable HTTP (not the deprecated SSE-only transport). Point the inspector at `http://127.0.0.1:8787/mcp`. Set the bearer token to the guest token. Then:
 
 1. Initialize and list tools. Expect only the six names above.
-2. Call `get_evaluation_summary` with the bearer. Expect `measured: false` and `judge.scores: null`.
+2. Call `get_evaluation_summary` with the bearer. Expect the contents of `docs/evals/published-summary.json` (`measured: true`, offline fixture judge scores).
 3. Call `get_research_run` with a run id you own, then with a run id you do not own. The second is an error from the API (`run_not_found`), not another user's report.
 4. Call `create_research_run` only if you mean to spend the one-use quota. Send a topic and an idempotency key. Call it again with the same key and expect the same run. A new key after a successful start returns the API quota error.
 5. Repeat a tool call with no Authorization header. Expect HTTP 401 and no tool result.
