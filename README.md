@@ -33,6 +33,7 @@ with durable Postgres jobs, guest quotas, and a thin MCP Worker.
 ## Table of contents
 
 - [Current status](#current-status)
+- [Resume after clone](#resume-after-clone)
 - [What it does](#what-it-does)
 - [Live stack](#live-stack)
 - [Architecture](#architecture)
@@ -66,11 +67,35 @@ ResearchMind 2.0 is a **portfolio / student demo** with a public Singapore stack
 | Cold starts | Render Free can sleep after idle; wake can take about a minute |
 | “Production-ready” | **Not claimed.** Measured behavior and known limits are documented honestly |
 | Offline evaluation | Fixture DeepEval + deterministic checks **published** (not a V1 vs V2 table) |
+| Estimated cost | List-price token×rate (+ search call rate) when measured; **unknown** when not — never fake `$0` |
 
 Authoritative product/architecture text: [`docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`](docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md).  
 Live execution board: [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).  
 Measured hosts: [`docs/deployment-report.md`](docs/deployment-report.md).  
 Eval write-up: [`docs/evals/RESULTS.md`](docs/evals/RESULTS.md).
+
+---
+
+## Resume after clone
+
+GitHub `main` is the source of truth for code and docs. A wiped laptop recovers the repo with:
+
+```bash
+git clone https://github.com/sumitjadhav1703/Multi_agent_research_system.git
+cd Multi_agent_research_system
+```
+
+**Secrets are not in git.** Local `.env` is gitignored. After clone, recreate keys from cloud dashboards / a password manager (never from a committed file):
+
+| Secret | Where it lives |
+| --- | --- |
+| `DATABASE_URL` | Neon + Render env |
+| Provider keys (`GROQ_*`, `GEMINI_*`, `MISTRAL_*`, `OPENROUTER_*`, `TAVILY_*`, optional `META_API_KEY`) | Render env |
+| `TURNSTILE_SECRET_KEY` | Render env |
+| `VITE_TURNSTILE_SITE_KEY`, `VITE_API_BASE` | Vercel env |
+| Cloudflare Worker / Actions (`CLOUDFLARE_*`, Worker secrets) | Cloudflare + GitHub Actions secrets |
+
+Then follow [Quick start (local)](#quick-start-local) for a mock offline run, or point at the live Singapore stack above.
 
 ---
 

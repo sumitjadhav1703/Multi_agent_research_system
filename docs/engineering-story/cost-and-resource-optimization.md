@@ -30,7 +30,7 @@
 | Estimated cost | Model $ if prices known — often **null** in app |
 | Actual billed cost | Invoice |
 
-ResearchMind stores `estimated_cost_usd` as null when unknown — never fake $0.00 savings.
+ResearchMind stores `estimated_cost_usd` as null when unmeasured — never fake $0.00. When tokens/search calls exist, `backend/app/cost_estimate.py` writes a list-price USD string (Gemini Flash USD/1M + search call rate), not an invoice.
 
 ---
 

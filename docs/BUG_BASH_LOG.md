@@ -37,6 +37,10 @@ A second whole-project find pass (static + discovery tests + bounded live smoke)
 
 Product fixes landed for BI-P1-1…5 and the high-confidence P2 cluster (see inventory). Offline matrix green after promotion of discovery tests. Live health still 200; this fix tree was not redeployed to Render/Vercel/Workers in the same step. Residuals (R04, lease race, forwarded-ips, provider ops) remain open.
 
+## Deploy follow-through (2026-11-10)
+
+Later `main` commits (usage ledger UI, Live overflow, print/export, list-price cost, ReportPage typecheck) shipped via git to Vercel/Render/MCP Actions. Vercel production verified READY after `793f792`. Residuals from the bash table remain open; see [`BUG_INVENTORY.md`](BUG_INVENTORY.md).
+
 ## Notes
 
 - Full guest Turnstile → research run → SSE was not completed in this bash (would consume the one-use quota and needs a browser Turnstile token). Authz and health paths were exercised instead.

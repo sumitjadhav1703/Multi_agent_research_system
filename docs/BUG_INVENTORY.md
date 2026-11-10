@@ -1,7 +1,19 @@
 # ResearchMind 2.0 — Bug inventory
 
-**Updated:** 2026-11-10 (post-merge delta)  
+**Updated:** 2026-11-10 (wipe-ready handoff)  
 **Models this delta:** Parent Cursor Auto/Composer; explore agents for graph/frontend. Not Opus / Sonnet 5.
+
+## Post-delta ships (2026-11-10, after inventory)
+
+| Item | Status | Note |
+| --- | --- | --- |
+| Live drawer horizontal overflow | **fixed** | CSS `min-width: 0` + wrap + fixed drawer track |
+| Report Export Markdown / Print | **fixed** | Blob `.md` of answer body; print CSS hides chrome, unclamps preview |
+| List-price estimated cost | **fixed** | `backend/app/cost_estimate.py` + ledger/`/me/usage`/Usage UI |
+| CI/Vercel `ReportPage.test.ts` tsc | **fixed** | `793f792` |
+| Stale `cursor/fix-empty-report-answer-8a03` | **deleted** | Already on main via PR #14/#15 |
+
+Residuals below unchanged.
 
 ## Post-merge delta verification (2026-11-10)
 

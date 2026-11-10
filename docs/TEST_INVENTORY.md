@@ -25,11 +25,11 @@ RUN_NODE_SUITES=1 bash scripts/run_offline_suites.sh
 | Suite | Command | What a pass shows |
 | --- | --- | --- |
 | V1 baseline | `PYTHONPATH=. python -m unittest discover -s tests -q` | Frozen Streamlit/pipeline tests under `tests/` still pass. |
-| V2 backend | `USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECRET_KEY= PYTHONPATH=. python -m unittest discover -s backend/tests -q` | FastAPI, graph, quotas, SSE, MCP reads, and provider mocks. External providers are not called. |
+| V2 backend | `USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECRET_KEY= PYTHONPATH=. python -m unittest discover -s backend/tests -q` | FastAPI, graph, quotas, SSE, MCP reads, provider mocks, and list-price cost estimate (`test_cost_estimate`). External providers are not called. |
 | Frontend lint | `cd frontend && npm run lint` | ESLint on the Research Console. |
-| Frontend types | `cd frontend && npm run typecheck` | `tsc --noEmit`. |
-| Frontend unit | `cd frontend && npm test` | Vitest. Progress, quota, citation, and SSE header behavior with mocked fetch. |
-| Frontend build | `cd frontend && npm run build` | Typecheck plus Vite build. |
+| Frontend types | `cd frontend && npm run typecheck` | `tsc --noEmit` over `frontend/src` (includes `*.test.ts` / `*.test.tsx`). |
+| Frontend unit | `cd frontend && npm test` | Vitest. Progress, quota, citation, SSE, Usage ledger mapping, Report `downloadMarkdown`, Evaluation chart honesty. |
+| Frontend build | `cd frontend && npm run build` | Typecheck plus Vite build (must stay green for Vercel). |
 | MCP worker | `cd mcp-server && npm test` | Vitest for bearer rejection, tool surface, and the FastAPI forwarder. No live Worker deploy. |
 | Eval unit tests | `PYTHONPATH=. python -m unittest discover -s evals/tests -q` | Golden-set shape and the judge gate. No model calls. |
 | Deterministic eval | `PYTHONPATH=. python -m evals.cli deterministic` | Fixture runs against the golden set. The printed rows are `metric_kind=deterministic`, not judge scores. |

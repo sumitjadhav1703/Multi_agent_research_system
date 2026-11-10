@@ -1,7 +1,9 @@
 # ResearchMind 2.0 — Risk Register
 
-**Updated:** 2026-11-09 (Phase 1.2 in-process IP dial: R04 only)  
+**Updated:** 2026-11-10 (wipe-ready handoff; residuals unchanged)  
 **Owners:** Parent orchestrator unless noted
+
+First-release demo is live on Singapore hosts. Highest residual demo risk remains **R07/BI-P1-6** (free-provider availability) and **R10** (Render Free sleep). **R04** SSRF stays partial. See [`BUG_INVENTORY.md`](BUG_INVENTORY.md).
 
 Severity: Critical / High / Medium / Low  
 Likelihood: High / Medium / Low

@@ -642,7 +642,7 @@ These are starter settings. Run the benchmark and measure actual usage before in
 - Prevent duplicate start requests with idempotency keys.
 - Abort/cancel workers once the budget or deadline is reached.
 - Store provider usage and display it after each run.
-- If provider usage/cost is unknown, show **unknown**, not `$0`.
+- If provider usage/cost is unmeasured, show **unknown**, not `$0`. When prompt/completion tokens and/or search calls are measured, show a **list-price** estimate (token×published USD/1M rates plus a search call rate); label it as estimate, not an invoice.
 - Keep evaluation runs separate from public demo usage and run them manually.
 
 Do not rely only on a frontend counter or LiteLLM Proxy budget. The app database is the authoritative gate for this public demo. LiteLLM Proxy virtual-key budgets, if added later, also need a connected PostgreSQL database according to its documentation.

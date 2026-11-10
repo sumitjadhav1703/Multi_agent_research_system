@@ -89,7 +89,7 @@ Research date: **2026-11-08**. Official dashboards remain authoritative.
 | Circuit breakers | Rely on LiteLLM Router deployment health where configured; app keeps fallbacks minimal | PARTIAL |
 | Fallback conditions | Only configured allowlisted hop | IMPLEMENTED · VERIFIED offline |
 | Token tracking | Usage ledger; null stays null | IMPLEMENTED · VERIFIED |
-| Cost estimates | `estimated_cost_usd` null when unknown | IMPLEMENTED |
+| Cost estimates | List-price when measured; null/unknown when not | IMPLEMENTED |
 | Failure recovery | Persist events; no paid escape hatch | IMPLEMENTED |
 
 ### Hard rules (SoT)

@@ -1,9 +1,17 @@
 # ResearchMind 2.0 — Implementation Status
 
-**Updated:** 2026-11-10  
+**Updated:** 2026-11-10 (wipe-ready handoff)  
 **Repository root:** `/Users/sumitjadhav/Multi_agent_research_system/repo`  
-**Git:** `main` (Singapore public stack)  
+**Git:** `main` (Singapore public stack) — clone from `https://github.com/sumitjadhav1703/Multi_agent_research_system.git`  
 **Current gate:** **First-release SoT gaps closed or residual-documented; whole-project offline matrix green; live Singapore smoke + bug bash recorded.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP Worker live. Retention env set on Render. Not “production-ready.”
+
+### Follow-up: wipe-ready handoff (2026-11-10, evening)
+
+- **Git:** `main` is the resume surface. Local `.env` is **not** in git — recreate secrets from Render / Vercel / Neon / Cloudflare after clone.
+- **Shipped since delta:** Live drawer horizontal-overflow CSS; Report export markdown + print document CSS; list-price cost estimate (`backend/app/cost_estimate.py` → ledger + `/me/usage` + Usage UI); Usage page ledger meters; CI/Vercel typecheck fix for `ReportPage.test.ts` (`793f792`); debug instrumentation removed (`409ce58`).
+- **Deploy:** Vercel production READY for typecheck-fix commit; API/console/MCP continue on Singapore URLs via git auto-deploy.
+- **Cleanup:** remote `cursor/fix-empty-report-answer-8a03` deleted (already merged via PR #14/#15; tip was duplicate patch of `66d911d`).
+- **Still open:** BI-P1-6 providers, BI-P2-7/8/16/18/19, R04/R10/R12, MCP OAuth.
 
 ### Follow-up: post-merge delta bug check (2026-11-10)
 
@@ -20,7 +28,7 @@
 - **Fixed P2:** search_calls on failure, job status `rejected`, prompt delimiters, guest clearToken, stop_reason banner, Turnstile reset, idempotency while starting, MCP wrangler API base → SG.
 - **Residuals left open:** BI-P1-6 providers, BI-P2-7/8 retry+lease race, BI-P2-16 forwarded-ips, BI-P2-18 ready/consumer, BI-P2-19 allowlist oracle, R04/R10/R12, MCP OAuth.
 - **Offline after fixes:** `RUN_NODE_SUITES=1 bash scripts/run_offline_suites.sh` — V1 16; backend 154 OK (1 skipped); evals 14; deterministic 20/20; frontend vitest 36; MCP 29. Discovery tests promoted to hard gates.
-- **Live:** health live/ready 200 (this tree not redeployed yet). Register: [`docs/BUG_INVENTORY.md`](BUG_INVENTORY.md).
+- **Live:** health live/ready 200; later commits on `main` redeployed via git (Vercel/Render/MCP Actions). Register: [`docs/BUG_INVENTORY.md`](BUG_INVENTORY.md).
 
 ### Follow-up: find-only bug audit (2026-11-09, evening)
 
@@ -226,7 +234,7 @@ M1 provider modules were not rewritten.
 - A claim can be `supported` only after a stored passage quote overlaps it and the citation checks pass. Wording is "evidence assessed," not fact-checked.
 - PDF parsing is off. PDF URLs keep the search snippet and say so.
 - Provider JSON mode is not required. Completions are parsed as JSON and rejected when invalid.
-- Model cost is always unknown (`estimated_cost_usd` is null). Unknown token usage is not coerced to zero.
+- Model cost: list-price estimate when prompt/completion tokens and/or search calls are measured (`backend/app/cost_estimate.py`); otherwise `estimated_cost_usd` stays null / UI **unknown**. Unknown token usage is not coerced to zero; never invent `$0`.
 
 ### Tests run
 
@@ -443,7 +451,7 @@ Jobs, quota, migrations, and the graph were not rewritten. The JSON events route
 ### Decisions
 
 - Stream path is `GET /api/v1/research-runs/{run_id}/events/stream`. Bearer token and `Last-Event-ID` are headers. A token in the query string is ignored and does not authenticate.
-- Each SSE `id` is the persisted `sequence_id`. A `snapshot` event is built on connect from `research_reports`, `research_sources`, `evidence_passages`, `research_claims`, and `usage_ledger`. It has no id, so it does not move the cursor. Null usage stays null. `estimated_cost_usd` is shown as unknown.
+- Each SSE `id` is the persisted `sequence_id`. A `snapshot` event is built on connect from `research_reports`, `research_sources`, `evidence_passages`, `research_claims`, and `usage_ledger`. It has no id, so it does not move the cursor. Null usage counters stay null. `estimated_cost_usd` is a list-price string when measurable, else unknown in the UI.
 - The console reconciles with `GET /research-runs/{id}` after refresh, visibility return, and channel drop. It does not treat a dead channel as a live run.
 - Markdown is passed through `react-markdown` without raw HTML. `<` is neutralized first. Citation ids become links to the evidence screen. Other URLs are text unless they are a stored source URL.
 - Evaluation has no scores. Every metric is "not measured". There is no guest benchmark button.

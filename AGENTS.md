@@ -15,7 +15,7 @@
 
 ## Learned Workspace Facts
 
-- Workspace root is `/Users/sumitjadhav/Multi_agent_research_system/repo`; GitHub remote is `https://github.com/sumitjadhav1703/Multi_agent_research_system.git`.
+- Workspace root is `/Users/sumitjadhav/Multi_agent_research_system/repo`; GitHub remote is `https://github.com/sumitjadhav1703/Multi_agent_research_system.git`. After a wiped machine, clone that remote and recreate `.env` from cloud dashboards — secrets are never in git.
 - Authoritative ResearchMind 2.0 spec is `docs/RESEARCHMIND_2_0_SOURCE_OF_TRUTH.md`; track progress in `docs/IMPLEMENTATION_STATUS.md`, measured hosts in `docs/deployment-report.md`, suite run instructions in `docs/TEST_INVENTORY.md`, and confirmed bug-audit items in `docs/BUG_INVENTORY.md`.
 - V1 Streamlit/pipeline baseline is frozen at git tag `v1-baseline`; keep V1 modules and offline V1 tests green while V2 grows beside them under `backend/`.
 - V2 stack target: FastAPI + LiteLLM SDK Router (free-only allowlist, no paid fallback), LangGraph bounded research, PostgreSQL/Neon durable jobs/quotas/checkpoints, REST + SSE (no first-release WebSockets), React/Vite Research Console, thin Cloudflare MCP Worker, Render deployability with a public URL as definition-of-done.

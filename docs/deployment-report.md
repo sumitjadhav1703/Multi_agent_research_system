@@ -20,6 +20,17 @@
 - Render Oregon `researchmind-api` (`srv-dbnlo1c9v7es73d4at5g`, https://researchmind-api-o2tw.onrender.com) — **deleted by user** (API now 404; absent from Render service list).
 - `render.yaml` region default is now `singapore`.
 
+### Follow-up measurements (2026-11-10)
+
+| Check | Result |
+|---|---|
+| Vercel production after `793f792` | Deploy `dpl_HuL5FwWPB7qvtHMfN3tgoVtdEpuE` **READY** (`sin1`); prior `b2e6b82` failed on `ReportPage.test.ts` tsc — fixed |
+| GitHub Actions Tests | Run for `793f792` **success** (frontend + test jobs) |
+| List-price cost estimate | Shipped in `b2e6b82` (`cost_estimate.py`); Render picks up via git auto-deploy when the API service is linked |
+| MCP Worker | Git auto-deploy via `.github/workflows/deploy-mcp-worker.yml` (`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`) |
+| Stale agent branch | `cursor/fix-empty-report-answer-8a03` **deleted** (content already on main) |
+| Wipe handoff | Code/docs on GitHub `main`; secrets only in host dashboards — not in this repo |
+
 ### Follow-up measurements (2026-11-09)
 
 | Check | Result |

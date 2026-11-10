@@ -87,7 +87,7 @@ Aliases: `rm-planner`, `rm-researcher`, `rm-verifier`, `rm-writer`, `rm-eval-jud
 
 ### Token budgets — IMPLEMENTED (server-side caps)
 
-`MAX_MODEL_CALLS_PER_RUN`, `MAX_RUN_WALL_CLOCK_SECONDS`, graph `max_model_calls=12`. Estimated USD cost stays **null** when unknown (`providers/usage.py`) — never coerced to zero.
+`MAX_MODEL_CALLS_PER_RUN`, `MAX_RUN_WALL_CLOCK_SECONDS`, graph `max_model_calls=12`. Estimated USD cost is a **list-price** string when tokens/search are measured (`backend/app/cost_estimate.py`); stays **null**/UI unknown when unmeasured — never coerced to fake zero.
 
 ---
 

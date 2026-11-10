@@ -59,7 +59,7 @@ Keep questions, source snapshots, and model configs constant across V1 vs V2 com
 | Provider latency | NOT MEASURED |
 | Fallback frequency | NOT MEASURED (logs possible) |
 | Token in/out | Ledger fields; hosted aggregate NOT MEASURED |
-| Estimated cost USD | Intentionally null when unknown |
+| Estimated cost USD | List-price when tokens/search measured; null/unknown otherwise |
 | Provider failure rate | NOT MEASURED |
 
 ### Complete workflow
@@ -115,5 +115,5 @@ These prove **engineering test speed under mocks**, not research wall-clock on f
 2. Issue guest identity; start one short topic with mock or tiny live budget.  
 3. Record timestamps: 202 response, first SSE event, terminal event.  
 4. Repeat 5× cold and 5× warm; report median and p95 separately.  
-5. Export usage_ledger tokens if present; leave cost null if unknown.  
+5. Export usage_ledger tokens if present; list-price cost when measurable, else leave cost null/unknown.  
 6. Write results into `docs/evals/` or append this file with commit SHA — never overwrite with guesses.
