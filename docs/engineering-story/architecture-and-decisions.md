@@ -133,7 +133,7 @@ Cloudflare Worker + Streamable HTTP-style MCP surface: IMPLEMENTED · VERIFIED �
 | Choice | Status | Why |
 |---|---|---|
 | React + TypeScript + Vite | IMPLEMENTED · VERIFIED | SPA screens, typed client, Vite proxy |
-| Tailwind + local UI primitives | IMPLEMENTED | Lightweight; not a full shadcn codegen tree |
+| Local UI primitives + plain CSS (Tailwind removed 2026-11-10) | IMPLEMENTED | Lightweight; not a full shadcn codegen tree |
 | SSE via `@microsoft/fetch-event-source` | IMPLEMENTED · VERIFIED | Bearer headers (EventSource cannot set them) |
 | Streamlit as V2 UI | REJECTED | Kept only as V1 baseline |
 

@@ -64,7 +64,7 @@ ResearchMind 2.0 is a **portfolio / student demo** with a public Singapore stack
 | MCP | Thin Cloudflare Worker forwarding to the API |
 | Guest research | Needs Cloudflare Turnstile keys on console + API |
 | Real LLM runs | Need provider keys on Render and `USE_MOCK_PROVIDER=false` |
-| Cold starts | Render Free can sleep after idle; wake can take about a minute |
+| Cold starts | Render Free can sleep after idle; wake can take about a minute. A Cloudflare Worker cron (`*/10`) pings `/health/live` to reduce this; not an SLA |
 | “Production-ready” | **Not claimed.** Measured behavior and known limits are documented honestly |
 | Offline evaluation | Fixture DeepEval + deterministic checks **published** (not a V1 vs V2 table) |
 | Estimated cost | List-price token×rate (+ search call rate) when measured; **unknown** when not — never fake `$0` |
@@ -127,7 +127,7 @@ Then follow [Quick start (local)](#quick-start-local) for a mock offline run, or
 | MCP Worker | Cloudflare Workers | https://researchmind-mcp.jadhavsumit534.workers.dev |
 | Postgres | Neon `aws-ap-southeast-1` | Wired as Render `DATABASE_URL` (secret; not in git) |
 
-Quick checks:
+Quick checks (`/health/ready` returns only `status`, `database`, `use_mock_provider`):
 
 ```bash
 curl -fsS https://researchmind-api-sg.onrender.com/api/v1/health/live
@@ -312,7 +312,7 @@ cd frontend && npm test && npm run build
 cd mcp-server && npm test
 ```
 
-CI workflow: [`.github/workflows/tests.yml`](.github/workflows/tests.yml).
+CI workflow: [`.github/workflows/tests.yml`](.github/workflows/tests.yml) (jobs: `v1`, `backend` + `pip check`, `evals`, `mcp`, `docker`, `frontend`). Offline counts at 2026-11-10: V1 16, backend 221, evals 15, frontend 47, MCP 31.
 
 ---
 
@@ -398,10 +398,10 @@ Deeper checklist: [`docs/deployment-report.md`](docs/deployment-report.md).
 | Topic | Honest position |
 | --- | --- |
 | Quotas | One guest research run per issued identity; global caps in Postgres |
-| Providers | Free-model allowlist for role primary/fallback; paid markers / `ALLOW_PAID_MODELS=true` fail closed; optional Meta Muse Spark Contributor last-resort when `META_API_KEY` is set |
+| Providers | Free-model allowlist for role primary/fallback; paid markers / `ALLOW_PAID_MODELS=true` fail closed; optional Meta Muse Spark Contributor last-resort only when `META_LAST_RESORT_ENABLED=true`, `META_API_KEY` is set, and the model is allowlisted |
 | Secrets | Server-side only; not logged or shipped in the frontend bundle |
 | Turnstile | Required for normal guest issuance when secret + site key are configured |
-| SSRF | V1-level DNS/scheme checks; residual DNS-rebinding / connect-time risk — **not** claimed closed without an egress proxy |
+| SSRF | In-process checked IP dial (`backend/app/research/fetch.py` with an overall read deadline, `egress_fetch.py`); residual DNS-rebinding / connect-time risk — **not** claimed closed without an egress proxy |
 | Hosting | Render Free idle sleep; cold start not a measured SLA |
 | Data | Demo for public topics only — do not submit private or sensitive content |
 | Eval | Offline fixture DeepEval + deterministic results published on README / Evaluation / Evidence empty state; not part of every public request |

@@ -25,7 +25,7 @@ Streamlit remains in-repo for regression comparison, not as the public V2 surfac
 | Layer | Choice | Status |
 |---|---|---|
 | React 19 + TS + Vite | SPA | IMPLEMENTED |
-| Tailwind-style utility CSS in `index.css` + local primitives | Lightweight design system | IMPLEMENTED |
+| Utility-style CSS in `index.css` + local primitives (Tailwind removed 2026-11-10) | Lightweight design system | IMPLEMENTED |
 | shadcn/ui | Recommended in brief; console uses local `components/ui.tsx` rather than a full shadcn tree | PARTIAL / pragmatic |
 | Charts | Recharts available; evaluation page shows **not measured** | IMPLEMENTED (no fake scores) |
 | SSE | `@microsoft/fetch-event-source` (Bearer headers) | IMPLEMENTED · VERIFIED |

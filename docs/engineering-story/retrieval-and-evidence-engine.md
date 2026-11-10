@@ -1,6 +1,6 @@
 # Retrieval and evidence engine
 
-**Code:** `backend/app/research/retrieval.py`, `backend/app/research/evidence.py`, V1 `tools.py`  
+**Code:** `backend/app/research/retrieval.py`, `backend/app/research/evidence.py`, V1 `tools.py` (V2 fetch moved to `backend/app/research/fetch.py` 2026-11-10)  
 **Tests:** `backend/tests/test_retrieval.py`, `test_citations.py`  
 **Limits:** `GraphLimits` in `backend/app/graph/limits.py`
 
@@ -49,7 +49,7 @@ UI may show unknown publication date unless a stored field exists (`IMPLEMENTATI
 
 ### HTML extraction — IMPLEMENTED
 
-Reuses V1 `scrape_url`: public DNS checks, redirect limit, 1 MB cap, script/style strip, excerpt bounds. Process-wide DNS pin lock serializes scrapes.
+Uses `scrape_url` in `backend/app/research/fetch.py` (moved out of root `tools.py` 2026-11-10; overall read deadline added): public DNS checks, redirect limit, 1 MB cap, script/style strip, excerpt bounds. Process-wide DNS pin lock serializes scrapes.
 
 ### PDF extraction — DEFERRED
 

@@ -5,6 +5,17 @@
 **Git:** `main` (Singapore public stack) — clone from `https://github.com/sumitjadhav1703/Multi_agent_research_system.git`  
 **Current gate:** **First-release SoT gaps closed or residual-documented; whole-project offline matrix green; live Singapore smoke + bug bash recorded.** Neon `aws-ap-southeast-1`, Render `singapore` API, Vercel console `sin1`, MCP Worker live. Retention env set on Render. Not “production-ready.”
 
+### Follow-up: audit hardening (2026-11-10, fix/audit-hardening)
+
+- **Current state (supersedes older statements below):** backend no longer imports root `tools.py`; scraping is `backend/app/research/fetch.py` (overall read deadline). `backend/requirements-fetch.txt` deleted; bs4/soupsieve/tavily-python are in `backend/requirements.txt`; langchain is not in the API image. V1 untouched, tested in CI job `v1`.
+- `gemini/gemini-2.0-flash` and `mock/free-model` removed from the default/production allowlist. Meta last resort only with `META_LAST_RESORT_ENABLED=true` + key + allowlisted model.
+- Graph: round-robin passages (follow-up evidence read), retry needs a free source slot, empty content falls back, wall-clock enforced between steps (`expired` / `wall_clock`), revise at limit returns to review.
+- Jobs: review resume resets attempts, conditional cancel/review UPDATEs, periodic recovery, background DB-init retry, consumer wake + `QUEUE_IDLE_POLL_SECONDS=300`, lost lease stops graph, SSE off event loop (15 min cap), Turnstile without `remoteip` plus hostname check. Migration `0002` (usage_ledger identity index, duplicate indexes dropped).
+- `/health/ready` returns only `status`, `database`, `use_mock_provider`. Eval summary single source `docs/evals/published-summary.json`. `render.yaml`: `autoDeployTrigger: commit`, service `researchmind-api-sg`, duplicate static console removed; Docker `HEALTHCHECK` removed.
+- Keep-awake is the Cloudflare Worker cron `*/10` in `mcp-server`; `keep-api-awake.yml` is manual only.
+- Frontend: Tailwind removed, EvaluationPage lazy-loaded (main chunk 848 to 485 KB), revise button hidden after one revision, `src_*` citations route to `?source=`.
+- Suites: V1 16, backend 221, evals 15, frontend 47, MCP 31. R04 SSRF stays OPEN (no egress proxy). See [`BUG_INVENTORY.md`](BUG_INVENTORY.md).
+
 ### Follow-up: wipe-ready handoff (2026-11-10, evening)
 
 - **Git:** `main` is the resume surface. Local `.env` is **not** in git — recreate secrets from Render / Vercel / Neon / Cloudflare after clone.
@@ -59,7 +70,7 @@
 - **Dissection (not a classic git-bisect app crash):** Last successful cold start was `56b2f4d` / retention merge era; startup completed in logs. After Free spin-down (~15 min idle), wake requests hung at the edge with **no container logs**. Manual `trigger_deploy` brought the service back; `/docs` and `/openapi.json` returned **200**.
 - **Root hardenings (two layers):**
   1. **Do not block Uvicorn bind on Neon.** FastAPI lifespan yields after non-DB setup; migrations, checkpointer, lease recovery, optional retention pass, and queue consumer run in a background `asyncio` task (`to_thread` for sync SQLAlchemy). `/docs`, `/`, and `/health/live` stay up while `database: starting` (ready → 503). Postgres `connect_timeout=10`, checkpointer `wait_for` 30s, `HEAD /` + `HEAD /health/live` accepted.
-  2. **Reduce Free spin-down.** `.github/workflows/keep-api-awake.yml` pings `/api/v1/health/live` every ~10 minutes (plus `workflow_dispatch`). Demo keep-alive, not an SLA; GitHub cron can drift.
+  2. **Reduce Free spin-down.** `.github/workflows/keep-api-awake.yml` pings `/api/v1/health/live` every ~10 minutes (plus `workflow_dispatch`). Demo keep-alive, not an SLA; GitHub cron can drift. (2026-11-10: GitHub cron was throttled to every few hours; the workflow is now manual only and a Cloudflare Worker cron `*/10` pings the same path.)
 - **Tests:** `backend/tests/test_startup_hang_guards.py` (deferred init + docs-while-starting) plus `backend/tests/test_lifespan_resilience.py`.
 - **Not claimed:** zero cold starts forever on Render Free; measured wake latency after this change until redeploy + idle interval.
 
@@ -239,8 +250,8 @@ M1 provider modules were not rewritten.
 ### Tests run
 
 ```text
-# V2 backend, Python 3.13.14 (/tmp/rm_v2_venv)
-USE_MOCK_PROVIDER=true PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests -v
+# V2 backend, Python 3.13.14 (venv)
+USE_MOCK_PROVIDER=true PYTHONPATH=. python -m unittest discover -s backend/tests -v
 Ran 47 tests in 0.431s — OK
 
 # V1 regression (/tmp/rm_v1_venv)
@@ -257,7 +268,7 @@ M2 tests cover worker-wave cap, planner truncation, invalid topic, provider time
 Command (stdout only; stderr discarded; no secret values printed):
 
 ```text
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python backend/scripts/live_text_smoke.py
+PYTHONPATH=. python backend/scripts/live_text_smoke.py
 ```
 
 `.env` is present, gitignored, and was not staged. `USE_MOCK_PROVIDER` in that file is false. The script forced a live router. Key presence only: groq, gemini, mistral, openrouter, and tavily were all set. Tavily was not called.
@@ -330,13 +341,13 @@ Graph node logic was not rewritten. The M2 test that expected `NotImplementedErr
 - `QUEUE_CONSUMER_ENABLED` defaults to true. The lifespan starts the single consumer only when that flag is true and a database is configured. Tests set the flag false and blank `DATABASE_URL`.
 - Guest tokens are returned once. The database stores `sha256` only. Turnstile fails closed unless a secret is configured or a test double is injected.
 - Refunds happen only when a job fails before `provider_work_started` is committed. Cancel consumes the one-use entitlement. Estimated cost stays null.
-- `gemini/gemini-2.0-flash` stays on the allowlist. New defaults use `gemini/gemini-flash-latest`. No live Gemini call was made in this milestone.
+- (M3 state; removed from the allowlist 2026-11-10.) `gemini/gemini-2.0-flash` stays on the allowlist. New defaults use `gemini/gemini-flash-latest`. No live Gemini call was made in this milestone.
 
 ### Tests run
 
 ```text
-# V2 backend, Python 3.13.14 (/tmp/rm_v2_venv)
-USE_MOCK_PROVIDER=true PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests -v
+# V2 backend, Python 3.13.14 (venv)
+USE_MOCK_PROVIDER=true PYTHONPATH=. python -m unittest discover -s backend/tests -v
 Ran 65 tests in 1.885s — OK
 
 # V1 regression (/tmp/rm_v1_venv)
@@ -386,7 +397,7 @@ PASS WITH CONDITIONS stands as the review result. The conditions below are what 
 
 ### SSRF — left open
 
-`tools.scrape_url` pins the global IPs from `validate_public_url` onto `socket.getaddrinfo` for that one urllib3 connection, including each manual redirect hop. V1 `test_connect_time_lookup_keeps_the_validated_address` sees `93.184.216.34` at connect time when a later lookup would return `127.0.0.1`.
+(Historical; V2 now uses `backend/app/research/fetch.py` and `egress_fetch.py`.) `tools.scrape_url` pins the global IPs from `validate_public_url` onto `socket.getaddrinfo` for that one urllib3 connection, including each manual redirect hop. V1 `test_connect_time_lookup_keeps_the_validated_address` sees `93.184.216.34` at connect time when a later lookup would return `127.0.0.1`.
 
 This does **not** close SSRF. The pin is not an egress proxy. It does not cover connectors that skip `socket.getaddrinfo`, and it does not drop traffic to a public address. The required follow-up is a trusted egress proxy that dials only the checked IP and blocks private, loopback, link-local, and metadata ranges. Detail is in `docs/RISK_REGISTER.md` (R04).
 
@@ -401,8 +412,8 @@ This does **not** close SSRF. The pin is not an egress proxy. It does not cover 
 ### Tests run
 
 ```text
-# V2 backend, Python 3.13.14 (/tmp/rm_v2_venv), after the follow-up
-USE_MOCK_PROVIDER=true PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests -v
+# V2 backend, Python 3.13.14 (venv), after the follow-up
+USE_MOCK_PROVIDER=true PYTHONPATH=. python -m unittest discover -s backend/tests -v
 Ran 73 tests in 2.322s — OK
 
 # V1 regression (/tmp/rm_v1_venv)
@@ -476,8 +487,8 @@ tsc --noEmit — pass
 vitest run — 4 files, 16/16 pass
 vite build — pass (dist/assets/index-DaVdvYvS.js 776.88 kB, gzip 235.38 kB; chunk-size warning)
 
-# V2 backend, Python 3.13.14 (/tmp/rm_v2_venv), this sandbox
-USE_MOCK_PROVIDER=true PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests -v
+# V2 backend, Python 3.13.14 (venv), this sandbox
+USE_MOCK_PROVIDER=true PYTHONPATH=. python -m unittest discover -s backend/tests -v
 Ran 71 tests in 1.996s — OK (skipped=1)
 ```
 
@@ -523,13 +534,13 @@ Offline golden set, deterministic evaluators, and a DeepEval harness that cannot
 ### Tests run
 
 ```text
-# Deterministic fixture self-check, Python 3.13.14 (/tmp/rm_v2_venv)
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m evals.cli deterministic
+# Deterministic fixture self-check, Python 3.13.14 (venv)
+PYTHONPATH=. python -m evals.cli deterministic
 dataset=32 runs=20 fixture_mismatches=0 unlabeled_issues=0
 exit 0
 
 # Eval unit tests, same interpreter. DeepEval is not installed in this venv.
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s evals/tests -v
+PYTHONPATH=. python -m unittest discover -s evals/tests -v
 Ran 14 tests in 1.969s — OK
 ```
 
@@ -539,7 +550,7 @@ The 14 include a dry run that loaded DeepEval 4.3.3 from `/tmp/deepeval_inspect`
 
 - No V1 versus V2-A versus V2-B comparison and no judge scores. `docs/evals/RESULTS.md` records that explicitly.
 - Office-holder notes are dated 2026-11-07 and must be re-checked before any scored run.
-- DeepEval is not in the project virtualenv. A controlled judge run needs `uv pip install --python /tmp/rm_v2_venv/bin/python -r evals/requirements.txt` plus an exported Gemini or Google key. That install was not done here.
+- DeepEval is not in the project virtualenv. A controlled judge run needs `uv pip install --python python -r evals/requirements.txt` plus an exported Gemini or Google key. That install was not done here.
 - Quota and URL checks score saved artifacts and URL strings. They do not execute the PostgreSQL quota gate or `tools.validate_public_url`.
 - GitHub Actions does not run `evals/tests`. That is intentional.
 
@@ -586,7 +597,7 @@ Structured JSON logs and OpenTelemetry spans for request, quota, job, graph node
 ### Tests run
 
 ```text
-USE_MOCK_PROVIDER=true PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests -v
+USE_MOCK_PROVIDER=true PYTHONPATH=. python -m unittest discover -s backend/tests -v
 Ran 85 tests in 2.129s — OK
 ```
 
@@ -651,8 +662,8 @@ Binding: env.RESEARCHMIND_API_BASE ("http://127.0.0.1:8000")
 Wrangler was not on `PATH`. The project dev dependency is 4.158.0. The dry run did not upload a Worker.
 
 ```text
-# Backend, Python 3.13 venv /tmp/rm_v2_venv, throwaway Postgres available
-USE_MOCK_PROVIDER=true PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests -v
+# Backend, Python 3.13 venv, throwaway Postgres available
+USE_MOCK_PROVIDER=true PYTHONPATH=. python -m unittest discover -s backend/tests -v
 Ran 88 tests in 2.284s — OK
 ```
 
@@ -695,16 +706,16 @@ No migration. Graph, evals, and the research routes were not rewritten. No new s
 - Health stays at `GET /api/v1/health/live` and `GET /api/v1/health/ready`. Render's health check uses the live path.
 - Uvicorn target is `backend.app.main:app`, not `backend.main:app`. `WEB_CONCURRENCY` must be `1` or the entrypoint exits.
 - `CORS_ORIGINS` is an exact origin list. Empty means no CORS middleware. `*` is rejected. `allow_credentials` is false. Allowed methods are GET, POST, and OPTIONS. Allowed request headers include `Authorization`, `Content-Type`, `Accept`, `Last-Event-ID`, and `Idempotency-Key`.
-- `render.yaml` is one free Docker web service plus one static site. No `databases:` block. `DATABASE_URL` is `sync: false` for Neon. `autoDeployTrigger` is `"off"`.
+- `render.yaml` is one free Docker web service plus one static site. No `databases:` block. `DATABASE_URL` is `sync: false` for Neon. `autoDeployTrigger` was `"off"` (now `commit`; service `researchmind-api-sg`, static console removed 2026-11-10).
 - `vercel.json` is the other static host. Use one console, then put that origin in `CORS_ORIGINS`.
-- `backend/requirements-fetch.txt` is installed with `pip --no-deps` so `langchain==1.4.7` does not replace `langgraph==1.1.10`.
+- (Historical; file deleted 2026-11-10.) `backend/requirements-fetch.txt` was installed with `pip --no-deps` so `langchain==1.4.7` does not replace `langgraph==1.1.10`.
 - Region `oregon` and plan `free` are blueprint values. They are not a running service.
 
 ### Tests and checks
 
 ```text
 USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECRET_KEY= \
-  PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s backend/tests
+  PYTHONPATH=. python -m unittest discover -s backend/tests
 Ran 95 tests in 2.293s — OK
 ```
 

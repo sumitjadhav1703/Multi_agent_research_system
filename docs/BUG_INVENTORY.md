@@ -37,7 +37,7 @@ Live smoke (no Turnstile): API live/ready 200; console `/` and `/app` 200; MCP u
 
 **New P0/P1 from delta:** BI-P1-20 only (eval chart honesty). No crash, broken edge, empty-answer, or auth/quota bypass found on provisional/passage/Meta paths.
 
-**Delta P2 / low (recorded, not fixed):** Report empty-copy polish; score rounding display elsewhere. Residuals BI-P2-7/8/16/18/19, R04/R10/R12, BI-P1-6 still open.
+**Delta P2 / low (recorded, not fixed):** Report empty-copy polish; score rounding display elsewhere. Residuals BI-P2-7/8/16/18/19 (7, 8 and part of 18 since fixed; see 2026-11-10 audit), R04/R10/R12, BI-P1-6 still open.
 
 ---
 
@@ -68,8 +68,8 @@ Prior matrix: V1 16; backend 154; evals 14; discovery promoted to hard gates. Se
 
 | ID | Status | Fix / note |
 | --- | --- | --- |
-| BI-P2-7 | **residual** | `retryable` still unused; left for a lease/retry design pass. |
-| BI-P2-8 | **residual** | Lost-lease race (R09); needs abort-on-heartbeat-loss design. |
+| BI-P2-7 | **fixed** | Dead retry path removed from `persist.py` (fixed 2026-11-10 on fix/audit-hardening). |
+| BI-P2-8 | **fixed** | Lost lease now stops the graph early (fixed 2026-11-10 on fix/audit-hardening). Postgres lease SQL still untested in CI (R09 at-least-once stays). |
 | BI-P2-9 | **fixed** | Failed search sets `search_calls=1` ([`evidence.py`](../backend/app/research/evidence.py)). |
 | BI-P2-10 | **fixed** | Reject → job status `rejected` (terminal). |
 | BI-P2-11 | **fixed** | `clearToken` also clears `CURRENT_RUN_KEY`. |
@@ -79,16 +79,40 @@ Prior matrix: V1 16; backend 154; evals 14; discovery promoted to hard gates. Se
 | BI-P2-15 | **fixed** | `untrusted_block` neutralizes inner delimiters. |
 | BI-P2-16 | **residual** | `--forwarded-allow-ips='*'` needs Render peer allowlist. |
 | BI-P2-17 | **fixed** | MCP `wrangler.jsonc` defaults to Singapore API. |
-| BI-P2-18 | **residual** | Ready ignores dead consumer; sync SSE poll. |
+| BI-P2-18 | **partial** | SSE poll fixed 2026-11-10 on fix/audit-hardening (off event loop, snapshot only on change, 15 min cap, closes on terminal). Ready ignoring a dead consumer is still open. |
 | BI-P2-19 | **residual** | Free allowlist is name markers, not a price oracle. |
+
+## 2026-11-10 audit (fix/audit-hardening)
+
+Findings below were fixed 2026-11-10 on fix/audit-hardening. Suites after the fix: V1 16, backend 221, evals 15, frontend 47, MCP 31.
+
+| Finding | Status |
+| --- | --- |
+| P1 stuck queued job held the only slot (review resume kept attempts; cancel/review raced) | **fixed** (conditional UPDATEs, attempts reset, periodic recovery) |
+| P1 no DB-init retry after Neon failure | **fixed** (background retry, 5s backoff to 60s) |
+| P1 follow-up evidence never read by extractor/writer | **fixed** (round-robin passage pick) |
+| P2 retry without a free source slot / refetch of known URLs | **fixed** |
+| P2 empty provider content had no fallback | **fixed** (role fallback model) |
+| P2 Meta last resort auto-enabled by key alone | **fixed** (needs `META_LAST_RESORT_ENABLED=true` + key + allowlisted model) |
+| P2 wall-clock deadline unenforced | **fixed** (checked between steps; `expired` / `wall_clock`) |
+| P2 duplicate `run.*` status events | **fixed** |
+| P2 SSE poll blocked the event loop | **fixed** (see BI-P2-18) |
+| P2 identity DB error returned 500 without CORS | **fixed** (503 with CORS) |
+| P2 Neon never idle (queue polling) | **fixed** (wake signal; `QUEUE_IDLE_POLL_SECONDS=300`) |
+| P2 GitHub keep-awake cron throttled | **fixed** (Worker cron `*/10`; GitHub workflow manual only) |
+
+Also fixed: revise at the revision limit returns to review with a warning; token counting continues after a failed call; Turnstile `remoteip` dropped and siteverify hostname checked (not BI-P2-16, which is the forwarded-allow-ips item); migration 0002 index cleanup; `/health/ready` trimmed to status, database, `use_mock_provider`.
 
 ## Known residuals (still open)
 
-- **R04** SSRF: in-process IP dial only; no egress proxy.
-- **R10** Render Free sleep / long SSE.
+- **R04** SSRF: in-process IP dial only; no egress proxy. Fetch now lives in `backend/app/research/fetch.py` with an overall read deadline; still not closed.
+- **R10** Render Free sleep / long SSE (Worker cron keep-alive reduces it; not an SLA).
 - **R12** Neon pooler vs LangGraph checkpointer unmeasured.
 - MCP OAuth deferred (ADR 0006).
-- CI skips Postgres `SKIP LOCKED` when local Postgres tools missing.
+- `elapsed_ms` not persisted across a review resume.
+- OTel setup couples to a private field.
+- Lighter MCP report queries skipped.
+- Postgres-only lease SQL (`SKIP LOCKED`) untested in CI.
 
 ## Graph
 

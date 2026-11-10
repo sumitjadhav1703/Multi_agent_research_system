@@ -30,10 +30,10 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 |---|---|---|
 | `groq/openai/gpt-oss-20b` | planner / researcher / writer primary | M2 live text smoke: pass at `max_tokens=128` |
 | `gemini/gemini-flash-latest` | verifier / eval_judge primary; several fallbacks | Alias for current Flash; **fresh live capability NOT VERIFIED** in M3+ |
-| `gemini/gemini-2.0-flash` | allowlisted for boot compat | M2 smoke: HTTP **404** (retired) |
+| `gemini/gemini-2.0-flash` | allowlisted for boot compat (removed from the default/production allowlist 2026-11-10) | M2 smoke: HTTP **404** (retired) |
 | `mistral/mistral-small-latest` | verifier/writer fallback | Live not fully matrix-tested |
 | `openrouter/meta-llama/llama-3.2-3b-instruct:free` | allowlisted | Free suffix; still subject to OpenRouter account limits |
-| `mock/free-model` | CI | `USE_MOCK_PROVIDER=true` |
+| `mock/free-model` (removed from the default/production allowlist 2026-11-10) | CI | `USE_MOCK_PROVIDER=true` |
 
 `ALLOW_PAID_MODELS=true` or paid markers (`gpt-4`, `claude-sonnet-4`, …) → **fail closed at startup**.
 

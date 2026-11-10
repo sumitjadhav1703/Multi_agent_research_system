@@ -5,7 +5,7 @@ Dataset contents, review limits, and the expansion TODO are in `evals/DATASET_CA
 **Dataset:** `golden-v0.1`, 32 author-reviewed questions, no frozen page snapshot, no independent second review.  
 **Judge pin:** DeepEval `4.3.3`, LiteLLM model `gemini/gemini-flash-latest` (same id as `EVAL_JUDGE_PRIMARY_MODEL` in `.env.example`). Temperature 0.  
 **Threshold 0.5:** DeepEval 4.3.3's library default. It is not a calibrated ResearchMind pass bar.  
-**Python:** `/tmp/rm_v2_venv/bin/python` (3.13). Run from the repository root with `PYTHONPATH=.`.
+**Python:** `python` (3.13). Run from the repository root with `PYTHONPATH=.`.
 
 No scores in this card were produced by a model.
 
@@ -25,13 +25,13 @@ Static URL safety does not resolve DNS and does not replace `tools.validate_publ
 ## Deterministic command
 
 ```text
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m evals.cli deterministic \
+PYTHONPATH=. python -m evals.cli deterministic \
   --dataset evals/dataset/golden_v0.jsonl \
   --runs evals/fixtures/runs.json
 ```
 
 ```text
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m unittest discover -s evals/tests -v
+PYTHONPATH=. python -m unittest discover -s evals/tests -v
 ```
 
 The fixture file's `expect_issue_codes` values are the harness self-check. A real saved run should omit that field. Any issue then makes the command exit 1.
@@ -39,15 +39,15 @@ The fixture file's `expect_issue_codes` values are the harness self-check. A rea
 Refresh the JSONL after editing the authoring module:
 
 ```text
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python -m evals.dataset.golden_v0
-PYTHONPATH=. /tmp/rm_v2_venv/bin/python evals/fixtures/make_runs.py
+PYTHONPATH=. python -m evals.dataset.golden_v0
+PYTHONPATH=. python evals/fixtures/make_runs.py
 ```
 
 ## Judge command
 
 Export `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the process environment. The command sets `DEEPEVAL_DISABLE_DOTENV=1`, `DEEPEVAL_TELEMETRY_OPT_OUT=1`, and `LITELLM_MODE=PRODUCTION` before import so DeepEval and LiteLLM do not read a `.env` file. Do not print those keys.
 
-Keep DeepEval out of `/tmp/rm_v2_venv`. The unit test that expects exit code 3 runs with that interpreter and a clean `PYTHONPATH`. Install the judge extra in a separate environment. `deepeval==4.3.3` does not depend on LiteLLM, and `LiteLLMModel` imports it only when a completion runs, so `evals/requirements.txt` also pins `litellm==1.108.2` (the backend pin).
+Keep DeepEval out of `the project virtualenv`. The unit test that expects exit code 3 runs with that interpreter and a clean `PYTHONPATH`. Install the judge extra in a separate environment. `deepeval==4.3.3` does not depend on LiteLLM, and `LiteLLMModel` imports it only when a completion runs, so `evals/requirements.txt` also pins `litellm==1.108.2` (the backend pin).
 
 ```text
 uv venv /tmp/rm_eval_judge --python python3.13

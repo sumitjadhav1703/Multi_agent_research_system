@@ -2,7 +2,7 @@
 
 **Risk register:** [`../RISK_REGISTER.md`](../RISK_REGISTER.md)  
 **M3 review:** PASS WITH CONDITIONS (SSRF left open)  
-**Code owners:** `backend/app/jobs/quota.py`, `turnstile.py`, `tools.py`, CORS/settings validators, MCP auth
+**Code owners:** `backend/app/jobs/quota.py`, `turnstile.py`, `research/fetch.py` (V1 `tools.py`), CORS/settings validators, MCP auth
 
 This is a **public student demo**, not a claimed hardened multi-tenant SaaS.
 
