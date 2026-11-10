@@ -48,13 +48,13 @@ Cold-start latency, RSS, hosted research-run p95, and DeepEval judge scores are 
 
 | Layer | Behavior | Evidence |
 |---|---|---|
-| UI | Streamlit (`app.py`), session-scoped state | `app.py` |
-| Orchestration | Sequential `search → reader → writer → critic` | `pipeline.py` `STAGES`, `run_research_pipeline` |
-| Models | Single Groq `openai/gpt-oss-20b` for every stage | `agents.py` `build_llm` |
-| Search | Tavily, `max_results=5` | `tools.py` `web_search` |
-| Reading | Prompted to scrape **one** HTML URL; no PDF | `agents.py` `build_reader_agent`; `tools.py` `scrape_url` |
-| Critic | Same-model review; not passage-grounded verification | `agents.py` critic prompt |
-| Recovery | `PipelinePaused` + manual Resume; in-memory / Streamlit session | `pipeline.py`, `app.py` |
+| UI | Streamlit (`v1/app.py`), session-scoped state | `v1/app.py` |
+| Orchestration | Sequential `search → reader → writer → critic` | `v1/pipeline.py` `STAGES`, `run_research_pipeline` |
+| Models | Single Groq `openai/gpt-oss-20b` for every stage | `v1/agents.py` `build_llm` |
+| Search | Tavily, `max_results=5` | `v1/tools.py` `web_search` |
+| Reading | Prompted to scrape **one** HTML URL; no PDF | `v1/agents.py` `build_reader_agent`; `v1/tools.py` `scrape_url` |
+| Critic | Same-model review; not passage-grounded verification | `v1/agents.py` critic prompt |
+| Recovery | `PipelinePaused` + manual Resume; in-memory / Streamlit session | `v1/pipeline.py`, `v1/app.py` |
 | Tests | 14 offline unittest cases; providers mocked | `tests/`, `.github/workflows/tests.yml` |
 
 V1 is frozen at tag `v1-baseline` → `f1881b9`. See [`../BASELINE_REPORT.md`](../BASELINE_REPORT.md).

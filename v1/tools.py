@@ -1,6 +1,13 @@
 """Search and bounded, public-web extraction tools."""
 import http.client
 import os
+import sys
+from pathlib import Path
+
+# V1 lives in v1/ but shares the SSRF helper from the repo-root backend package.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv

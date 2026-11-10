@@ -35,12 +35,12 @@ if [[ -z "$V1_PY" ]]; then
   done
 fi
 if [[ -z "$V1_PY" ]]; then
-  echo "V1 suite needs requirements.txt (streamlit, groq, bs4). Set V1_PYTHON." >&2
+  echo "V1 suite needs v1/requirements.txt (streamlit, groq, bs4). Set V1_PYTHON." >&2
   exit 2
 fi
 
-echo "== V1 tests/ ($V1_PY) =="
-"$V1_PY" -m unittest discover -s tests -q
+echo "== V1 v1/tests/ ($V1_PY) =="
+(cd v1 && "$V1_PY" -m unittest discover -s tests -q)
 
 echo "== V2 backend/tests/ ($PY) =="
 "$PY" -m unittest discover -s backend/tests -q

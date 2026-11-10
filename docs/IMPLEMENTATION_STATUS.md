@@ -7,7 +7,7 @@
 
 ### Follow-up: audit hardening (2026-11-10, fix/audit-hardening)
 
-- **Current state (supersedes older statements below):** backend no longer imports root `tools.py`; scraping is `backend/app/research/fetch.py` (overall read deadline). `backend/requirements-fetch.txt` deleted; bs4/soupsieve/tavily-python are in `backend/requirements.txt`; langchain is not in the API image. V1 untouched, tested in CI job `v1`.
+- **Current state (supersedes older statements below):** backend no longer imports root `tools.py`; scraping is `backend/app/research/fetch.py` (overall read deadline). `backend/requirements-fetch.txt` deleted; bs4/soupsieve/tavily-python are in `backend/requirements.txt`; langchain is not in the API image. V1 moved unchanged into `v1/` (run tests with `cd v1 && python -m unittest discover -s tests`), tested in CI job `v1`.
 - `gemini/gemini-2.0-flash` and `mock/free-model` removed from the default/production allowlist. Meta last resort only with `META_LAST_RESORT_ENABLED=true` + key + allowlisted model.
 - Graph: round-robin passages (follow-up evidence read), retry needs a free source slot, empty content falls back, wall-clock enforced between steps (`expired` / `wall_clock`), revise at limit returns to review.
 - Jobs: review resume resets attempts, conditional cancel/review UPDATEs, periodic recovery, background DB-init retry, consumer wake + `QUEUE_IDLE_POLL_SECONDS=300`, lost lease stops graph, SSE off event loop (15 min cap), Turnstile without `remoteip` plus hostname check. Migration `0002` (usage_ledger identity index, duplicate indexes dropped).

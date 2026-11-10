@@ -177,7 +177,7 @@ Dockerfile               API image (Python 3.13)
 .env.example             Backend env names (no secrets)
 ```
 
-V1 Streamlit modules remain at the repo root for the frozen baseline. Prefer the V2 paths above for new work.
+V1 Streamlit code lives in [`v1/`](v1/) (frozen baseline, tag `v1-baseline`). Prefer the V2 paths above for new work.
 
 ---
 
@@ -303,7 +303,7 @@ USE_MOCK_PROVIDER=true DATABASE_URL= QUEUE_CONSUMER_ENABLED=false TURNSTILE_SECR
   PYTHONPATH=. python -m unittest discover -s backend/tests
 
 # V1 baseline (frozen Streamlit path)
-python -m unittest discover -s tests
+cd v1 && python -m unittest discover -s tests
 
 # Frontend
 cd frontend && npm test && npm run build
