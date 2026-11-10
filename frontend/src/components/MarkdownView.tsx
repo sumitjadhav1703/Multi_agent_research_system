@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { linkCitations, neutralizeHtml } from "../domain/markdown";
+import { linkCitations } from "../domain/markdown";
 
 export function MarkdownView({
   markdown,
@@ -15,7 +15,7 @@ export function MarkdownView({
   runId: string;
 }) {
   const source = useMemo(
-    () => linkCitations(neutralizeHtml(markdown), citationIds),
+    () => linkCitations(markdown, citationIds),
     [markdown, citationIds],
   );
   const allowed = useMemo(() => new Set(allowedUrls), [allowedUrls]);
@@ -46,7 +46,7 @@ function renderLink(
 ) {
   if (href?.startsWith("#cite-")) {
     const id = decodeURIComponent(href.slice("#cite-".length));
-    const param = id.startsWith("cl") ? "claim" : "passage";
+    const param = id.startsWith("cl") ? "claim" : id.startsWith("src_") ? "source" : "passage";
     return (
       <Link className="citation" to={`/runs/${runId}/evidence?${param}=${encodeURIComponent(id)}`}>
         {id}

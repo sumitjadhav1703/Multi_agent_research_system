@@ -1,3 +1,5 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { resetRunStore } from "../state/runStore";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 export const GUEST_TOKEN_KEY = "researchmind.guestToken";
@@ -20,10 +22,13 @@ export function TokenProvider({ children }: { children: ReactNode }) {
     setTokenState(value);
   }, []);
 
+  const queryClient = useQueryClient();
   const clearToken = useCallback(() => {
     sessionStorage.removeItem(CURRENT_RUN_KEY);
     setToken(null);
-  }, [setToken]);
+    queryClient.clear();
+    resetRunStore();
+  }, [setToken, queryClient]);
   const value = useMemo(() => ({ token, setToken, clearToken }), [token, setToken, clearToken]);
   return <TokenContext.Provider value={value}>{children}</TokenContext.Provider>;
 }

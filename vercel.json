@@ -9,7 +9,7 @@
       "destination": "/app/index.html"
     },
     {
-      "source": "/app/(.*)",
+      "source": "/app/((?!assets/).*)",
       "destination": "/app/index.html"
     }
   ]

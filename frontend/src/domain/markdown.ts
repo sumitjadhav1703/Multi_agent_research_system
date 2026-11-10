@@ -1,7 +1,3 @@
-export function neutralizeHtml(markdown: string): string {
-  return markdown.replace(/</g, "&lt;");
-}
-
 export function linkCitations(markdown: string, ids: readonly string[]): string {
   const unique = [...new Set(ids.filter((id) => id.length > 0))].sort((left, right) => right.length - left.length);
   let output = markdown;
@@ -13,8 +9,4 @@ export function linkCitations(markdown: string, ids: readonly string[]): string 
     });
   }
   return output;
-}
-
-export function citationIdsFrom(ids: readonly string[]): string[] {
-  return [...new Set(ids)];
 }

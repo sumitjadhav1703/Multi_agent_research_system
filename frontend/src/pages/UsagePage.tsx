@@ -1,14 +1,13 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { getEvents, getReady, getRun, getUsage } from "../api/client";
-import { consumeRunStream } from "../api/sse";
 import type { UsageFigures, UsageSnapshot } from "../api/types";
 import { EMPTY_USAGE } from "../api/types";
 import { useToken } from "../auth/token";
 import { ErrorText, PageHeader, UsageFiguresList } from "../components/ui";
 import { formatElapsed, formatUnknown, formatWhen } from "../domain/format";
-import { maxSequence, sourcesSeenCount, statusLabel, usageFromEvents } from "../domain/runView";
+import { sourcesSeenCount, statusLabel, usageFromEvents } from "../domain/runView";
 import { runStore } from "../state/runStore";
 
 /** Map /me/usage ledger fields into the shared metric list shape. */
@@ -214,26 +213,6 @@ function RunRow({ runId }: { runId: string }) {
     enabled: Boolean(token),
     queryFn: () => getEvents(token as string, runId, 0),
   });
-
-  useEffect(() => {
-    if (!token || !events.data) return;
-    runStore.merge(runId, events.data.events);
-    if (runStore.get(runId)?.snapshot) return;
-    const controller = new AbortController();
-    void consumeRunStream({
-      token,
-      runId,
-      after: maxSequence(events.data.events),
-      signal: controller.signal,
-      onOpen: () => undefined,
-      onEvent: (event) => runStore.merge(runId, [event]),
-      onSnapshot: (snapshot) => runStore.setSnapshot(runId, snapshot),
-      onClosed: () => undefined,
-      onDrop: () => undefined,
-      onUnauthorized: () => undefined,
-    });
-    return () => controller.abort();
-  }, [token, runId, events.data]);
 
   const item = run.data;
   const entry = runStore.get(runId);

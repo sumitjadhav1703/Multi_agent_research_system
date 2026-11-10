@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ResearchRun, RunEvent } from "../api/types";
 import { formatUnknown } from "./format";
-import { linkCitations, neutralizeHtml } from "./markdown";
-import { mergeEvents, nextActionHint, runBanners, sourcesSeenCount, workerCards } from "./runView";
+import { linkCitations } from "./markdown";
+import { mergeEvents, nextActionHint, revisionsUsed, runBanners, sourcesSeenCount, stageStates, workerCards } from "./runView";
 
 const run = (status: string, extra: Partial<ResearchRun> = {}): ResearchRun => ({
   run_id: "run-1",
@@ -145,8 +145,7 @@ describe("run view", () => {
     expect(cards[0]).toMatchObject({ provider: "unknown", sources: 2, state: "completed" });
   });
 
-  it("turns citation ids into links and neutralizes tags", () => {
-    expect(neutralizeHtml("See <script>alert(1)</script>")).not.toContain("<script>");
+  it("turns citation ids into links", () => {
     expect(linkCitations("See ev_sq1_1.", ["ev_sq1_1"])).toContain("](#cite-ev_sq1_1)");
   });
 
@@ -176,5 +175,20 @@ describe("run view", () => {
     expect(sourcesSeenCount(events, null)).toBe(1);
     expect(sourcesSeenCount([], 3)).toBe(3);
     expect(sourcesSeenCount(events, 2)).toBe(2);
+  });
+
+  it("counts used revisions from review.resumed events", () => {
+    expect(revisionsUsed([event(1, "review.resumed", { action: "approve" })])).toBe(0);
+    expect(revisionsUsed([event(1, "review.resumed", { action: "revise" })])).toBe(1);
+  });
+
+  it("marks sources, evidence and verify active before they finish", () => {
+    const ids = (events: ReturnType<typeof event>[]) =>
+      Object.fromEntries(stageStates(events, "running").map((stage) => [stage.id, stage.state]));
+    expect(ids([event(1, "worker.started", {}), event(2, "source.discovered", { source_id: "s" })])).toMatchObject({
+      sources: "active",
+    });
+    expect(ids([event(1, "worker.completed", {})])).toMatchObject({ evidence: "active" });
+    expect(ids([event(1, "evidence.extracted", {})])).toMatchObject({ evidence: "done", verify: "active" });
   });
 });

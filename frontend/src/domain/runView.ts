@@ -69,21 +69,21 @@ const STAGES: {
     label: "Sources",
     blurb: "Gather pages",
     start: ["source.discovered"],
-    done: ["source.extracted", "source.discovered"],
+    done: [], // finishes when a later stage starts
   },
   {
     id: "evidence",
     label: "Evidence",
     blurb: "Extract passages",
-    start: ["evidence.extracted"],
+    start: ["worker.completed"],
     done: ["evidence.extracted"],
   },
   {
     id: "verify",
     label: "Verify",
     blurb: "Check claims",
-    start: ["claim.verified", "claim.conflicted"],
-    done: ["claim.verified", "claim.conflicted"],
+    start: ["evidence.extracted"],
+    done: [], // finishes when the writer starts
   },
   {
     id: "report",
@@ -152,6 +152,11 @@ export function stageStates(events: readonly RunEvent[], status: string): StageV
     if (stage.id === "review" && status === "review_required") state = "active";
     return { id: stage.id, label: stage.label, blurb: stage.blurb, state };
   });
+}
+
+/** Revisions already consumed (backend allows one). */
+export function revisionsUsed(events: readonly RunEvent[]): number {
+  return events.filter((event) => event.type === "review.resumed" && event.payload.action === "revise").length;
 }
 
 export function workerCards(events: readonly RunEvent[]): WorkerCard[] {
@@ -298,7 +303,7 @@ export function runBanners(input: {
       detail: "The run will stop at the next safe point. The one-use demo run stays consumed.",
     });
   }
-  banners.push(statusBanner(input.run));
+  banners.push(statusBanner(input.run, revisionsUsed(input.events) > 0));
   if (input.events.some((event) => event.type === "worker.failed")) {
     banners.push({
       id: "partial",
@@ -347,7 +352,7 @@ function failureDetail(run: ResearchRun): string {
   return "The run failed before a report was approved.";
 }
 
-function statusBanner(run: ResearchRun): Banner {
+function statusBanner(run: ResearchRun, revisionUsed: boolean): Banner {
   if (run.status === "queued") {
     return {
       id: "queued",
@@ -369,7 +374,9 @@ function statusBanner(run: ResearchRun): Banner {
       id: "review",
       tone: "warning",
       title: "Review required",
-      detail: "Approve, request one revision, or reject. A second revision is not offered.",
+      detail: revisionUsed
+        ? "Approve or reject. The one allowed revision was already used."
+        : "Approve, request one revision, or reject. A second revision is not offered.",
     };
   }
   if (run.status === "expired") {
@@ -409,7 +416,7 @@ function statusBanner(run: ResearchRun): Banner {
       id: "approved",
       tone: "ok",
       title: "Approved",
-      detail: "The saved report was approved. Evaluation scores are not measured in this release.",
+      detail: "The saved report was approved. Evaluation not measured for this run.",
     };
   }
   return {

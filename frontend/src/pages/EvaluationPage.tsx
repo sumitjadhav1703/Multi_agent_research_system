@@ -1,12 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getEvaluationSummary } from "../api/client";
 import type { EvaluationSummary } from "../api/types";
-import { useToken } from "../auth/token";
-import bundledSummary from "../data/evaluationSummary.json";
+import bundledSummary from "../../../docs/evals/published-summary.json";
 import { PageHeader } from "../components/ui";
 
-const FALLBACK = bundledSummary as EvaluationSummary;
+const summary = bundledSummary as EvaluationSummary;
 
 function metricRows(summary: EvaluationSummary): { metric: string; result: string }[] {
   const judgeMetrics = summary.judge?.metrics ?? [];
@@ -28,9 +25,6 @@ function metricRows(summary: EvaluationSummary): { metric: string; result: strin
       ? "expected failure codes matched"
       : "not measured",
   });
-  if (rows.length === 0) {
-    return [{ metric: "scores", result: "not measured" }];
-  }
   return rows;
 }
 
@@ -55,14 +49,6 @@ function metadataRows(summary: EvaluationSummary): [string, string][] {
 }
 
 export function EvaluationPage() {
-  const { token } = useToken();
-  const query = useQuery({
-    queryKey: ["evaluation-summary"],
-    queryFn: () => getEvaluationSummary(token as string),
-    enabled: Boolean(token),
-    staleTime: 60_000,
-  });
-  const summary = query.data ?? FALLBACK;
   const chartIsJudgeMeans = Boolean(summary.judge?.measured && summary.judge.chart?.length);
   const chartPoints = chartIsJudgeMeans
     ? (summary.judge?.chart ?? [])
@@ -78,11 +64,6 @@ export function EvaluationPage() {
         Guests cannot launch benchmarks from this demo. Figures below are the published offline
         harness note, not a live scoreboard.
       </p>
-      {query.isError ? (
-        <p className="meta" role="status">
-          Live summary unavailable; showing the bundled publish.
-        </p>
-      ) : null}
       <ScoreChart
         points={chartPoints}
         valueKind={chartIsJudgeMeans ? "mean_score" : "fixture_runs"}
@@ -169,7 +150,7 @@ export function ScoreChart({
   const allowDecimals = valueKind === "mean_score";
   return (
     <div
-      className="panel h-56"
+      className="panel chart-box"
       data-testid="score-chart"
       data-value-kind={valueKind}
       aria-label={seriesName}

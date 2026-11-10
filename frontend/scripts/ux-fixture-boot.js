@@ -1,4 +1,4 @@
-/* Local UX verification only — seeds guest token + fetch fixtures before the SPA boots. */
+/* Local UX verification only (not shipped). Inject via Playwright addInitScript: seeds guest token + fetch fixtures before the SPA boots. */
 (() => {
   const tokenKey = "researchmind.guestToken";
   sessionStorage.setItem(tokenKey, "g".repeat(24));

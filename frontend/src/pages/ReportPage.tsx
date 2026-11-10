@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { CollapsiblePanel } from "../components/CollapsiblePanel";
@@ -6,16 +7,27 @@ import { ReviewForm } from "../components/ReviewForm";
 import { SectionHeading } from "../components/SectionMark";
 import { ErrorText, NoticeCluster, PageHeader, RunStatusBar, UsageFiguresList } from "../components/ui";
 import { formatElapsed } from "../domain/format";
-import { answerMarkdown, nextActionHint, noticeBanners, usageFromEvents } from "../domain/runView";
+import { answerMarkdown, nextActionHint, noticeBanners, revisionsUsed, usageFromEvents } from "../domain/runView";
 import { useFirstVisitExpand } from "../hooks/useFirstVisitExpand";
 import { useRunChannelContext } from "../hooks/runChannelContext";
-import { EMPTY_USAGE } from "../api/types";
 
 export function ReportPage() {
   const { runId = "" } = useParams();
   const expandSecondary = useFirstVisitExpand(`report:${runId || "none"}`);
   const { runQuery, events, snapshot, connection } = useRunChannelContext();
   const run = runQuery.data;
+  const citationIds = useMemo(
+    () => [
+      ...(snapshot?.passages.map((passage) => passage.evidence_id) ?? []),
+      ...(snapshot?.claims.map((claim) => claim.claim_id) ?? []),
+      ...(snapshot?.sources.map((source) => source.source_id) ?? []),
+    ],
+    [snapshot],
+  );
+  const allowedUrls = useMemo(
+    () => snapshot?.sources.flatMap((source) => [source.url, source.canonical_url]) ?? [],
+    [snapshot],
+  );
 
   if (runQuery.isPending) return <p role="status">Loading the saved run.</p>;
   if (runQuery.isError || !run) {
@@ -25,14 +37,6 @@ export function ReportPage() {
 
   const { markdown, draft } = answerMarkdown(snapshot, events);
   const answerBody = markdown ?? draft;
-  const citationIds = [
-    ...(snapshot?.passages.map((passage) => passage.evidence_id) ?? []),
-    ...(snapshot?.claims.map((claim) => claim.claim_id) ?? []),
-    ...(snapshot?.sources.map((source) => source.source_id) ?? []),
-  ];
-  const allowedUrls = [
-    ...(snapshot?.sources.flatMap((source) => [source.url, source.canonical_url]) ?? []),
-  ];
   const usage = snapshot?.usage ?? usageFromEvents(events);
   const conflicts = snapshot?.claims.filter((claim) => claim.status === "contradictory") ?? [];
   const gaps = snapshot?.claims.filter((claim) => claim.status === "insufficient") ?? [];
@@ -69,7 +73,7 @@ export function ReportPage() {
             />
             <p className="meta">
               Duration {formatElapsed(run.started_at, run.finished_at)} · Sources{" "}
-              {snapshot ? snapshot.sources.length : "unknown"} · Evaluation not measured
+              {snapshot ? snapshot.sources.length : "unknown"} · Evaluation not measured for this run
             </p>
           </div>
         </div>
@@ -79,7 +83,7 @@ export function ReportPage() {
       </div>
       {run.status === "review_required" ? (
         <div className="no-print">
-          <ReviewForm runId={run.run_id} />
+          <ReviewForm runId={run.run_id} canRevise={revisionsUsed(events) === 0} />
         </div>
       ) : null}
 
@@ -172,7 +176,7 @@ export function ReportPage() {
         defaultOpen={expandSecondary}
         className="report-secondary no-print"
       >
-        <UsageFiguresList usage={usage ?? EMPTY_USAGE} bare />
+        <UsageFiguresList usage={usage} bare />
       </CollapsiblePanel>
     </section>
   );
@@ -185,6 +189,8 @@ export function downloadMarkdown(runId: string, markdown: string) {
   const link = document.createElement("a");
   link.href = url;
   link.download = `researchmind-${runId}.md`;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

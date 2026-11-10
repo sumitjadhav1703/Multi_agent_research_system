@@ -42,7 +42,6 @@ class RunStore {
 
   setSnapshot(runId: string, snapshot: ArtifactSnapshot) {
     const current = this.entry(runId);
-    if (JSON.stringify(current.snapshot) === JSON.stringify(snapshot)) return;
     this.entries.set(runId, { ...current, snapshot });
     this.emit();
   }

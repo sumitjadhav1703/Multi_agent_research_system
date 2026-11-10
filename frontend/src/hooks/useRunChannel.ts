@@ -20,7 +20,8 @@ export function useRunChannel(runId: string | undefined) {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (!status || TERMINAL_STATUSES.has(status)) return false;
-      return entry?.connection === "live" ? 8000 : 3000;
+      // SSE keeps the run fresh while live; poll only as a fallback.
+      return entry?.connection === "live" ? false : 3000;
     },
   });
 
@@ -56,7 +57,13 @@ export function useRunChannel(runId: string | undefined) {
       after,
       signal: controller.signal,
       onOpen: () => runStore.setConnection(runId, "live"),
-      onEvent: (event) => runStore.merge(runId, [event]),
+      onEvent: (event) => {
+        runStore.merge(runId, [event]);
+        // Status changes are the only thing the live channel does not carry; refresh the run then.
+        if (/^(run|review)\.|^planner\.started$/.test(event.type)) {
+          void queryClient.invalidateQueries({ queryKey: ["run", runId] }, { cancelRefetch: false });
+        }
+      },
       onSnapshot: (snapshot) => runStore.setSnapshot(runId, snapshot),
       onClosed: () => {
         runStore.setConnection(runId, "closed");
@@ -65,7 +72,7 @@ export function useRunChannel(runId: string | undefined) {
       onUnauthorized: () => clearToken(),
       onDrop: () => {
         runStore.setConnection(runId, "reconnecting");
-        void queryClient.invalidateQueries({ queryKey: ["run", runId] });
+        void queryClient.invalidateQueries({ queryKey: ["run", runId] }, { cancelRefetch: false });
       },
     });
     return () => {

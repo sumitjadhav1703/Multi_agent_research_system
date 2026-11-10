@@ -22,24 +22,31 @@ declare global {
   }
 }
 
+const TURNSTILE_SCRIPT_ID = "turnstile-api";
+
+/** Inject the Turnstile script once per page, however often the gate mounts. */
+function loadTurnstile() {
+  if (document.getElementById(TURNSTILE_SCRIPT_ID)) return;
+  const script = document.createElement("script");
+  script.id = TURNSTILE_SCRIPT_ID;
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+  script.async = true;
+  script.defer = true;
+  document.head.appendChild(script);
+}
+
 export function IdentityGate() {
   const { setToken } = useToken();
   const siteKey = readEnv("VITE_TURNSTILE_SITE_KEY");
   const [verification, setVerification] = useState("");
   const [widgetNote, setWidgetNote] = useState("");
   const widgetIdRef = useRef<string | undefined>(undefined);
-  const resettingRef = useRef(false);
   const refreshVerification = useCallback(() => {
     setVerification("");
     const api = window.turnstile;
-    if (typeof api?.reset !== "function" || resettingRef.current) return;
-    resettingRef.current = true;
-    try {
-      if (widgetIdRef.current) api.reset(widgetIdRef.current);
-      else api.reset();
-    } finally {
-      resettingRef.current = false;
-    }
+    if (typeof api?.reset !== "function") return;
+    if (widgetIdRef.current) api.reset(widgetIdRef.current);
+    else api.reset();
   }, []);
   const mutation = useMutation({
     mutationFn: (turnstileToken: string) => createGuest(turnstileToken),
@@ -49,11 +56,7 @@ export function IdentityGate() {
 
   useEffect(() => {
     if (!siteKey) return;
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
+    loadTurnstile();
     let attempts = 0;
     const timer = window.setInterval(() => {
       attempts += 1;
@@ -68,14 +71,13 @@ export function IdentityGate() {
         widgetIdRef.current = typeof widgetId === "string" ? widgetId : undefined;
         window.clearInterval(timer);
       }
-      if (attempts > 20) {
+      if (attempts > 66) { // ~20s
         setWidgetNote("Verification widget did not load. Paste a token if you have one.");
         window.clearInterval(timer);
       }
     }, 300);
     return () => {
       window.clearInterval(timer);
-      script.remove();
     };
   }, [refreshVerification, siteKey]);
 

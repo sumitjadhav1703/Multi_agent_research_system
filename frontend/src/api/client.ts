@@ -1,4 +1,4 @@
-import type { EvaluationSummary, EventsPage, HealthReady, ResearchRun, UsageSnapshot } from "./types";
+import type { EventsPage, HealthReady, ResearchRun, UsageSnapshot } from "./types";
 
 const API_BASE = readEnv("VITE_API_BASE").replace(/\/$/, "");
 
@@ -128,6 +128,3 @@ export function streamUrl(runId: string): string {
   return apiUrl(`/api/v1/research-runs/${encodeURIComponent(runId)}/events/stream`);
 }
 
-export function getEvaluationSummary(token: string): Promise<EvaluationSummary> {
-  return request("/api/v1/evaluation/summary", { token });
-}

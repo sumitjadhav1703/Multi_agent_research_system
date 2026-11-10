@@ -1,6 +1,6 @@
-import { Link, useLocation, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { EMPTY_USAGE } from "../api/types";
 import { CollapsiblePanel } from "../components/CollapsiblePanel";
 import { ExpandableMarkdown } from "../components/ExpandableMarkdown";
 import { CancelRun } from "../components/ReviewForm";
@@ -25,10 +25,27 @@ import { useRunChannelContext } from "../hooks/runChannelContext";
 export function LiveRunPage() {
   const { runId = "" } = useParams();
   const location = useLocation();
-  const reused = Boolean((location.state as { reused?: boolean } | null)?.reused);
+  const navigate = useNavigate();
+  const [reused] = useState(() => Boolean((location.state as { reused?: boolean } | null)?.reused));
+  // Consume the one-shot flag so a reload does not show it again.
+  useEffect(() => {
+    if (location.state) navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [location.state, navigate, location.pathname, location.search]);
   const expandSecondary = useFirstVisitExpand(`live:${runId || "none"}`);
   const { runQuery, events, snapshot, connection } = useRunChannelContext();
   const run = runQuery.data;
+  const citationIds = useMemo(
+    () => [
+      ...(snapshot?.passages.map((passage) => passage.evidence_id) ?? []),
+      ...(snapshot?.claims.map((claim) => claim.claim_id) ?? []),
+      ...(snapshot?.sources.map((source) => source.source_id) ?? []),
+    ],
+    [snapshot],
+  );
+  const allowedUrls = useMemo(
+    () => snapshot?.sources.flatMap((source) => [source.url, source.canonical_url]) ?? [],
+    [snapshot],
+  );
 
   if (runQuery.isPending) return <p role="status">Loading the saved run.</p>;
   if (runQuery.isError || !run) {
@@ -41,18 +58,10 @@ export function LiveRunPage() {
   const workers = workerCards(events);
   const sources = snapshot?.sources ?? [];
   const discovered = discoveredSources(events);
-  const usage = snapshot?.usage ?? usageFromEvents(events) ?? EMPTY_USAGE;
+  const usage = snapshot?.usage ?? usageFromEvents(events);
   const { markdown, draft } = answerMarkdown(snapshot, events);
   const answerBody = markdown ?? draft;
   const hint = nextActionHint(run, Boolean(answerBody), "live");
-  const citationIds = [
-    ...(snapshot?.passages.map((passage) => passage.evidence_id) ?? []),
-    ...(snapshot?.claims.map((claim) => claim.claim_id) ?? []),
-    ...(snapshot?.sources.map((source) => source.source_id) ?? []),
-  ];
-  const allowedUrls = [
-    ...(snapshot?.sources.flatMap((source) => [source.url, source.canonical_url]) ?? []),
-  ];
   const doneCount = stages.filter((stage) => stage.state === "done").length;
   const sourceCount = sources.length || discovered.length;
 

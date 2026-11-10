@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", "public/ux-fixture-boot.js"] },
+  { ignores: ["dist", "node_modules", "scripts/ux-fixture-boot.js"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

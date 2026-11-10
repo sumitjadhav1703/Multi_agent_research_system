@@ -1,6 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
@@ -51,12 +50,13 @@ function portfolioLandingDev(): Plugin {
 
 export default defineConfig({
   base: "/app/",
-  plugins: [portfolioLandingDev(), react(), tailwindcss()],
+  plugins: [portfolioLandingDev(), react()],
   build: {
     outDir: "dist/app",
     emptyOutDir: true,
   },
-  server: { port: 5173, proxy },
+  // The eval summary is imported from ../docs (single source of truth).
+  server: { port: 5173, proxy, fs: { allow: [".."] } },
   preview: { proxy },
   test: {
     environment: "jsdom",
