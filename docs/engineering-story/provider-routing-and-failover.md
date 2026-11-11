@@ -30,8 +30,7 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 |---|---|---|
 | `groq/openai/gpt-oss-120b` | planner / writer primary, verifier fallback, eval_judge | Live JSON probe pass 2026-11-11 (1.2 s) |
 | `groq/openai/gpt-oss-20b` | researcher primary | Live pass; separate Groq rate-limit bucket from 120b. Reasoning model: needs the 2000-token budget. |
-| `openrouter/nvidia/nemotron-3.5-super-vl:free` | verifier primary | Live JSON probe pass 2026-11-11 (2.2 s). OpenRouter `:free`: 20 req/min, 50 req/day (1,000 after a one-time $10 purchase). |
-| `nvidia_nim/meta/llama-3.3-70b-instruct` | planner / researcher / writer fallback | NVIDIA NIM free tier (~40 req/min); needs `NVIDIA_NIM_API_KEY` |
+| `openrouter/nvidia/nemotron-3.5-super-vl:free` | verifier primary; planner / researcher / writer fallback | Live JSON probe pass 2026-11-11 (2.2 s). OpenRouter `:free`: 20 req/min, 50 req/day (1,000 after a one-time $10 purchase). |
 | `meta/muse-spark-1.3-contributor` | paid last resort for every role (owner-approved, `META_LAST_RESORT_ENABLED=true`) | Live pass 2026-11-11; runs only after a role's free primary and fallback both fail |
 | `mock/free-model` | in the code default allowlist; omitted from `render.yaml`'s production list | `USE_MOCK_PROVIDER=true` |
 
@@ -45,10 +44,10 @@ Dropped 2026-11-11: `gemini/*` (503s and timeouts; free tier cut to ~20–100 re
 
 | Role | Alias | Primary | Fallback |
 |---|---|---|---|
-| planner | `rm-planner` | groq/openai/gpt-oss-120b | nvidia_nim/meta/llama-3.3-70b-instruct |
-| researcher | `rm-researcher` | groq/openai/gpt-oss-20b | nvidia_nim/meta/llama-3.3-70b-instruct |
+| planner | `rm-planner` | groq/openai/gpt-oss-120b | openrouter/nvidia/nemotron-3.5-super-vl:free |
+| researcher | `rm-researcher` | groq/openai/gpt-oss-20b | openrouter/nvidia/nemotron-3.5-super-vl:free |
 | verifier | `rm-verifier` | openrouter/nvidia/nemotron-3.5-super-vl:free (a different model family checks the extractor) | groq/openai/gpt-oss-120b |
-| writer | `rm-writer` | groq/openai/gpt-oss-120b | nvidia_nim/meta/llama-3.3-70b-instruct |
+| writer | `rm-writer` | groq/openai/gpt-oss-120b | openrouter/nvidia/nemotron-3.5-super-vl:free |
 | eval_judge | `rm-eval-judge` | groq/openai/gpt-oss-120b | none |
 
 `eval_judge` is only the in-app alias; the offline DeepEval judge uses `meta/muse-spark-1.3-contributor` (`evals/__init__.py`). Fallbacks must also be on the allowlist. When a role's free primary and fallback both fail, the owner-approved paid Meta Muse last resort runs; if it also fails, stop safely and preserve completed stages/events. No other paid model is ever used.
@@ -69,8 +68,9 @@ Research date: **2026-11-08**. Official dashboards remain authoritative.
 - Mistral's free Experiment tier returned 429 rate limits.
 - Both left claims unverified, so both were removed from the defaults, `render.yaml` and the allowlist.
 
-### NVIDIA NIM
-- Free hosted endpoints at build.nvidia.com, OpenAI-compatible, ~40 requests/min; LiteLLM prefix `nvidia_nim/`.
+### NVIDIA NIM (supported, not a default)
+- Free hosted endpoints at build.nvidia.com, OpenAI-compatible, ~40 requests/min; LiteLLM prefix `nvidia_nim/`, key `NVIDIA_NIM_API_KEY`.
+- 2026-11-11 live probe: `meta/llama-3.3-70b-instruct` is end-of-life (410); 13 other listed models returned 404, timed out or were unavailable. Re-probe before routing a role to it.
 
 ### OpenRouter
 - Free-suffixed models still require an OpenRouter key and obey OpenRouter rate/credit rules.  

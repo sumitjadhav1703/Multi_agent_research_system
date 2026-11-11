@@ -54,15 +54,15 @@ services:
       - key: LOG_LEVEL
         value: INFO
       - key: FREE_MODEL_ALLOWLIST
-        value: groq/openai/gpt-oss-20b,groq/openai/gpt-oss-120b,openrouter/nvidia/nemotron-3.5-super-vl:free,nvidia_nim/meta/llama-3.3-70b-instruct,meta/muse-spark-1.3-contributor
+        value: groq/openai/gpt-oss-20b,groq/openai/gpt-oss-120b,openrouter/nvidia/nemotron-3.5-super-vl:free,meta/muse-spark-1.3-contributor
       - key: PLANNER_PRIMARY_MODEL
         value: groq/openai/gpt-oss-120b
       - key: PLANNER_FALLBACK_MODEL
-        value: nvidia_nim/meta/llama-3.3-70b-instruct
+        value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: RESEARCH_PRIMARY_MODEL
         value: groq/openai/gpt-oss-20b
       - key: RESEARCH_FALLBACK_MODEL
-        value: nvidia_nim/meta/llama-3.3-70b-instruct
+        value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: VERIFIER_PRIMARY_MODEL
         value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: VERIFIER_FALLBACK_MODEL
@@ -70,7 +70,7 @@ services:
       - key: WRITER_PRIMARY_MODEL
         value: groq/openai/gpt-oss-120b
       - key: WRITER_FALLBACK_MODEL
-        value: nvidia_nim/meta/llama-3.3-70b-instruct
+        value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: EVAL_JUDGE_PRIMARY_MODEL
         value: groq/openai/gpt-oss-120b
       - key: META_LAST_RESORT_ENABLED

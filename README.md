@@ -232,7 +232,7 @@ All backend settings are environment variables, read by `backend/app/core/config
 | `ALLOW_PAID_MODELS` | Must stay `false`. Startup fails if a paid model is configured. |
 | `FREE_MODEL_ALLOWLIST` | Comma-separated LiteLLM model ids every role model must match |
 | `PLANNER_* / RESEARCH_* / VERIFIER_* / WRITER_*_MODEL` | Primary and fallback model per role |
-| `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `NVIDIA_NIM_API_KEY` | Free provider keys (Groq primaries, OpenRouter verifier, NVIDIA NIM fallbacks) |
+| `GROQ_API_KEY`, `OPENROUTER_API_KEY` | Free provider keys (Groq primaries; OpenRouter Nemotron verifier and fallbacks). `NVIDIA_NIM_API_KEY` is optional (supported, not a default). |
 | `LLAMA_API_KEY` (or `META_API_KEY`) | Meta Muse paid last resort |
 | `TAVILY_API_KEY` | Web search |
 | `META_LAST_RESORT_ENABLED` | Paid Meta Muse last resort (owner-approved, `true` in production). Runs only when a role's free primary and fallback both fail; its model must be allowlisted. |

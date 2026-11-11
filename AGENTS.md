@@ -234,7 +234,7 @@ Check `docs/RISK_REGISTER.md` and `docs/BUG_INVENTORY.md` for the full list.
 - **Elapsed time:** `elapsed_ms` does not carry across a review resume.
 - **OTel:** `observability/tracing.py` touches private OpenTelemetry SDK fields. Re-test it when upgrading OTel.
 - **Readiness:** `/health/ready` doesn't detect a dead consumer thread (BI-P2-18, partial).
-- **Free provider limits:** OpenRouter `:free` allows 50 requests/day without a one-time $10 credit purchase, and NVIDIA NIM allows ~40 requests/min. Gemini and Mistral were dropped on 2026-11-11 after live 503s and 429s.
+- **Free provider limits:** OpenRouter `:free` allows 50 requests/day without a one-time $10 credit purchase, and NVIDIA NIM (optional, not a default) failed live probes. Gemini and Mistral were dropped on 2026-11-11 after live 503s and 429s.
 
 ---
 

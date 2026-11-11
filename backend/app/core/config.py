@@ -16,15 +16,14 @@ RoleName = Literal["planner", "researcher", "verifier", "writer", "eval_judge"]
 # Default LiteLLM model IDs, each live-probed 2026-11-11 with a JSON extraction prompt.
 # Gemini (503s, ~20-100 free req/day) and Mistral (429s) were dropped after failing live runs.
 # Groq 20b and 120b have separate rate-limit buckets; OpenRouter :free allows 50 req/day
-# (1,000 after a one-time $10 credit purchase); NVIDIA NIM's free tier allows ~40 req/min.
+# (1,000 after a one-time $10 credit purchase). NVIDIA NIM (nvidia_nim/ + NVIDIA_NIM_API_KEY) is
+# supported but not a default: on 2026-11-11 every probed NIM model 404'd, timed out or was unavailable.
 # meta/ Muse is the owner-approved paid last resort, used only when a role's free chain fails.
-NVIDIA_NIM_MODEL = "nvidia_nim/meta/llama-3.3-70b-instruct"
 OPENROUTER_FREE_MODEL = "openrouter/nvidia/nemotron-3.5-super-vl:free"
 DEFAULT_FREE_ALLOWLIST: tuple[str, ...] = (
     "groq/openai/gpt-oss-20b",
     "groq/openai/gpt-oss-120b",
     OPENROUTER_FREE_MODEL,
-    NVIDIA_NIM_MODEL,
     "meta/muse-spark-1.3-contributor",
     "mock/free-model",
 )
@@ -90,13 +89,13 @@ class Settings(BaseSettings):
         default="groq/openai/gpt-oss-120b", alias="PLANNER_PRIMARY_MODEL"
     )
     planner_fallback_model: str | None = Field(
-        default=NVIDIA_NIM_MODEL, alias="PLANNER_FALLBACK_MODEL"
+        default=OPENROUTER_FREE_MODEL, alias="PLANNER_FALLBACK_MODEL"
     )
     research_primary_model: str = Field(
         default="groq/openai/gpt-oss-20b", alias="RESEARCH_PRIMARY_MODEL"
     )
     research_fallback_model: str | None = Field(
-        default=NVIDIA_NIM_MODEL, alias="RESEARCH_FALLBACK_MODEL"
+        default=OPENROUTER_FREE_MODEL, alias="RESEARCH_FALLBACK_MODEL"
     )
     verifier_primary_model: str = Field(
         default=OPENROUTER_FREE_MODEL, alias="VERIFIER_PRIMARY_MODEL"
@@ -108,7 +107,7 @@ class Settings(BaseSettings):
         default="groq/openai/gpt-oss-120b", alias="WRITER_PRIMARY_MODEL"
     )
     writer_fallback_model: str | None = Field(
-        default=NVIDIA_NIM_MODEL, alias="WRITER_FALLBACK_MODEL"
+        default=OPENROUTER_FREE_MODEL, alias="WRITER_FALLBACK_MODEL"
     )
     eval_judge_primary_model: str = Field(
         default="groq/openai/gpt-oss-120b", alias="EVAL_JUDGE_PRIMARY_MODEL"

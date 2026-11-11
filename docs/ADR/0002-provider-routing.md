@@ -28,5 +28,5 @@ Use the **LiteLLM Python SDK `Router` inside FastAPI** (not a separate LiteLLM P
 **Update (2026-11-11):** Gemini and Mistral were removed after live runs: Gemini returned 503s and timeouts, Mistral returned 429s, and claims went unverified. The defaults are now:
 - Groq `gpt-oss-120b` for planner and writer, and `gpt-oss-20b` for researcher.
 - OpenRouter `nvidia/nemotron-3.5-super-vl:free` for verifier, so a different model family checks the claims.
-- NVIDIA NIM `meta/llama-3.3-70b-instruct` as the free fallback.
+- OpenRouter Nemotron as the free fallback for planner, researcher and writer. NVIDIA NIM is supported (`nvidia_nim/`) but not a default: its models 404'd or timed out in live probes.
 - Meta Muse as the owner-approved paid last resort, now enabled (`META_LAST_RESORT_ENABLED=true`).
