@@ -102,6 +102,12 @@ Follow-up the same day: Gemini and Mistral were removed from every default, `ren
 
 See `docs/engineering-story/provider-routing-and-failover.md`.
 
+### 2026-11-12 follow-up (fix/extract-relevance)
+- The extractor prompt never included the research question, so live claims included page metadata ("The article has 25 pages"). The question is now in the prompt, and the extractor is told to skip metadata.
+- In about 1 in 10 live runs the model returned a valid `{"claims":[]}` for passages that gave claims on the next call. Extraction now retries once when no usable claims come back.
+- The fallback warning now records `proposed=N kept=0`.
+- Two full local API runs (guest → review → approve) both completed, with 7 and 4 supported claims.
+
 ## 2026-11-10 audit (fix/audit-hardening)
 
 Findings below were fixed 2026-11-10 on fix/audit-hardening. Suites after the fix: V1 16, backend 224, evals 15, frontend 47, MCP 31.

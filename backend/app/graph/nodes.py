@@ -320,33 +320,10 @@ def route_after_merge(state: ResearchState) -> str:
     return "extract_claims"
 
 
-def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str, Any]:
-    limits = runtime.context.limits
-    passages = [Passage.model_validate(item) for item in state.get("passages") or []]
-    events = [emit("evidence.extracted", "extract_claims", {"count": len(passages)})]
-    if not passages:
-        return {"claims": [], "contradictions": [], "events": events}
-    known = {passage.evidence_id for passage in passages}
-    listing = ["Evidence IDs you may cite:"]
-    for passage in select_prompt_passages(passages):
-        listing.append(f"ID={passage.evidence_id} URL={passage.url}")
-        listing.append(untrusted_block(passage.quote))
-    parsed, usage, error = complete_json(
-        runtime.context.model_client,
-        state.get("usage"),
-        role="researcher",
-        messages=[
-            {"role": "system", "content": RESEARCHER_SYSTEM},
-            {"role": "user", "content": "\n".join(listing)},
-        ],
-        max_tokens=MAX_COMPLETION_TOKENS,
-        max_model_calls=limits.max_model_calls,
-    )
+def _usable_claims(raw_claims: list, known: set[str]) -> list[Claim]:
+    """Model claims that cite at least one stored evidence id."""
     proposals: list[Claim] = []
-    warnings = list(state.get("warnings") or [])
-    if error:
-        warnings.append(f"claim extraction failed:{error}")
-    for item in (parsed or {}).get("claims") or []:
+    for item in raw_claims:
         if not isinstance(item, dict):
             continue
         text = " ".join(str(item.get("text") or "").split())[:500]
@@ -362,6 +339,45 @@ def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) ->
                 verification_reason="Awaiting verification.",
             )
         )
+    return proposals
+
+
+def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str, Any]:
+    limits = runtime.context.limits
+    passages = [Passage.model_validate(item) for item in state.get("passages") or []]
+    events = [emit("evidence.extracted", "extract_claims", {"count": len(passages)})]
+    if not passages:
+        return {"claims": [], "contradictions": [], "events": events}
+    known = {passage.evidence_id for passage in passages}
+    listing = [f"Research question: {state.get('topic') or ''}", "Evidence IDs you may cite:"]
+    for passage in select_prompt_passages(passages):
+        listing.append(f"ID={passage.evidence_id} URL={passage.url}")
+        listing.append(untrusted_block(passage.quote))
+    messages = [
+        {"role": "system", "content": RESEARCHER_SYSTEM},
+        {"role": "user", "content": "\n".join(listing)},
+    ]
+    usage = state.get("usage")
+    warnings = list(state.get("warnings") or [])
+    proposals: list[Claim] = []
+    raw_claims: list = []
+    # One retry: live runs showed the same passages sometimes yield {"claims":[]} and claims on the next call.
+    for _attempt in range(2):
+        parsed, usage, error = complete_json(
+            runtime.context.model_client,
+            usage,
+            role="researcher",
+            messages=messages,
+            max_tokens=MAX_COMPLETION_TOKENS,
+            max_model_calls=limits.max_model_calls,
+        )
+        if error:
+            warnings.append(f"claim extraction failed:{error}")
+            break
+        raw_claims = (parsed or {}).get("claims") or []
+        proposals = _usable_claims(raw_claims, known)
+        if proposals:
+            break
     if not proposals and passages:
         # Lazy import: evidence ↔ graph package init would otherwise cycle at module load.
         from backend.app.research.evidence import claims_from_passages
@@ -370,7 +386,10 @@ def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) ->
         # so the writer and provisional answer have real excerpt text.
         proposals = claims_from_passages(passages)
         if proposals:
-            warnings.append("claim extraction empty:seeded deterministic passage claims")
+            # Counts tell a live failure apart: model returned nothing vs. claims with unknown evidence ids.
+            warnings.append(
+                f"claim extraction empty:proposed={len(raw_claims)} kept=0:seeded deterministic passage claims"
+            )
     return {
         "claims": [claim.model_dump() for claim in proposals],
         "contradictions": [],
