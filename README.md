@@ -311,7 +311,7 @@ cd mcp-server && npm test
 
 | Suite | Tests (2026-11-10) |
 | --- | --- |
-| Backend | 225 |
+| Backend | 228 |
 | Frontend | 47 |
 | MCP Worker | 31 |
 | V1 | 16 |

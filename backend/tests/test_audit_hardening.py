@@ -114,6 +114,44 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(out["claims"][0]["status"], "insufficient")
 
 
+class ExtractClaimsTests(unittest.TestCase):
+    def test_prompt_has_the_question_and_empty_warning_has_counts(self) -> None:
+        from backend.app.graph.nodes import extract_claims_node
+
+        seen: list[list[dict]] = []
+
+        class OneBadId:
+            def complete(self, role, messages, **_k):
+                seen.append(messages)
+                return SimpleNamespace(
+                    content='{"claims":[{"text":"Heat pumps cut bills.","evidence_ids":["ev_unknown"]}]}', usage=None
+                )
+
+        runtime = SimpleNamespace(context=SimpleNamespace(limits=GraphLimits(), model_client=OneBadId()))
+        passage = Passage(evidence_id="ev1", source_id="s", subquestion_id="sq1", quote="Field tests show cold-climate heat pumps cut heating bills by about 30%.", url="https://e.com", relevance_reason="r")
+        out = extract_claims_node({"topic": "Do heat pumps save money?", "passages": [passage.model_dump()]}, runtime)
+        self.assertIn("Research question: Do heat pumps save money?", seen[0][-1]["content"])
+        self.assertTrue(any("proposed=1 kept=0" in w for w in out["warnings"]), out["warnings"])
+
+
+    def test_empty_extraction_is_retried_once(self) -> None:
+        from backend.app.graph.nodes import extract_claims_node
+
+        replies = iter(['{"claims":[]}', '{"claims":[{"text":"Heat pumps cut bills.","evidence_ids":["ev1"]}]}'])
+        calls: list[int] = []
+
+        class EmptyThenGood:
+            def complete(self, role, messages, **_k):
+                calls.append(1)
+                return SimpleNamespace(content=next(replies), usage=None)
+
+        runtime = SimpleNamespace(context=SimpleNamespace(limits=GraphLimits(), model_client=EmptyThenGood()))
+        passage = Passage(evidence_id="ev1", source_id="s", subquestion_id="sq1", quote="Field tests show cold-climate heat pumps cut heating bills by about 30%.", url="https://e.com", relevance_reason="r")
+        out = extract_claims_node({"topic": "Do heat pumps save money?", "passages": [passage.model_dump()]}, runtime)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([c["claim_id"] for c in out["claims"]], ["cl1"])
+
+
 class ParsingTests(unittest.TestCase):
     def test_leading_prose_with_braces_and_two_fences(self) -> None:
         text = 'Use {braces} freely.\n```json\n{"a": 1}\n```\nand\n```json\n{"b": 2}\n```'
