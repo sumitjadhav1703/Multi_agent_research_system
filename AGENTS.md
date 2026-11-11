@@ -200,7 +200,7 @@ cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 cd mcp-server && npm test && npx tsc --noEmit
 ```
 
-Baseline counts (2026-11-10): backend 224, frontend 47, MCP 31, V1 16, evals 15. If a count drops, find out why before continuing.
+Baseline counts (2026-11-10): backend 225, frontend 47, MCP 31, V1 16, evals 15. If a count drops, find out why before continuing.
 
 Live checks (they need real keys and are never run in CI): `backend/scripts/live_text_smoke.py` and `backend/scripts/live_capability_matrix.py`.
 

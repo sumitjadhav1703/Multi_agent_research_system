@@ -66,7 +66,7 @@ services:
       - key: VERIFIER_PRIMARY_MODEL
         value: gemini/gemini-flash-latest
       - key: VERIFIER_FALLBACK_MODEL
-        value: mistral/mistral-small-latest
+        value: groq/openai/gpt-oss-20b
       - key: WRITER_PRIMARY_MODEL
         value: groq/openai/gpt-oss-20b
       - key: WRITER_FALLBACK_MODEL

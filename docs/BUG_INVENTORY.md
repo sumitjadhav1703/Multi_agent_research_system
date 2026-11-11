@@ -82,6 +82,18 @@ Prior matrix: V1 16; backend 154; evals 14; discovery promoted to hard gates. Se
 | BI-P2-18 | **partial** | SSE poll fixed 2026-11-10 on fix/audit-hardening (off event loop, snapshot only on change, 15 min cap, closes on terminal). Ready ignoring a dead consumer is still open. |
 | BI-P2-19 | **residual** | Free allowlist is name markers, not a price oracle. |
 
+## 2026-11-11 live answers were snippets, not claims (fix/relevant-passages)
+
+Found in a live run after the audit merge: every claim stayed `insufficient`, and the report showed raw page snippets. Each cause was confirmed with recorded live model output.
+
+| Cause | Fix |
+| --- | --- |
+| Passages came from the first 2000 chars of each page, which on real sites is menus ("Skip to content…"). The extractor correctly found no claims. | Excerpt now leads with the search snippet (relevant text from the same page), then page text, still capped at 2000 chars. Test: `PageHeadBoilerplateTests`. |
+| `groq/openai/gpt-oss-20b` reasons before answering. On extraction it spent 798 of 800 `max_tokens` thinking and returned empty content (`finish=length`). | One 2000-token completion budget (`MAX_COMPLETION_TOKENS` in `graph/nodes.py`) for all four roles. |
+| Verifier primary Gemini returned 503/timeouts and fallback Mistral returned 429, so no claim could be verified. | Verifier fallback default is now `groq/openai/gpt-oss-20b`. Render's dashboard value must be changed too. |
+
+Live check after all three: 12 claims extracted, 12 supported, no warnings.
+
 ## 2026-11-10 audit (fix/audit-hardening)
 
 Findings below were fixed 2026-11-10 on fix/audit-hardening. Suites after the fix: V1 16, backend 224, evals 15, frontend 47, MCP 31.

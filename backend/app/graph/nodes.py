@@ -41,6 +41,10 @@ from backend.app.schemas.research import (
     SubQuestion,
 )
 
+# The default gpt-oss models reason before answering; ~800 tokens of reasoning used up the old
+# 700-900 budgets and left empty content. Billing is per token used, so a roomy cap is cheap.
+MAX_COMPLETION_TOKENS = 2000
+
 
 def select_prompt_passages(passages: list[Passage], limit: int = 6) -> list[Passage]:
     """Up to `limit` passages, round-robin across subquestions so later ones (incl. followup) are seen."""
@@ -98,7 +102,7 @@ def plan_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str,
             {"role": "system", "content": PLANNER_SYSTEM},
             {"role": "user", "content": state.get("topic") or ""},
         ],
-        max_tokens=700,
+        max_tokens=MAX_COMPLETION_TOKENS,
         max_model_calls=limits.max_model_calls,
     )
     if parsed is None:
@@ -335,7 +339,7 @@ def extract_claims_node(state: ResearchState, runtime: Runtime[GraphContext]) ->
             {"role": "system", "content": RESEARCHER_SYSTEM},
             {"role": "user", "content": "\n".join(listing)},
         ],
-        max_tokens=800,
+        max_tokens=MAX_COMPLETION_TOKENS,
         max_model_calls=limits.max_model_calls,
     )
     proposals: list[Claim] = []
@@ -407,7 +411,7 @@ def verify_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[st
                 {"role": "system", "content": VERIFIER_SYSTEM},
                 {"role": "user", "content": "\n".join(listing)},
             ],
-            max_tokens=800,
+            max_tokens=MAX_COMPLETION_TOKENS,
             max_model_calls=limits.max_model_calls,
         )
     decisions = {}
@@ -541,7 +545,7 @@ def write_node(state: ResearchState, runtime: Runtime[GraphContext]) -> dict[str
             {"role": "system", "content": WRITER_SYSTEM},
             {"role": "user", "content": "\n".join(lines)},
         ],
-        max_tokens=900,
+        max_tokens=MAX_COMPLETION_TOKENS,
         max_model_calls=limits.max_model_calls,
     )
     warnings = list(state.get("warnings") or [])

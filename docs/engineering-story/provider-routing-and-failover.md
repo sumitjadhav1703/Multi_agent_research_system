@@ -31,7 +31,7 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 | `groq/openai/gpt-oss-20b` | planner / researcher / writer primary | M2 live text smoke: pass at `max_tokens=128` |
 | `gemini/gemini-flash-latest` | verifier / eval_judge primary; several fallbacks | Alias for current Flash; **fresh live capability NOT VERIFIED** in M3+ |
 | `gemini/gemini-2.0-flash` | no longer allowlisted (removed 2026-11-10); an environment that still names it fails at boot | M2 smoke: HTTP **404** (retired) |
-| `mistral/mistral-small-latest` | verifier/writer fallback | Live not fully matrix-tested |
+| `mistral/mistral-small-latest` | writer fallback | Live not fully matrix-tested; returned 429 rate limits in a 2026-11-11 live check |
 | `openrouter/meta-llama/llama-3.2-3b-instruct:free` | allowlisted | Free suffix; still subject to OpenRouter account limits |
 | `mock/free-model` | in the code default allowlist; omitted from `render.yaml`'s production list | `USE_MOCK_PROVIDER=true` |
 
@@ -45,7 +45,7 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 |---|---|---|---|
 | planner | `rm-planner` | groq/openai/gpt-oss-20b | gemini/gemini-flash-latest |
 | researcher | `rm-researcher` | groq/openai/gpt-oss-20b | gemini/gemini-flash-latest |
-| verifier | `rm-verifier` | gemini/gemini-flash-latest | mistral/mistral-small-latest |
+| verifier | `rm-verifier` | gemini/gemini-flash-latest | groq/openai/gpt-oss-20b (Gemini 503s and Mistral 429s left claims unverified in live runs, 2026-11-11) |
 | writer | `rm-writer` | groq/openai/gpt-oss-20b | mistral/mistral-small-latest |
 | eval_judge | `rm-eval-judge` | gemini/gemini-flash-latest | none |
 

@@ -81,6 +81,26 @@ class GateAndFetchTests(unittest.TestCase):
         self.assertTrue(any(w.endswith(":empty") for w in warnings))
 
 
+class PageHeadBoilerplateTests(unittest.TestCase):
+    def test_passages_come_from_relevant_text_not_the_page_menu(self) -> None:
+        # Live pages start with menus; the relevant text sits past the 2000-char excerpt cap.
+        menu = "Skip to content Home About Shop Contact Login Menu. " * 50
+        body = "Cold climate heat pumps keep heating efficiently below freezing in recent field tests."
+        hit = SearchHit(title="t", url="https://e.com/heat", snippet=body)
+        sources, passages, _w = materialize_hits(
+            subquestion_id="sq1",
+            question="How efficient are heat pumps for heating in cold climates?",
+            hits=[hit],
+            fetch=lambda url: FetchResult(url=url, text=menu + body, extraction_method="html"),
+            fetch_budget=2,
+            limits=GraphLimits(),
+            retrieved_at="t",
+        )
+        self.assertTrue(passages)
+        self.assertIn("heat pumps keep heating", passages[0].quote)
+        self.assertIn(passages[0].quote, sources[0].excerpt)  # citations still point into the stored excerpt
+
+
 class VerifyTests(unittest.TestCase):
     def test_all_auto_seed_claims_skip_the_llm(self) -> None:
         class Boom:

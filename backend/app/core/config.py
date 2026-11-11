@@ -103,7 +103,7 @@ class Settings(BaseSettings):
         default="gemini/gemini-flash-latest", alias="VERIFIER_PRIMARY_MODEL"
     )
     verifier_fallback_model: str | None = Field(
-        default="mistral/mistral-small-latest", alias="VERIFIER_FALLBACK_MODEL"
+        default="groq/openai/gpt-oss-20b", alias="VERIFIER_FALLBACK_MODEL"
     )
     writer_primary_model: str = Field(
         default="groq/openai/gpt-oss-20b", alias="WRITER_PRIMARY_MODEL"
