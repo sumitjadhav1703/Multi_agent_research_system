@@ -94,6 +94,14 @@ Found in a live run after the audit merge: every claim stayed `insufficient`, an
 
 Live check after all three: 12 claims extracted, 12 supported, no warnings.
 
+Follow-up the same day: Gemini and Mistral were removed from every default, `render.yaml` and the allowlist. The roles now run on:
+- Groq `gpt-oss-120b` and `gpt-oss-20b`.
+- OpenRouter Nemotron as the verifier.
+- NVIDIA NIM as the fallback.
+- Meta Muse as the enabled paid last resort.
+
+See `docs/engineering-story/provider-routing-and-failover.md`.
+
 ## 2026-11-10 audit (fix/audit-hardening)
 
 Findings below were fixed 2026-11-10 on fix/audit-hardening. Suites after the fix: V1 16, backend 224, evals 15, frontend 47, MCP 31.

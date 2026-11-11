@@ -23,9 +23,7 @@ def mock_settings(**overrides: object) -> Settings:
         "LITELLM_NUM_RETRIES": "0",
         # Isolate from process env provider keys so offline tests stay deterministic.
         "GROQ_API_KEY": "",
-        "GEMINI_API_KEY": "",
-        "GOOGLE_API_KEY": "",
-        "MISTRAL_API_KEY": "",
+        "NVIDIA_NIM_API_KEY": "",
         "OPENROUTER_API_KEY": "",
         "META_API_KEY": "",
         "MODEL_API_KEY": "",

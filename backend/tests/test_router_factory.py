@@ -72,7 +72,7 @@ class RouterFactoryTests(unittest.TestCase):
             _api_key_for_model(aliased, "meta/muse-spark-1.3-contributor"),
             "model-alias-key",
         )
-        self.assertNotIn("meta/muse-spark-1.3-contributor", DEFAULT_FREE_ALLOWLIST)
+        self.assertIn("meta/muse-spark-1.3-contributor", DEFAULT_FREE_ALLOWLIST)  # owner-approved last resort
         self.assertTrue(settings.meta_last_resort_active())
         self.assertEqual(settings.meta_last_resort_model, "meta/muse-spark-1.3-contributor")
 

@@ -28,10 +28,10 @@ Owner context: this is a resume and portfolio project on free-tier hosting. Hone
    - Never read, print, cat, log or commit `.env` or any secret value.
    - Keys live in `.env` locally (gitignored) and in the Render, Vercel, Cloudflare and GitHub dashboards.
    - Code may load env through settings or dotenv without displaying values.
-2. **Free models only.**
+2. **Free models first.**
    - `ALLOW_PAID_MODELS` stays `false`, and every role model must be in `FREE_MODEL_ALLOWLIST`.
-   - Never add a paid fallback.
-   - The optional Meta last resort is off unless `META_LAST_RESORT_ENABLED=true` and its model is allowlisted.
+   - Role primaries and fallbacks are free models. Don't add a paid model to them.
+   - The only paid model is the owner-approved Meta Muse last resort (`META_LAST_RESORT_ENABLED=true` in production). It runs only after a role's free primary and fallback both fail.
 3. **One worker.**
    - `WEB_CONCURRENCY` must be `1`, because each Uvicorn worker starts its own queue consumer.
    - `infra/docker-entrypoint.sh` refuses any other value.
@@ -234,7 +234,7 @@ Check `docs/RISK_REGISTER.md` and `docs/BUG_INVENTORY.md` for the full list.
 - **Elapsed time:** `elapsed_ms` does not carry across a review resume.
 - **OTel:** `observability/tracing.py` touches private OpenTelemetry SDK fields. Re-test it when upgrading OTel.
 - **Readiness:** `/health/ready` doesn't detect a dead consumer thread (BI-P2-18, partial).
-- **Gemini model:** `gemini-flash-latest` hasn't been re-verified with a fresh live call.
+- **Free provider limits:** OpenRouter `:free` allows 50 requests/day without a one-time $10 credit purchase, and NVIDIA NIM allows ~40 requests/min. Gemini and Mistral were dropped on 2026-11-11 after live 503s and 429s.
 
 ---
 

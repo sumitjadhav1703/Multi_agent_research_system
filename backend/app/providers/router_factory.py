@@ -38,12 +38,10 @@ def _api_key_for_model(settings: Settings, model_id: str) -> str | None:
 
     if lowered.startswith("groq/"):
         return _present(settings.groq_api_key)
-    if lowered.startswith("gemini/") or lowered.startswith("google/"):
-        return _present(settings.gemini_api_key) or _present(settings.google_api_key)
-    if lowered.startswith("mistral/"):
-        return _present(settings.mistral_api_key)
     if lowered.startswith("openrouter/"):
         return _present(settings.openrouter_api_key)
+    if lowered.startswith("nvidia_nim/"):
+        return _present(settings.nvidia_nim_api_key)
     # LiteLLM Meta Model API Muse routes (e.g. meta/muse-spark-1.3-contributor).
     if lowered.startswith("meta/"):
         return _present(settings.resolved_meta_api_key())

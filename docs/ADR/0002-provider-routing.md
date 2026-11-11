@@ -24,3 +24,9 @@ Use the **LiteLLM Python SDK `Router` inside FastAPI** (not a separate LiteLLM P
 - Meta Muse Spark Contributor last-resort is the lowest-cost Spark chat tier; Contributor mode may allow Meta to train on prompts/completions. It is engineering last-hop resilience, not a marketed paid product tier.
 
 **Update (2026-11-10):** The Meta last resort runs only when `META_LAST_RESORT_ENABLED=true`, a Meta key is set, and `META_LAST_RESORT_MODEL` is on `FREE_MODEL_ALLOWLIST`; `render.yaml` does not enable it. An empty provider reply now falls through to the role fallback model, and tokens are counted after failed calls. `gemini/gemini-2.0-flash` is no longer in the default allowlist, and an environment that names it fails at boot. The offline eval judge uses `meta/muse-spark-1.3-contributor` (`evals/__init__.py`), not `rm-eval-judge`.
+
+**Update (2026-11-11):** Gemini and Mistral were removed after live runs: Gemini returned 503s and timeouts, Mistral returned 429s, and claims went unverified. The defaults are now:
+- Groq `gpt-oss-120b` for planner and writer, and `gpt-oss-20b` for researcher.
+- OpenRouter `nvidia/nemotron-3.5-super-vl:free` for verifier, so a different model family checks the claims.
+- NVIDIA NIM `meta/llama-3.3-70b-instruct` as the free fallback.
+- Meta Muse as the owner-approved paid last resort, now enabled (`META_LAST_RESORT_ENABLED=true`).

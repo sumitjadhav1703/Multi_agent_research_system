@@ -74,7 +74,7 @@ One lifespan `QueueConsumer` leases jobs with `FOR UPDATE SKIP LOCKED`. No separ
 
 | | |
 |---|---|
-| **Problem** | Unify Groq/Gemini/Mistral/OpenRouter behind role aliases with free-only failover. |
+| **Problem** | Unify providers (now Groq, OpenRouter, NVIDIA NIM; Gemini/Mistral dropped 2026-11-11) behind role aliases with free-first failover and an owner-approved paid Meta last resort. |
 | **Why selected** | In-process Router; fallbacks; OpenAI-shaped API ([LiteLLM docs](https://docs.litellm.ai/), verified 2026-11-08). |
 | **Alternative: LiteLLM Proxy** | Separate gateway process with its own RAM/ops. |
 | **Rejected Proxy because** | Render Free has 512 MB RAM / 0.1 CPU; a second Python service competes with FastAPI + consumer. SDK Router lives inside the API. |

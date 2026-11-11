@@ -148,6 +148,6 @@ Secrets stay in host dashboards — never in git.
 | Render sleep | Banner in UI; Neon durability; Worker cron pings `/api/v1/health/live` every 10 min (`mcp-server/wrangler.jsonc`); `keep-api-awake.yml` is manual-only because GitHub throttled its schedule |
 | Neon scale-to-zero + Render wake | Compounded latency — NOT MEASURED |
 | Single Uvicorn worker | Simplicity; no HA |
-| Gemini alias unverified | Live smoke before demos |
+| Free provider churn (OpenRouter/NVIDIA limits) | Live smoke before demos; swap models by env |
 | SSRF residual | Risk register; no “secure egress” claim |
 | Docs drift (M7 “not deployed” vs live URLs) | Prefer deployment-report + status gate header |
