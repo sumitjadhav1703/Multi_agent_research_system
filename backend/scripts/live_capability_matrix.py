@@ -143,11 +143,7 @@ def main() -> int:
     print("matrix live_capability_matrix")
     print(f"use_mock_provider_flag {str(settings.use_mock_provider).lower()}")
     print(f"key_present groq {str(bool(settings.groq_api_key)).lower()}")
-    print(
-        "key_present gemini "
-        f"{str(bool(settings.gemini_api_key or settings.google_api_key)).lower()}"
-    )
-    print(f"key_present mistral {str(bool(settings.mistral_api_key)).lower()}")
+    print(f"key_present nvidia_nim {str(bool(settings.nvidia_nim_api_key)).lower()}")
     print(f"key_present openrouter {str(bool(settings.openrouter_api_key)).lower()}")
     print("live_mode forced")
 
@@ -158,11 +154,6 @@ def main() -> int:
 
     for role, alias in ROLE_ALIASES.items():
         primary, _fallback = settings.role_models()[role]
-        if primary.startswith("gemini/") and "2.0-flash" in primary and "latest" not in primary:
-            print(
-                f"warn role={role} model={primary} "
-                "retired_id_risk=gemini-2.0-flash_use_flash-latest"
-            )
         if not _api_key_for_model(settings, primary):
             failures += 1
             for capability in capabilities:

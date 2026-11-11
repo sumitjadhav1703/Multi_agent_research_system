@@ -28,12 +28,13 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 
 | Model ID | Role default use | Notes |
 |---|---|---|
-| `groq/openai/gpt-oss-20b` | planner / researcher / writer primary | M2 live text smoke: pass at `max_tokens=128` |
-| `gemini/gemini-flash-latest` | verifier / eval_judge primary; several fallbacks | Alias for current Flash; **fresh live capability NOT VERIFIED** in M3+ |
-| `gemini/gemini-2.0-flash` | no longer allowlisted (removed 2026-11-10); an environment that still names it fails at boot | M2 smoke: HTTP **404** (retired) |
-| `mistral/mistral-small-latest` | verifier/writer fallback | Live not fully matrix-tested |
-| `openrouter/meta-llama/llama-3.2-3b-instruct:free` | allowlisted | Free suffix; still subject to OpenRouter account limits |
+| `groq/openai/gpt-oss-120b` | planner / writer primary, verifier fallback, eval_judge | Live JSON probe pass 2026-11-11 (1.2 s) |
+| `groq/openai/gpt-oss-20b` | researcher primary | Live pass; separate Groq rate-limit bucket from 120b. Reasoning model: needs the 2000-token budget. |
+| `openrouter/nvidia/nemotron-3.5-super-vl:free` | verifier primary; planner / researcher / writer fallback | Live JSON probe pass 2026-11-11 (2.2 s). OpenRouter `:free`: 20 req/min, 50 req/day (1,000 after a one-time $10 purchase). |
+| `meta/muse-spark-1.3-contributor` | paid last resort for every role (owner-approved, `META_LAST_RESORT_ENABLED=true`) | Live pass 2026-11-11; runs only after a role's free primary and fallback both fail |
 | `mock/free-model` | in the code default allowlist; omitted from `render.yaml`'s production list | `USE_MOCK_PROVIDER=true` |
+
+Dropped 2026-11-11: `gemini/*` (503s and timeouts; free tier cut to ~20–100 req/day) and `mistral/*` (429s on the free Experiment tier). `openrouter/meta-llama/llama-3.2-3b-instruct:free` no longer exists on OpenRouter.
 
 `ALLOW_PAID_MODELS=true` or paid markers (`gpt-4`, `claude-sonnet-4`, …) → **fail closed at startup**.
 
@@ -43,13 +44,13 @@ From `DEFAULT_FREE_ALLOWLIST` in `backend/app/core/config.py`:
 
 | Role | Alias | Primary | Fallback |
 |---|---|---|---|
-| planner | `rm-planner` | groq/openai/gpt-oss-20b | gemini/gemini-flash-latest |
-| researcher | `rm-researcher` | groq/openai/gpt-oss-20b | gemini/gemini-flash-latest |
-| verifier | `rm-verifier` | gemini/gemini-flash-latest | mistral/mistral-small-latest |
-| writer | `rm-writer` | groq/openai/gpt-oss-20b | mistral/mistral-small-latest |
-| eval_judge | `rm-eval-judge` | gemini/gemini-flash-latest | none |
+| planner | `rm-planner` | groq/openai/gpt-oss-120b | openrouter/nvidia/nemotron-3.5-super-vl:free |
+| researcher | `rm-researcher` | groq/openai/gpt-oss-20b | openrouter/nvidia/nemotron-3.5-super-vl:free |
+| verifier | `rm-verifier` | openrouter/nvidia/nemotron-3.5-super-vl:free (a different model family checks the extractor) | groq/openai/gpt-oss-120b |
+| writer | `rm-writer` | groq/openai/gpt-oss-120b | openrouter/nvidia/nemotron-3.5-super-vl:free |
+| eval_judge | `rm-eval-judge` | groq/openai/gpt-oss-120b | none |
 
-`eval_judge` is only the in-app alias; the offline DeepEval judge uses `meta/muse-spark-1.3-contributor` (`evals/__init__.py`). Fallbacks must also be on the allowlist. Exhaustion of all approved options → stop safely; preserve completed stages/events. **Never** escalate to paid.
+`eval_judge` is only the in-app alias; the offline DeepEval judge uses `meta/muse-spark-1.3-contributor` (`evals/__init__.py`). Fallbacks must also be on the allowlist. When a role's free primary and fallback both fail, the owner-approved paid Meta Muse last resort runs; if it also fails, stop safely and preserve completed stages/events. No other paid model is ever used.
 
 ---
 
@@ -62,14 +63,14 @@ Research date: **2026-11-08**. Official dashboards remain authoritative.
 - Fast inference; free-tier rate limits are real (V1 exposes `PipelinePaused` on 429).  
 - Tool-calling / structured-output for the default model: **NOT VERIFIED** in V2 matrix → graph avoids requiring JSON mode.
 
-### Google Gemini API
-- `gemini-2.0-flash` returned 404 in M2 smoke (shutdown noted in config comments as 2026-06-01).  
-- Defaults moved to `gemini/gemini-flash-latest`.  
-- Privacy / data-use: subject to Google AI API terms — review before handling sensitive queries.
+### Google Gemini and Mistral (removed 2026-11-11)
+- Gemini returned 503s and timeouts in live runs, and its free tier was cut to roughly 20–100 requests/day.
+- Mistral's free Experiment tier returned 429 rate limits.
+- Both left claims unverified, so both were removed from the defaults, `render.yaml` and the allowlist.
 
-### Mistral AI
-- `mistral-small-latest` used as free-path fallback.  
-- Live completion matrix: **NOT MEASURED**.
+### NVIDIA NIM (supported, not a default)
+- Free hosted endpoints at build.nvidia.com, OpenAI-compatible, ~40 requests/min; LiteLLM prefix `nvidia_nim/`, key `NVIDIA_NIM_API_KEY`.
+- 2026-11-11 live probe: `meta/llama-3.3-70b-instruct` is end-of-life (410); 13 other listed models returned 404, timed out or were unavailable. Re-probe before routing a role to it.
 
 ### OpenRouter
 - Free-suffixed models still require an OpenRouter key and obey OpenRouter rate/credit rules.  
@@ -123,4 +124,4 @@ Before any interview demo that depends on verifier/judge roles:
 1. Run `backend/scripts/live_text_smoke.py` with current aliases.  
 2. Confirm Tavily + primary Groq path.  
 3. Record date, model IDs, and pass/fail in `docs/deployment-report.md`.  
-4. If Gemini fails, point verifier to a verified allowlisted alternative **explicitly** — do not enable paid models.
+4. If a provider fails, point the role at a verified allowlisted alternative **explicitly** through env vars. No code change is needed.

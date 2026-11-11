@@ -127,7 +127,7 @@ export function UsagePage() {
             </p>
             <UsageFiguresList usage={figures} bare />
             <p className="meta">
-              Estimated cost uses list-price token rates (Gemini Flash USD/1M) plus a search call
+              Estimated cost uses an approximate blended list-price token rate (USD/1M) plus a search call
               rate — not an invoice. Unknown only when tokens and search calls were not measured.
             </p>
           </section>

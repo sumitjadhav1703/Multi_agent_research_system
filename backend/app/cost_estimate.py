@@ -7,7 +7,7 @@ This is not an invoice and not provider-billed spend.
 from __future__ import annotations
 
 # Approximate blended list rates (USD per 1M tokens), one figure for every routed model
-# (default chain: groq gpt-oss-20b / gemini-flash-latest / mistral-small). Not per-model pricing.
+# (default chain: Groq gpt-oss, OpenRouter/NVIDIA free fallbacks). Not per-model pricing.
 INPUT_USD_PER_MTOK = 0.10
 OUTPUT_USD_PER_MTOK = 0.40
 # Order-of-magnitude Tavily-class list rate (USD per search call). Failed searches are

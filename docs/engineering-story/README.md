@@ -161,7 +161,7 @@ flowchart TB
   Vercel -->|HTTPS REST/SSE| Render[Render Free singapore API]
   CF --> Render
   Render --> NeonSG[Neon aws-ap-southeast-1]
-  Render --> Providers[Groq / Gemini / Mistral / OpenRouter / Tavily]
+  Render --> Providers[Groq / OpenRouter / NVIDIA NIM / Meta Muse last resort / Tavily]
 ```
 
 ---

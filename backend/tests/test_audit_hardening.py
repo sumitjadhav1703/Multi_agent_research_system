@@ -81,6 +81,26 @@ class GateAndFetchTests(unittest.TestCase):
         self.assertTrue(any(w.endswith(":empty") for w in warnings))
 
 
+class PageHeadBoilerplateTests(unittest.TestCase):
+    def test_passages_come_from_relevant_text_not_the_page_menu(self) -> None:
+        # Live pages start with menus; the relevant text sits past the 2000-char excerpt cap.
+        menu = "Skip to content Home About Shop Contact Login Menu. " * 50
+        body = "Cold climate heat pumps keep heating efficiently below freezing in recent field tests."
+        hit = SearchHit(title="t", url="https://e.com/heat", snippet=body)
+        sources, passages, _w = materialize_hits(
+            subquestion_id="sq1",
+            question="How efficient are heat pumps for heating in cold climates?",
+            hits=[hit],
+            fetch=lambda url: FetchResult(url=url, text=menu + body, extraction_method="html"),
+            fetch_budget=2,
+            limits=GraphLimits(),
+            retrieved_at="t",
+        )
+        self.assertTrue(passages)
+        self.assertIn("heat pumps keep heating", passages[0].quote)
+        self.assertIn(passages[0].quote, sources[0].excerpt)  # citations still point into the stored excerpt
+
+
 class VerifyTests(unittest.TestCase):
     def test_all_auto_seed_claims_skip_the_llm(self) -> None:
         class Boom:
@@ -138,8 +158,17 @@ class ProviderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mock_settings(META_API_KEY="k", META_LAST_RESORT_ENABLED="true", FREE_MODEL_ALLOWLIST="mock/free-model,mock/free-fallback")
 
-    def test_retired_gemini_is_not_allowlisted_by_default(self) -> None:
-        self.assertNotIn("gemini/gemini-2.0-flash", Settings(_env_file=None, USE_MOCK_PROVIDER="true").allowlist)
+    def test_default_chain_drops_gemini_and_mistral(self) -> None:
+        settings = Settings(_env_file=None, USE_MOCK_PROVIDER="true")
+        for model in settings.allowlist | set(settings.configured_model_ids()):
+            self.assertFalse(model.startswith(("gemini/", "mistral/")), model)
+        self.assertIn(settings.meta_last_resort_model, settings.allowlist)  # enabling it must not fail boot
+
+    def test_nvidia_nim_models_use_the_nvidia_key(self) -> None:
+        from backend.app.providers.router_factory import _api_key_for_model
+
+        keyed = Settings(_env_file=None, USE_MOCK_PROVIDER="true", NVIDIA_NIM_API_KEY="nv")
+        self.assertEqual(_api_key_for_model(keyed, "nvidia_nim/meta/llama-3.3-70b-instruct"), "nv")
 
 
 class ExecutorTests(unittest.TestCase):

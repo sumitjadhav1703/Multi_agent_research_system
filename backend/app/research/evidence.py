@@ -156,7 +156,9 @@ def materialize_hits(
             fetched_flag = False
             caveat = fetched.caveat or "Fetch failed. Search snippet used and the limitation is disclosed."
         else:
-            excerpt = fetched.text[: limits.max_excerpt_chars]
+            # Page text starts with menus; lead with the search snippet (relevant text from this page)
+            # so the 2000-char excerpt, and the passages picked from it, hold real content.
+            excerpt = "\n".join(part for part in (hit.snippet, fetched.text) if part)[: limits.max_excerpt_chars]
             method = fetched.extraction_method
             fetched_flag = method == "html"
             caveat = fetched.caveat

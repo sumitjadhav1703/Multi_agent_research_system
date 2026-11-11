@@ -14,11 +14,9 @@ class HealthApiTests(unittest.TestCase):
         os.environ["DATABASE_URL"] = ""
         os.environ["QUEUE_CONSUMER_ENABLED"] = "false"
         os.environ["TURNSTILE_SECRET_KEY"] = ""
-        os.environ["FREE_MODEL_ALLOWLIST"] = (
-            "groq/openai/gpt-oss-20b,gemini/gemini-flash-latest,gemini/gemini-2.0-flash,"
-            "mistral/mistral-small-latest,openrouter/meta-llama/llama-3.2-3b-instruct:free,mock/free-model"
-        )
-        from backend.app.core.config import clear_settings_cache
+        from backend.app.core.config import DEFAULT_FREE_ALLOWLIST, clear_settings_cache
+
+        os.environ["FREE_MODEL_ALLOWLIST"] = ",".join(DEFAULT_FREE_ALLOWLIST)
 
         clear_settings_cache()
         from backend.app.main import app

@@ -24,7 +24,7 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertFalse(settings.allow_paid_models)
         self.assertIn("groq/openai/gpt-oss-20b", settings.allowlist)
-        self.assertEqual(settings.role_models()["planner"][0], "groq/openai/gpt-oss-20b")
+        self.assertEqual(settings.role_models()["planner"][0], "groq/openai/gpt-oss-120b")
 
     def test_paid_model_marker_rejected(self) -> None:
         with self.assertRaises(ValidationError) as caught:

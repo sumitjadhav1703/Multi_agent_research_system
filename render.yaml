@@ -54,38 +54,38 @@ services:
       - key: LOG_LEVEL
         value: INFO
       - key: FREE_MODEL_ALLOWLIST
-        value: groq/openai/gpt-oss-20b,gemini/gemini-flash-latest,mistral/mistral-small-latest,openrouter/meta-llama/llama-3.2-3b-instruct:free
+        value: groq/openai/gpt-oss-20b,groq/openai/gpt-oss-120b,openrouter/nvidia/nemotron-3.5-super-vl:free,meta/muse-spark-1.3-contributor
       - key: PLANNER_PRIMARY_MODEL
-        value: groq/openai/gpt-oss-20b
+        value: groq/openai/gpt-oss-120b
       - key: PLANNER_FALLBACK_MODEL
-        value: gemini/gemini-flash-latest
+        value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: RESEARCH_PRIMARY_MODEL
         value: groq/openai/gpt-oss-20b
       - key: RESEARCH_FALLBACK_MODEL
-        value: gemini/gemini-flash-latest
+        value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: VERIFIER_PRIMARY_MODEL
-        value: gemini/gemini-flash-latest
+        value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: VERIFIER_FALLBACK_MODEL
-        value: mistral/mistral-small-latest
+        value: groq/openai/gpt-oss-120b
       - key: WRITER_PRIMARY_MODEL
-        value: groq/openai/gpt-oss-20b
+        value: groq/openai/gpt-oss-120b
       - key: WRITER_FALLBACK_MODEL
-        value: mistral/mistral-small-latest
+        value: openrouter/nvidia/nemotron-3.5-super-vl:free
       - key: EVAL_JUDGE_PRIMARY_MODEL
-        value: gemini/gemini-flash-latest
+        value: groq/openai/gpt-oss-120b
+      - key: META_LAST_RESORT_ENABLED
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGINS
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: MISTRAL_API_KEY
-        sync: false
       - key: OPENROUTER_API_KEY
+        sync: false
+      - key: NVIDIA_NIM_API_KEY
+        sync: false
+      - key: LLAMA_API_KEY
         sync: false
       - key: TAVILY_API_KEY
         sync: false

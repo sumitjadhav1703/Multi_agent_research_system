@@ -264,7 +264,7 @@ describe("research console screens", () => {
     expect(metric("Total tokens")).toBe("1550");
     expect(metric("Search calls")).toBe("3");
     expect(metric("Estimated cost (USD)")).toBe("$0.015260");
-    expect(screen.getByText(/list-price token rates/i)).toBeInTheDocument();
+    expect(screen.getByText(/blended list-price token rate/i)).toBeInTheDocument();
   });
 
   it("does not offer a guest benchmark or invent an accuracy figure", async () => {

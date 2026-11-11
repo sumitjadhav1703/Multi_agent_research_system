@@ -13,18 +13,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RoleName = Literal["planner", "researcher", "verifier", "writer", "eval_judge"]
 
-# Default free-tier LiteLLM model IDs for the student demo.
-# Real capability must still be verified before enabling a role in production demos.
-# gemini/gemini-2.0-flash was shut down by Google on 2026-06-01. The Milestone 2
-# live smoke got HTTP 404 for that id. gemini/gemini-flash-latest is LiteLLM's
-# documented alias for the current Gemini Flash route. Milestone 3 did not
-# re-run a live call, so this alias is not capability-verified.
-# The retired id is no longer allowlisted; an environment that still names it fails at boot.
+# Default LiteLLM model IDs, each live-probed 2026-11-11 with a JSON extraction prompt.
+# Gemini (503s, ~20-100 free req/day) and Mistral (429s) were dropped after failing live runs.
+# Groq 20b and 120b have separate rate-limit buckets; OpenRouter :free allows 50 req/day
+# (1,000 after a one-time $10 credit purchase). NVIDIA NIM (nvidia_nim/ + NVIDIA_NIM_API_KEY) is
+# supported but not a default: on 2026-11-11 every probed NIM model 404'd, timed out or was unavailable.
+# meta/ Muse is the owner-approved paid last resort, used only when a role's free chain fails.
+OPENROUTER_FREE_MODEL = "openrouter/nvidia/nemotron-3.5-super-vl:free"
 DEFAULT_FREE_ALLOWLIST: tuple[str, ...] = (
     "groq/openai/gpt-oss-20b",
-    "gemini/gemini-flash-latest",
-    "mistral/mistral-small-latest",
-    "openrouter/meta-llama/llama-3.2-3b-instruct:free",
+    "groq/openai/gpt-oss-120b",
+    OPENROUTER_FREE_MODEL,
+    "meta/muse-spark-1.3-contributor",
     "mock/free-model",
 )
 
@@ -64,10 +64,8 @@ class Settings(BaseSettings):
 
     # Provider API keys (optional until a live call is made).
     groq_api_key: str | None = Field(default=None, alias="GROQ_API_KEY")
-    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
-    google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
-    mistral_api_key: str | None = Field(default=None, alias="MISTRAL_API_KEY")
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
+    nvidia_nim_api_key: str | None = Field(default=None, alias="NVIDIA_NIM_API_KEY")
     llama_api_key: str | None = Field(default=None, alias="LLAMA_API_KEY")
     # Meta Model API (https://dev.meta.ai). Preferred for LiteLLM meta/ Muse routes.
     # MODEL_API_KEY / LLAMA_API_KEY remain accepted aliases via resolved_meta_api_key().
@@ -88,31 +86,31 @@ class Settings(BaseSettings):
     )
 
     planner_primary_model: str = Field(
-        default="groq/openai/gpt-oss-20b", alias="PLANNER_PRIMARY_MODEL"
+        default="groq/openai/gpt-oss-120b", alias="PLANNER_PRIMARY_MODEL"
     )
     planner_fallback_model: str | None = Field(
-        default="gemini/gemini-flash-latest", alias="PLANNER_FALLBACK_MODEL"
+        default=OPENROUTER_FREE_MODEL, alias="PLANNER_FALLBACK_MODEL"
     )
     research_primary_model: str = Field(
         default="groq/openai/gpt-oss-20b", alias="RESEARCH_PRIMARY_MODEL"
     )
     research_fallback_model: str | None = Field(
-        default="gemini/gemini-flash-latest", alias="RESEARCH_FALLBACK_MODEL"
+        default=OPENROUTER_FREE_MODEL, alias="RESEARCH_FALLBACK_MODEL"
     )
     verifier_primary_model: str = Field(
-        default="gemini/gemini-flash-latest", alias="VERIFIER_PRIMARY_MODEL"
+        default=OPENROUTER_FREE_MODEL, alias="VERIFIER_PRIMARY_MODEL"
     )
     verifier_fallback_model: str | None = Field(
-        default="mistral/mistral-small-latest", alias="VERIFIER_FALLBACK_MODEL"
+        default="groq/openai/gpt-oss-120b", alias="VERIFIER_FALLBACK_MODEL"
     )
     writer_primary_model: str = Field(
-        default="groq/openai/gpt-oss-20b", alias="WRITER_PRIMARY_MODEL"
+        default="groq/openai/gpt-oss-120b", alias="WRITER_PRIMARY_MODEL"
     )
     writer_fallback_model: str | None = Field(
-        default="mistral/mistral-small-latest", alias="WRITER_FALLBACK_MODEL"
+        default=OPENROUTER_FREE_MODEL, alias="WRITER_FALLBACK_MODEL"
     )
     eval_judge_primary_model: str = Field(
-        default="gemini/gemini-flash-latest", alias="EVAL_JUDGE_PRIMARY_MODEL"
+        default="groq/openai/gpt-oss-120b", alias="EVAL_JUDGE_PRIMARY_MODEL"
     )
     eval_judge_fallback_model: str | None = Field(
         default=None, alias="EVAL_JUDGE_FALLBACK_MODEL"

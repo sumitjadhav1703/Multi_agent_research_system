@@ -28,10 +28,10 @@ Owner context: this is a resume and portfolio project on free-tier hosting. Hone
    - Never read, print, cat, log or commit `.env` or any secret value.
    - Keys live in `.env` locally (gitignored) and in the Render, Vercel, Cloudflare and GitHub dashboards.
    - Code may load env through settings or dotenv without displaying values.
-2. **Free models only.**
+2. **Free models first.**
    - `ALLOW_PAID_MODELS` stays `false`, and every role model must be in `FREE_MODEL_ALLOWLIST`.
-   - Never add a paid fallback.
-   - The optional Meta last resort is off unless `META_LAST_RESORT_ENABLED=true` and its model is allowlisted.
+   - Role primaries and fallbacks are free models. Don't add a paid model to them.
+   - The only paid model is the owner-approved Meta Muse last resort (`META_LAST_RESORT_ENABLED=true` in production). It runs only after a role's free primary and fallback both fail.
 3. **One worker.**
    - `WEB_CONCURRENCY` must be `1`, because each Uvicorn worker starts its own queue consumer.
    - `infra/docker-entrypoint.sh` refuses any other value.
@@ -200,7 +200,7 @@ cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 cd mcp-server && npm test && npx tsc --noEmit
 ```
 
-Baseline counts (2026-11-10): backend 224, frontend 47, MCP 31, V1 16, evals 15. If a count drops, find out why before continuing.
+Baseline counts (2026-11-10): backend 225, frontend 47, MCP 31, V1 16, evals 15. If a count drops, find out why before continuing.
 
 Live checks (they need real keys and are never run in CI): `backend/scripts/live_text_smoke.py` and `backend/scripts/live_capability_matrix.py`.
 
@@ -234,7 +234,7 @@ Check `docs/RISK_REGISTER.md` and `docs/BUG_INVENTORY.md` for the full list.
 - **Elapsed time:** `elapsed_ms` does not carry across a review resume.
 - **OTel:** `observability/tracing.py` touches private OpenTelemetry SDK fields. Re-test it when upgrading OTel.
 - **Readiness:** `/health/ready` doesn't detect a dead consumer thread (BI-P2-18, partial).
-- **Gemini model:** `gemini-flash-latest` hasn't been re-verified with a fresh live call.
+- **Free provider limits:** OpenRouter `:free` allows 50 requests/day without a one-time $10 credit purchase, and NVIDIA NIM (optional, not a default) failed live probes. Gemini and Mistral were dropped on 2026-11-11 after live 503s and 429s.
 
 ---
 
